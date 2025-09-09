@@ -1,19 +1,10 @@
-from __future__ import annotations
-
 from typing import Dict, Any, Union
 from pathlib import Path
 
 from PIL import Image
 import numpy as np
 
-try:
-    from reasoning.inference import VLMInference  # type: ignore
-except ImportError as exc:
-    # Helpful error if package layout is wrong.
-    raise ImportError(
-        "Cannot import VLMInference. Expected it under 'vlm_robot_agent/vlm_inference/'.\n"
-        "Verify your folder structure matches the one documented in the module header."
-    ) from exc
+from reasoning.inference import VLMInference  # type: ignore
 
 __all__ = ["Perception", "Observation"]
 
@@ -81,6 +72,7 @@ class Perception:
         """Returns True if the target is observed in the image."""
         observation = self.perceive(img, mode="navigation")
         return observation["goal_observed"]
+    
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse

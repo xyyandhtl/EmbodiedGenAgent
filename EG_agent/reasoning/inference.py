@@ -223,7 +223,7 @@ class VLMInference:
 
         # 2️⃣  fallback to packaged JSON
         
-        with resources.files("vlm_robot_agent.prompts").joinpath(PROMPT_FILE_JSON).open("r", encoding="utf-8") as f:
+        with resources.files("prompts.demo").joinpath(PROMPT_FILE_JSON).open("r", encoding="utf-8") as f:
             print(f)
             print("-------------------")
             data = json.load(f)
@@ -279,7 +279,7 @@ class VLMInference:
             ],
         )
         txt = resp.choices[0].message.content
-        logger.debug("LLM latency %.2fs", time.time() - t0)
+        logger.info("LLM latency %.2fs", time.time() - t0)
         return txt
 
     # ---------------------------------------------------------------------

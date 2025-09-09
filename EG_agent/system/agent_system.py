@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import sys
 from enum import Enum, auto
 from typing import Union
 from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
 
 from PIL import Image
 import numpy as np
@@ -89,6 +91,7 @@ class RobotAgentSystem:
         # 1) Run perception
         mode = self._current_mode()
         obs: Observation = self.perception.perceive(img, mode=mode)
+        print(f'[Perception - {mode}] vlm description: ', obs["description"])
 
         # 2) Update goals + state
         self.goal_manager.update_from_observation(obs)

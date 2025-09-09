@@ -1,4 +1,4 @@
-# GenAgent
+# EmbodiedGenAgent
 A Generative Embodied Agent that transforms open-ended instructions into behavior trees for autonomous decision-making and action execution loop
 
 ## Plans
