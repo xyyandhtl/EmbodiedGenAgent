@@ -1,90 +1,129 @@
-import time
-from typing import Any, Dict
+from __future__ import annotations
 
-class Status:
-    """Custom struct to represent robot status."""
-    def __init__(self, position: Dict[str, float], is_stuck: bool, has_fallen: bool):
-        self.position = position  # e.g., {"x": 0.0, "y": 0.0, "z": 0.0}
-        self.is_stuck = is_stuck
-        self.has_fallen = has_fallen
+from enum import Enum, auto
+from typing import Union
+from pathlib import Path
 
-class AgentSystem:
-    def __init__(self, dt: float = 0.1):
-        # Initialize internal states
-        self.image_data = None
-        self.text_data = None
-        self.intent_goal_data = None
-        self.behavior_tree = None
-        self.current_action = None
-        self.deploy_action = None
-        self.dt = dt  # Time interval for the loop
-        self.running = False  # Control flag for the loop
+from PIL import Image
+import numpy as np
 
-    def feed_image(self, image_data: Any):
-        """Feed real-time image data to the system."""
-        self.image_data = image_data
-        # ...process image data...
+from environment.state.state_tracker import StateTracker, AgentState
+from environment.actions.planner_level import Action
+from planning.sequence.goal_manager import Goal, GoalManager
+from planning.sequence.planner import Planner
+from reasoning.perception import Perception, Observation
+from reasoning.memory import Memory
 
-    def feed_text(self, text_data: str):
-        """Feed real-time text data to the system."""
-        self.text_data = text_data
-        # ...process text data...
+try:
+    # ConversationManager is optional – import lazily.
+    from .conversation import ConversationManager  # type: ignore
+except ImportError:
+    ConversationManager = None  # type: ignore
 
-    def reasoning(self):
-        """Generate intent and environment understanding."""
-        # ...process self.image_data and self.text_data...
-        self.intent_goal_data = "Generated intent goal based on reasoning"
-        return self.intent_goal_data
+__all__ = ["RobotAgent"]
 
-    def intent_goal(self):
-        """Return the generated intent goal."""
-        if not self.intent_goal_data:
-            raise ValueError("Intent goal has not been generated yet.")
-        return self.intent_goal_data
 
-    def generate_bt(self):
-        """Generate the behavior tree."""
-        if not self.intent_goal_data:
-            raise ValueError("Cannot generate behavior tree without intent goal.")
-        self.behavior_tree = "Generated behavior tree based on intent goal"
-        return self.behavior_tree
+class RobotAgentSystem:
+    """Public-facing façade of the whole agent stack.
 
-    def step(self):
-        """Execute a single step of the behavior tree."""
-        if not self.behavior_tree:
-            raise ValueError("Behavior tree has not been generated yet.")
-        # Simulate a single step execution
-        self.current_action = "Step action from behavior tree"
-        self.deploy_action = "Step deploy-level action"
-        print(f"Step executed: {self.current_action}, {self.deploy_action}")
+    Usage
+    -----
+    >>> agent = RobotAgent(goal_text="Enter office 12")
+    >>> while True:
+    ...     img = camera.read()
+    ...     action = agent.step(img)
+    ...     robot.execute(action)
+    ...     if agent.finished:
+    ...         break
+    """
 
-    def execute_loop(self):
-        """Execute the behavior tree in a loop based on the configured dt."""
-        if not self.behavior_tree:
-            raise ValueError("Behavior tree has not been generated yet.")
-        self.running = True
-        print("Starting execution loop...")
-        while self.running:
-            self.step()
-            time.sleep(self.dt)  # Wait for the next step
+    def __init__(
+        self,
+        *,
+        goal_text: str,
+        provider: str = "openai",
+        history_size: int = 10,
+    ) -> None:
+        # 1) Perception engines
+        self.perception = Perception(
+            goal_text=goal_text,
+            provider=provider,
+            history_size=history_size,
+        )
 
-    def stop_loop(self):
-        """Stop the execution loop."""
-        self.running = False
-        print("Execution loop stopped.")
+        # 2) Cognition / memory / planning
+        self.goal_manager = GoalManager(Goal(goal_text))
+        self.memory = Memory(size=history_size)
+        self.planner = Planner()
+        self.state_tracker = StateTracker()
 
-    def get_bt_action(self):
-        """Get the current behavior tree action."""
-        if not self.current_action:
-            raise ValueError("No action is currently being executed.")
-        return self.current_action
+        # 3) Optional conversation manager
+        self.conversation = ConversationManager(goal_text) if ConversationManager else None
 
-    def get_deploy_action(self):
-        """Get the current deploy-level action."""
-        if not self.deploy_action:
-            raise ValueError("No deploy-level action is currently being executed.")
-        return self.deploy_action
+        # 4) Decompose high-level goal into sub-goals
+        if hasattr(self.planner, "decompose"):
+            subgoals = self.planner.decompose(goal_text)
+            for sg in subgoals:
+                self.goal_manager.push_subgoal(Goal(sg))
 
-    def on_bt_condition(self, status: Status):
-        """Callback for behavior tree condition checks."""
-        pass
+        # 5) Print initial plan
+        print("┌ Initial sub-goals plan ─────────────────────────")
+        for idx, g in enumerate(self.goal_manager.goal_stack, start=1):
+            print(f"│ {idx}. {g.description}")
+        print("└──────────────────────────────────────────────────")
+
+    @property
+    def finished(self) -> bool:
+        """Whether the agent has completed its top-level mission."""
+        return self.state_tracker.state == AgentState.FINISHED
+
+    def step(self, img: Union[str, Path, Image.Image, np.ndarray]) -> Action:
+        """One control tick:
+        1. Perceive with the right mode.
+        2. Update goal_manager & state_tracker.
+        3. Decide next action via planner.
+        4. If INTERACTION, run ConversationManager.
+        5. Log to memory.
+        """
+
+        # 1) Run perception
+        mode = self._current_mode()
+        obs: Observation = self.perception.perceive(img, mode=mode)
+
+        # 2) Update goals + state
+        self.goal_manager.update_from_observation(obs)
+        self.goal_manager.pop_finished()
+        self.state_tracker.update_last_observation(obs)
+
+        # 3) Plan next action
+        action = self.planner.decide(obs)
+
+        # 4) If interaction, trigger conversation turn
+        if action.kind.name.lower() == "interaction" and self.conversation:
+            utterance = self.conversation.robot_turn()
+            action.params["utterance"] = utterance
+
+        # 5) Record into memory
+        self.memory.add(obs, action)
+
+        return action
+
+    def _current_mode(self) -> str:
+        """Choose 'navigation' vs 'interaction' based on the agent's state."""
+        if self.state_tracker.state in {
+            AgentState.INTERACTING,
+            AgentState.TALKING,
+            AgentState.WAITING_REPLY,
+        }:
+            return "interaction"
+        return "navigation"
+
+
+# TODO: This script should call the various parts or sub-libraries, take the goal as input, as well as an image, 
+# create sub-goals for what it needs to do, print the plan with the sub-goals, and return navigation and interaction actions. 
+# In navigation actions, it will return movements forward, left, right, with distance. 
+# In the case of interaction, it can start a conversation and use TTS and STT to talk to the human, 
+# so we need to understand how to return this in the library, as it will later be used in ROS. 
+# TODO: After each interaction ends, the environment should be analyzed with an image to verify if the path is clear and switch to navigation actions. 
+# TODO: Ensure this library with all its sub-libraries can be used easily in ROS2.
+
