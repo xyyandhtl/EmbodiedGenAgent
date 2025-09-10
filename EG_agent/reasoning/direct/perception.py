@@ -4,7 +4,7 @@ from pathlib import Path
 from PIL import Image
 import numpy as np
 
-from reasoning.inference import VLMInference  # type: ignore
+from reasoning.simple.inference import VLMInference  # type: ignore
 
 __all__ = ["Perception", "Observation"]
 

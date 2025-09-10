@@ -10,17 +10,17 @@ from PIL import Image
 import numpy as np
 
 from environment.state.state_tracker import StateTracker, AgentState
-from environment.actions.planner_level import Action
-from planning.sequence.goal_manager import Goal, GoalManager
-from planning.sequence.planner import Planner
-from reasoning.perception import Perception, Observation
-from reasoning.memory import Memory
+from EG_agent.environment.actions.planner_level_direct import Action
+from planning.direct.goal_manager import Goal, GoalManager
+from planning.direct.planner import Planner
+from reasoning.direct.perception import Perception, Observation
+from reasoning.direct.memory import Memory
 
-try:
+# try:
     # ConversationManager is optional – import lazily.
-    from .conversation import ConversationManager  # type: ignore
-except ImportError:
-    ConversationManager = None  # type: ignore
+from reasoning.conversation import ConversationManager  # type: ignore
+# except ImportError:
+#     ConversationManager = None  # type: ignore
 
 __all__ = ["RobotAgent"]
 

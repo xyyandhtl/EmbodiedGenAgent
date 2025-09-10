@@ -8,7 +8,7 @@ from PyQt5.QtCore import QTimer, QPoint, QRectF
 from PyQt5 import QtCore
 import sys
 
-from visualization.window import Ui_MainWindow
+from visualization.ui.window import Ui_MainWindow
 from visualization.bt_utils.basic import get_root_path
 from PyQt5.QtCore import QThread
 import queue
@@ -16,8 +16,8 @@ import numpy as np
 from PyQt5.QtGui import QImage, QPixmap, QDrag, QPainter
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QThread, pyqtSignal
-from visualization.scene_ui import SceneUI
-from  visualization import scene_ui
+from visualization.ui.scene_ui import SceneUI
+from  visualization.ui import scene_ui
 
 root_path = get_root_path()
 

@@ -1,6 +1,6 @@
 from collections import deque
 from typing import Deque, Dict, Any
-from environment.actions.planner_level import Action
+from EG_agent.environment.actions.planner_level_direct import Action
 
 class Memory:
     """

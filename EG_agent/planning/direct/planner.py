@@ -1,5 +1,5 @@
 from typing import Dict, Any, List
-from environment.actions.planner_level import Action, ActionKind, NavigationDirection, InteractionType
+from EG_agent.environment.actions.planner_level_direct import Action, ActionKind, NavigationDirection, InteractionType
 
 class Planner:
     """

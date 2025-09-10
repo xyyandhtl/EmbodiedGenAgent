@@ -12,12 +12,12 @@
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Literal
 import os, json, time, re, unicodedata
 from importlib import resources
 
 from openai import OpenAI
-from reasoning.io import speech_io
+# from reasoning.direct.io import speech_io
 
 PROMPT_FILE = "conversation_prompts.json"
 TAG_RE = re.compile(r"#HUMAN_(?:CLEARED_PATH|REFUSED|NO_RESPONSE)", re.I)
@@ -29,7 +29,7 @@ SIL_TAG = "Silence"
 
 # ---------- utils --------------------------------------------------
 def _load_prompt(key: str) -> Dict[str, str]:
-    with resources.files("vlm_robot_agent.prompts").joinpath(PROMPT_FILE).open(
+    with resources.files("prompts.demo").joinpath(PROMPT_FILE).open(
         "r", encoding="utf-8"
     ) as f:
         data = json.load(f)
@@ -60,19 +60,26 @@ class ConversationManager:
         max_negative=5,
         max_elapsed_neg=40,
         openai_api_key: str | None = None,
+        mode: Literal["voice", "text"] = "voice",
     ):
+        """
+        mode:
+          voice -> 使用 TTS + 语音听写 (原有行为)
+          text  -> 终端纯文本交互（无等待时长，阻塞在 input）
+        """
         self.goal = goal
         self.model = model
         self.max_history = max_history
         self.silence_limit = silence_limit
         self.max_negative = max_negative
         self.max_elapsed_neg = max_elapsed_neg
+        self.mode = mode
 
         self.silence_elapsed = 0
         self.negatives = 0
         self.neg_start: float | None = None
         self.greeted = False
-        self.final_result: str | None = None  # <-- new
+        self.final_result: str | None = None
 
         prm = _load_prompt(prompt_key)
         self._system_tpl = prm["system"]
@@ -96,7 +103,8 @@ class ConversationManager:
 
     # ----- IO ---------------------------
     def _speak(self, txt: str):
-        speech_io.speak(_clean(txt))
+        if self.mode == "voice":
+            speech_io.speak(_clean(txt))
         print(f"[Robot] {txt}")
 
     # ----- greeting ---------------------
@@ -123,6 +131,22 @@ class ConversationManager:
 
     # ----- listen -----------------------
     def listen(self, secs=5) -> str | None:
+        """
+        voice 模式: 录音 secs 秒并转写
+        text  模式: 直接等待用户输入一行；空行视为 silence (返回 None)
+        """
+        if self.mode == "text":
+            try:
+                line = input("You> ").strip()
+            except EOFError:
+                line = ""
+            if line:
+                self.history.append(Turn("human", line))
+                print(f"[Human] {line}")
+                return line
+            print("[Human] (silence)")
+            return None
+
         txt = speech_io.listen(seconds=secs) or ""
         if txt:
             txt = txt.strip()
@@ -167,7 +191,9 @@ class ConversationManager:
 
     # ----- main loop --------------------
     def interactive_turn(self, listen_secs=5) -> bool:
-
+        """
+        text 模式忽略 listen_secs（无需等待长度概念）。
+        """
         if not self.greeted:
             self.greet()
 
@@ -178,11 +204,11 @@ class ConversationManager:
             print(f"--> Final result: {self.final_result}")
             return False
 
-        human = self.listen(listen_secs)
+        human = self.listen(listen_secs if self.mode == "voice" else 0)
 
         if human:
             cls = self._classify(human)
-            print(f"[LLM Classification] → {cls}")  # <-- new print
+            print(f"[LLM Classification] → {cls}")
             if cls.startswith("pos"):
                 self.final_result = POS_TAG
                 self._farewell_with_tag(POS_TAG)
@@ -202,7 +228,9 @@ class ConversationManager:
             self.silence_elapsed = 0
             return True
 
-        # silence
+        if self.mode == "text":
+            return True
+
         self.silence_elapsed += listen_secs
         if self.silence_elapsed >= self.silence_limit:
             self.final_result = SIL_TAG
@@ -225,7 +253,12 @@ class ConversationManager:
 
 # --------------- CLI -------------------
 if __name__ == "__main__":
-    cm = ConversationManager(goal="enter office twelve", prompt_key="default", silence_limit=5)
+    cm = ConversationManager(
+        goal="enter office twelve",
+        prompt_key="default",
+        silence_limit=5,
+        mode="text",
+    )
 
     while cm.interactive_turn(listen_secs=5):
         pass

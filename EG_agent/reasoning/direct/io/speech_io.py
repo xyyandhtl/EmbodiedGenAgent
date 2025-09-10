@@ -52,6 +52,7 @@ def tts_to_file(text: str, path: str | Path) -> Path:
 
 # -------------------  S  T  T  ---------------------
 import whisper
+import torch
 warnings.filterwarnings(
     "ignore",
     message="FP16 is not supported on CPU; using FP32 instead",
