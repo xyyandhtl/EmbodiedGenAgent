@@ -22,10 +22,8 @@ class Walk(EmbodiedAction):
         target = arg[0]
         info = {}
         info["pre"] = set()
-        # unify with goal generator: WALK -> IsNear(self, X)
-        info["add"] = {f"IsNear(self,{target})"}
-        # ensure only one IsNear(self, place) holds at a time; restrict to nav points
-        info["del_set"] = {f'IsNear(self,{place})' for place in cls.valid_args & EmbodiedAction.NAV_POINTS if place != target}
+        info["add"] = {f"RobotNear({target})"}
+        info["del_set"] = {f"RobotNear({place})" for place in cls.valid_args & EmbodiedAction.NAV_POINTS if place != target}
         info["cost"] = 15
         return info
 

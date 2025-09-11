@@ -1,0 +1,28 @@
+selector
+    sequence
+        cond RobotNear(doorway)
+        cond IsCaptured(victim)
+    sequence
+        selector
+            cond IsCaptured(victim)
+            sequence
+                cond IsCaptured(victim)
+                act Report(victim)
+            sequence
+                cond RobotNear(victim)
+                act Capture(victim)
+        act Walk(doorway)
+    sequence
+        selector
+            cond RobotNear(victim)
+            sequence
+                cond RobotNear(victim)
+                act Mark(victim)
+            sequence
+                cond RobotNear(victim)
+                act Capture(victim)
+            sequence
+                act Walk(victim)
+        act Capture(victim)
+    sequence
+        act Walk(victim)

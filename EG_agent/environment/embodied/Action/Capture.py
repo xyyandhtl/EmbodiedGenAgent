@@ -21,7 +21,7 @@ class Capture(EmbodiedAction):
         target = arg[0]
         return {
             # be at/near the target to capture
-            "pre": {f"IsNear(self,{target})"},
+            "pre": {f"RobotNear({target})"},
             "add": {f"IsCaptured({target})"},
             "del_set": set(),
             "cost": 10,

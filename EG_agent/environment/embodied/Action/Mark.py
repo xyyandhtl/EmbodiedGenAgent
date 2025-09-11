@@ -20,7 +20,7 @@ class Mark(EmbodiedAction):
         """
         target = arg[0]
         return {
-            "pre": {f"IsNear(self,{target})"},
+            "pre": {f"RobotNear({target})"},
             # unify with goal generator: MARK -> IsMarked(X)
             "add": {f"IsMarked({target})"},
             "del_set": set(),

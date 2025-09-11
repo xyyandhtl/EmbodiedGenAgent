@@ -1,0 +1,33 @@
+[Condition]
+RobotNear_<place_target>, IsCaptured_<target>, IsMarked_<target>, IsReported_<target>
+
+[Object]
+<place>=["entry", "staging_area", "corridor", "intersection", "stairwell",
+        "room_a", "room_b", "warehouse", "control_room", "loading_bay", "outdoor",
+        "lobby", "exit", "charging_station", "doorway", "window", "electrical_panel", "gas_meter"]
+<target>=["doorway", "window", "electrical_panel", "gas_meter", "structural_crack", "smoke_source", "water_leak", "blocked_exit", "anomaly", "equipment", "hazard", "gas_leak", "fire", "obstacle", "debris", "leak", "victim", "rescuer"]
+
+[Examples]
+
+指令: "请前往控制室。"
+Goal: RobotNear_control_room
+
+指令: "请在仓库标记异常。"
+Goal: IsMarked_anomaly
+
+指令: "拍摄并报告楼梯口的烟雾源。"
+Goal: IsCaptured_smoke_source & IsReported_smoke_source
+
+指令: "请在出口处救援受困人员。"
+Goal: RobotNearself,exit & IsCapturedvictim
+
+指令: "请报告房间A的水泄漏情况。"
+Goal: IsCapturedwater_leak & IsReportedwater_leak
+
+[提示]
+- 用户的语言指令为中文，生成的 Goal 必须为英文格式。
+- [Condition] 列出所有表示环境状态的谓词及其参数。
+- [Object] 列出所有可用的地点和目标对象。
+- [Examples] 展示中文指令到英文 Goal 的映射。
+- 请根据指令准确生成可执行的英文逻辑 Goal，不要添加多余解释。
+

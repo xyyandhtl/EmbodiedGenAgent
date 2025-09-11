@@ -6,7 +6,7 @@ sys.path.append("EG_agent/planning")
 from EG_agent.planning.btpg.algos.llm_client.tools import goal_transfer_str
 from EG_agent.planning.btpg.algos.bt_planning.bt_planner_interface import BTPlannerInterface
 from EG_agent.planning.btpg.behavior_tree.behavior_libs.ExecBehaviorLibrary import ExecBehaviorLibrary
-
+from EG_agent.system.path import AGENT_ENV_PATH
 
 max_goal_num=5
 diffcult_type= "mix" #"single"  #"mix" "multi"
@@ -14,29 +14,30 @@ scene = "VH" # RH RHS RW
 
 headless = False
 
-# embodied
-cur_cond_set = set()
-from EG_agent.environment.embodied._base.gen_action import EmbodiedAction
-# cur_cond_set |= {f'IsNear({arg})' for arg in EmbodiedAction.CanOpenPlaces}
-# cur_cond_set |= {f'IsCaptured({arg})' for arg in EmbodiedAction.CAPTUREABLE}
-# cur_cond_set |= {f'IsMarked({arg})' for arg in EmbodiedAction.MARKABLE}
-# cur_cond_set |= {f'IsReported({arg})' for arg in EmbodiedAction.REPORTABLE}
-goal_str = 'IsReported_doorway & IsMarked_obstacle & IsCaptured_victim'
-key_objects = ["doorway","obstacle","victim"]
-behavior_lib = ExecBehaviorLibrary("/home/lenovo/Projects/GenAgent/EG_agent/environment/embodied")
+test_env = "embodied"  # "virtualhome"  # "embodied"
 
-# virtualhome
-# cur_cond_set = {'IsSwitchedOff(dishwasher)', 'IsSwitchedOff(tablelamp)', 'IsClose(garbagecan)', 
-#                 'IsClose(cabinet)', 'IsStanding(self)', 'IsSwitchedOff(toaster)', 'IsClose(dishwasher)', 
-#                 'IsSwitchedOff(lightswitch)', 'IsRightHandEmpty(self)', 'IsLeftHandEmpty(self)', 
-#                 'IsSwitchedOff(tv)', 'IsClose(kitchencabinet)', 'IsSwitchedOff(microwave)', 
-#                 'IsSwitchedOff(faucet)', 'IsClose(stove)', 'IsSwitchedOff(coffeemaker)', 
-#                 'IsSwitchedOff(computer)', 'IsClose(microwave)', 'IsClose(fridge)', 'IsSwitchedOff(stove)'}
-# # goal_str = 'IsSwitchedOn_tv & IsSwitchedOn_computer & IsIn_cutlets_microwave & IsClose_microwave '
-# # key_objects = ["tv","computer","cutlets","microwave"]
-# goal_str = 'IsSwitchedOn_tv & IsClose_microwave '
-# key_objects = ["tv","microwave"]
-# behavior_lib = ExecBehaviorLibrary("/home/lenovo/Projects/GenAgent/EG_agent/environment/virtualhome")
+if test_env == "embodied":
+    cur_cond_set = set()
+    from EG_agent.environment.embodied._base.gen_action import EmbodiedAction
+    goal_str = 'RobotNear_doorway & IsCaptured_victim'
+    key_objects = ["doorway", "victim"]
+    # goal_str = 'IsReported_doorway & IsMarked_obstacle & IsCaptured_victim'
+    # key_objects = ["doorway", "obstacle", "victim"]
+    behavior_lib = ExecBehaviorLibrary(f"{AGENT_ENV_PATH}/embodied")
+elif test_env == "virtualhome":
+    cur_cond_set = {'IsSwitchedOff(dishwasher)', 'IsSwitchedOff(tablelamp)', 'IsClose(garbagecan)', 
+                    'IsClose(cabinet)', 'IsStanding(self)', 'IsSwitchedOff(toaster)', 'IsClose(dishwasher)', 
+                    'IsSwitchedOff(lightswitch)', 'IsRightHandEmpty(self)', 'IsLeftHandEmpty(self)', 
+                    'IsSwitchedOff(tv)', 'IsClose(kitchencabinet)', 'IsSwitchedOff(microwave)', 
+                    'IsSwitchedOff(faucet)', 'IsClose(stove)', 'IsSwitchedOff(coffeemaker)', 
+                    'IsSwitchedOff(computer)', 'IsClose(microwave)', 'IsClose(fridge)', 'IsSwitchedOff(stove)'}
+    # goal_str = 'IsSwitchedOn_tv & IsSwitchedOn_computer & IsIn_cutlets_microwave & IsClose_microwave '
+    # key_objects = ["tv","computer","cutlets","microwave"]
+    goal_str = 'IsSwitchedOn_tv & IsClose_microwave '
+    key_objects = ["tv","microwave"]
+    behavior_lib = ExecBehaviorLibrary(f"{AGENT_ENV_PATH}/virtualhome")
+else:
+    raise NotImplementedError
 
 print(f'behavior_lib: {behavior_lib}')
 
@@ -72,10 +73,10 @@ file_path = f'./{file_name}.btml'
 with open(file_path, 'w') as file:
     file.write(ptml_string)
 # read and execute
-from btpg import BehaviorTree
+from EG_agent.planning.btpg import BehaviorTree
 bt = BehaviorTree(file_name + ".btml", behavior_lib)
 # bt.print()
-bt.draw()
+bt.draw(png_only=True)
 
 # Simulate execution in a simulated scenario.
 # goal_str = 'IsIn_milk_fridge & IsClose_fridge'
