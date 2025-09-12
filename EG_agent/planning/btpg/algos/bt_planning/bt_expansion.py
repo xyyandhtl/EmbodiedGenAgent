@@ -1,7 +1,7 @@
 import copy
 import heapq
-from btpg.algos.base.tools import *
-from btpg.algos.base.btp_base import BTPlannerBase,CondActPair
+from EG_agent.planning.btpg.algos.base.tools import *
+from EG_agent.planning.btpg.algos.base.btp_base import BTPlannerBase,CondActPair
 seed = 0
 random.seed(seed)
 np.random.seed(seed)

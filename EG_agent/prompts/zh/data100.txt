@@ -1,107 +1,122 @@
 Instruction: "请前往控制室。"
-Goal: RobotNear_control_room
+Goal: RobotNear_ControlRoom
 
 Instruction: "请在仓库标记异常。"
-Goal: IsMarked_anomaly
+Goal: RobotNear_Warehouse & IsMarked_Equipment
 
 Instruction: "拍摄并报告楼梯口的烟雾源。"
-Goal: IsCaptured_smoke_source & IsReported_smoke_source
+Goal: RobotNear_Stairwell & IsCaptured_SmokeSource & IsReported_SmokeSource
 
 Instruction: "请在出口处救援受困人员。"
-Goal: RobotNear_exit & IsCaptured_victim
+Goal: RobotNear_Doorway & IsCaptured_Victim & IsReported_Victim
 
 Instruction: "请报告房间A的水泄漏情况。"
-Goal: IsCaptured_water_leak & IsReported_water_leak
+Goal: RobotNear_Office & IsCaptured_WaterLeak & IsReported_WaterLeak
 
 Instruction: "请前往大厅或充电站。"
-Goal: RobotNear_lobby | RobotNear_charging_station
+Goal: RobotNear_Lobby | RobotNear_ChargingStation
 
 Instruction: "请在交叉口标记结构裂缝。"
-Goal: IsMarked_structural_crack
+Goal: RobotNear_Intersection & IsMarked_StructuralCrack
 
-Instruction: "请在控制室拍摄气体泄漏并上报。"
-Goal: IsCaptured_gas_leak & IsReported_gas_leak
+Instruction: "请在控制室拍摄气体并上报。"
+Goal: RobotNear_ControlRoom & IsCaptured_Gas & IsReported_Gas
 
 Instruction: "确保靠近室外区域并报告碎片。"
-Goal: RobotNear_outdoor & IsReported_debris
+Goal: RobotNear_Outdoor & IsReported_Debris
 
 Instruction: "在装卸区救援受伤人员并上报。"
-Goal: RobotNear_loading_bay & IsCaptured_rescuer & IsReported_rescuer
+Goal: RobotNear_LoadingBay & IsCaptured_Victim & IsReported_Victim
 
 Instruction: "拍摄电气面板附近的火灾并上报。"
-Goal: IsCaptured_fire & IsReported_fire
+Goal: RobotNear_ElectricalPanel & IsCaptured_Fire & IsReported_Fire
 
 Instruction: "请前往楼梯间并标记被堵的出口。"
-Goal: RobotNear_stairwell & IsMarked_blocked_exit
+Goal: RobotNear_Stairwell & IsMarked_BlockedExit
 
-Instruction: "靠近气表并拍摄危险源。"
-Goal: RobotNear_gas_meter & IsCaptured_hazard
+Instruction: "靠近气表并拍摄危险气体。"
+Goal: RobotNear_GasMeter & IsCaptured_Gas
 
 Instruction: "在仓库标记设备。"
-Goal: IsMarked_equipment
+Goal: RobotNear_Warehouse & IsMarked_Equipment
 
 Instruction: "请在门口拍摄烟雾源并上报。"
-Goal: IsCaptured_smoke_source & IsReported_smoke_source
+Goal: RobotNear_Doorway & IsCaptured_SmokeSource & IsReported_SmokeSource
 
 Instruction: "靠近窗户并标记异常。"
-Goal: RobotNear_window & IsMarked_anomaly
+Goal: RobotNear_Window & IsMarked_Window
 
-Instruction: "到室外检查并报告任何泄漏。"
-Goal: RobotNear_outdoor & IsReported_leak
+Instruction: "到室外检查并报告任何水泄漏。"
+Goal: RobotNear_Outdoor & IsReported_WaterLeak
 
 Instruction: "到房间B拍摄并上报结构裂缝。"
-Goal: RobotNear_room_b & IsCaptured_structural_crack & IsReported_structural_crack
+Goal: RobotNear_Office & IsCaptured_StructuralCrack & IsReported_StructuralCrack
 
-Instruction: "去入口并标记任何障碍。"
-Goal: RobotNear_entry & IsMarked_obstacle
+Instruction: "去门口并标记任何被堵的出口。"
+Goal: RobotNear_Doorway & IsMarked_BlockedExit
 
-Instruction: "去仓储区拍摄并上报泄漏或碎片。"
-Goal: RobotNear_warehouse & (IsCaptured_leak | IsCaptured_debris) & (IsReported_leak | IsReported_debris)
+Instruction: "去仓储区拍摄并上报水泄漏或碎片。"
+Goal: RobotNear_Warehouse & (IsCaptured_WaterLeak | IsCaptured_Debris) & (IsReported_WaterLeak | IsReported_Debris)
 
 Instruction: "请不要靠近楼道。"
-Goal: ~RobotNear_stairwell
+Goal: ~RobotNear_Stairwell
 
-Instruction: "在交叉口拍摄异常并标记。"
-Goal: IsCaptured_anomaly & IsMarked_anomaly
+Instruction: "在交叉口拍摄烟雾源并标记。"
+Goal: RobotNear_Intersection & IsCaptured_SmokeSource & IsMarked_SmokeSource
 
-Instruction: "到控制室拍摄火源或气体泄漏并上报。"
-Goal: (IsCaptured_fire | IsCaptured_gas_leak) & (IsReported_fire | IsReported_gas_leak)
+Instruction: "到控制室拍摄火源或气体并上报。"
+Goal: RobotNear_ControlRoom & (IsCaptured_Fire | IsCaptured_Gas) & (IsReported_Fire | IsReported_Gas)
 
-Instruction: "去外区检查是否有危害，若发现则上报。"
-Goal: RobotNear_outdoor & (IsCaptured_hazard & IsReported_hazard)
+Instruction: "去外区检查是否有碎片，若发现则上报。"
+Goal: RobotNear_Outdoor & (IsCaptured_Debris & IsReported_Debris)
 
-Instruction: "请在房间A或房间B之间巡逻并标记任何异常。"
-Goal: (RobotNear_room_a | RobotNear_room_b) & IsMarked_anomaly
+Instruction: "请在仓库或办公室之间巡逻并标记结构裂缝。"
+Goal: (RobotNear_Warehouse | RobotNear_Office) & IsMarked_StructuralCrack
 
-Instruction: "不要在走廊附近进行拍摄。"
-Goal: ~IsCaptured_corridor  # intent: avoid capturing corridor-area objects
+Instruction: "不要靠近走廊。"
+Goal: ~RobotNear_Corridor
 
 Instruction: "到货区拍摄被困人员并上报。"
-Goal: RobotNear_loading_bay & IsCaptured_victim & IsReported_victim
+Goal: RobotNear_LoadingBay & IsCaptured_Victim & IsReported_Victim
 
-Instruction: "靠近出口并检查是否有泄漏或碎片。"
-Goal: RobotNear_exit & (IsCaptured_leak | IsCaptured_debris)
+Instruction: "靠近门口并检查是否有水泄漏或碎片。"
+Goal: RobotNear_Doorway & (IsCaptured_WaterLeak | IsCaptured_Debris)
 
 Instruction: "标记电气面板上的异常并上报。"
-Goal: IsMarked_electrical_panel & IsReported_electrical_panel
+Goal: RobotNear_ElectricalPanel & IsMarked_ElectricalPanel & IsReported_ElectricalPanel
 
 Instruction: "在楼梯间或交叉口拍摄火源并上报。"
-Goal: (RobotNear_stairwell | RobotNear_intersection) & IsCaptured_fire & IsReported_fire
+Goal: (RobotNear_Stairwell | RobotNear_Intersection) & IsCaptured_Fire & IsReported_Fire
 
-Instruction: "请不要上报假报警（不要报告没有被拍摄的目标）。"
-Goal: ~IsReported_false_alarm  # semantic: avoid reporting nonexistent targets
+Instruction: "请不要上报未拍摄到的受困人员。"
+Goal: ~IsReported_Victim
 
-Instruction: "靠近仓库并标记设备或异常。"
-Goal: RobotNear_warehouse & (IsMarked_equipment | IsMarked_anomaly)
+Instruction: "靠近仓库并标记设备或结构裂缝。"
+Goal: RobotNear_Warehouse & (IsMarked_Equipment | IsMarked_StructuralCrack)
 
-Instruction: "前往控制室并检查气表是否有泄漏，若有则上报。"
-Goal: RobotNear_control_room & (IsCaptured_gas_leak & IsReported_gas_leak)
+Instruction: "前往控制室并检查气表是否有气体泄漏，若有则上报。"
+Goal: RobotNear_ControlRoom & IsCaptured_Gas & IsReported_Gas
 
-Instruction: "巡查外面区域，若发现危险则标记并上报。"
-Goal: RobotNear_outdoor & IsMarked_hazard & IsReported_hazard
+Instruction: "巡查室外区域，若发现碎片则标记并上报。"
+Goal: RobotNear_Outdoor & IsMarked_Debris & IsReported_Debris
 
 Instruction: "到交叉口巡逻但不要标记窗户。"
-Goal: RobotNear_intersection & ~IsMarked_window
+Goal: RobotNear_Intersection & ~IsMarked_Window
 
-Instruction: "在房间A拍摄水泄漏并上报。"
-Goal: RobotNear_room_a & IsCaptured_water_leak & IsReported_water_leak
+Instruction: "在办公室拍摄水泄漏并上报。"
+Goal: RobotNear_Office & IsCaptured_WaterLeak & IsReported_WaterLeak
+
+Instruction: "请在大堂拍摄并上报烟雾源。"
+Goal: RobotNear_Lobby & IsCaptured_SmokeSource & IsReported_SmokeSource
+
+Instruction: "在控制室检查电气面板并标记。"
+Goal: RobotNear_ControlRoom & IsMarked_ElectricalPanel
+
+Instruction: "靠近室内检查结构裂缝并拍摄。"
+Goal: RobotNear_Indoor & IsCaptured_StructuralCrack
+
+Instruction: "在窗户拍摄并上报火情。"
+Goal: RobotNear_Window & IsCaptured_Fire & IsReported_Fire
+
+Instruction: "检查充电站是否有水泄漏并上报。"
+Goal: RobotNear_ChargingStation & IsCaptured_WaterLeak & IsReported_WaterLeak

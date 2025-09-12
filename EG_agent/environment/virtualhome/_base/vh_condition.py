@@ -1,5 +1,5 @@
-from btpg.behavior_tree.base_nodes import Condition
-from btpg.behavior_tree import Status
+from EG_agent.planning.btpg.behavior_tree.base_nodes import Condition
+from EG_agent.planning.btpg.behavior_tree import Status
 
 class VHCondition(Condition):
     can_be_expanded = True

@@ -1,210 +1,216 @@
-import time
-import numpy as np
 import re
 
 from EG_agent.reasoning.llms.internvl3 import VLMInference
 from EG_agent.reasoning.tools.data_process_check import format_check, goal_transfer_ls_set
 from EG_agent.system.path import AGENT_PROMPT_PATH
 
+
 class LogicGoalGenerator:
-    def __init__(self, 
-                 prompt_folder='zh',
-                 prompt_file1="scene.txt", 
-                 prompt_file2="logic_expression.txt", 
-                 test_data_set_file="data100.txt"):
-        # 加载数据集和 prompt
+    def __init__(
+        self,
+        prompt_folder='zh',
+        prompt_file1="scene.txt",
+        prompt_file2="logic_expression.txt",
+        test_data_set_file="data100.txt",
+    ):
+        # 加载数据集与 system prompt（仅注入一次，由 VLMInference 管理）
         with open(f'{AGENT_PROMPT_PATH}/{prompt_folder}/{test_data_set_file}', 'r', encoding="utf-8") as f:
             self.data_set = f.read()
         with open(f'{AGENT_PROMPT_PATH}/{prompt_folder}/{prompt_file1}', 'r', encoding="utf-8") as f:
             self.prompt1 = f.read()
         with open(f'{AGENT_PROMPT_PATH}/{prompt_folder}/{prompt_file2}', 'r', encoding="utf-8") as f:
             self.prompt2 = f.read()
+
         self.prompt = self.prompt1 + self.prompt2
+        # 以空行分段
         self.sections = re.split(r'\n\s*\n', self.data_set)
+
         self.llm = VLMInference()
         self.llm.add_system_prompt(self.prompt)
-    
-    def get_feedback_prompt(self, id, prompt1, prompt2, question, result, error_list, error_black_set):
-        error_message = ""
-        er_word0 = ""
-        er_word1 = ""
-        er_word2 = ""
-        if error_list[0] is not None:
-            error_message = ""
+
+    def _parse_section(self, section):
+        """
+        更健壮的解析：取首个非空行作为 question，
+        在其后的行里找含 'Goal:' 的一行为答案；找不到则取最后一行。
+        """
+        lines = [ln.strip() for ln in section.strip().splitlines() if ln.strip()]
+        if len(lines) < 2:
+            return None, None
+        question = lines[0]
+        # 找到含 Goal: 的行（不区分大小写）
+        answer_line = None
+        for ln in lines[1:]:
+            if ln.lower().startswith('goal'):
+                answer_line = ln
+                break
+        if answer_line is None:
+            answer_line = lines[-1]
+        correct_answer = re.sub(r'^\s*goal\s*:\s*', '', answer_line, flags=re.IGNORECASE).strip()
+        return question, correct_answer
+
+    def get_feedback_message(self, question, result, error_list, error_black_set):
+        """
+        仅返回反馈文本（不再拼接 prompt1/prompt2）。
+        累计黑名单并以三类清单形式给出替换建议。
+        约定沿用原索引映射：
+          error_list[1] -> Other
+          error_list[2] -> Condition
+          error_list[3] -> Object
+        """
+        # 容错处理：error_list 可能长度不足
+        def _as_set(x):
+            try:
+                return set(x) if isinstance(x, (set, list, tuple)) else set()
+            except Exception:
+                return set()
+
+        if isinstance(error_list, (list, tuple)):
+            other_set = _as_set(error_list[1]) if len(error_list) > 1 else set()
+            cond_set = _as_set(error_list[2]) if len(error_list) > 2 else set()
+            obj_set = _as_set(error_list[3]) if len(error_list) > 3 else set()
         else:
-            if error_list[1] != set():
-                error_black_set[0] |= set(error_list[1])
-            if error_list[2] != set():
-                error_black_set[1] |= set(error_list[2])
-            if error_list[3] != set():
-                error_black_set[2] |= set(error_list[3])
-            er_word0 = ", ".join(list(error_black_set[0]))
-            er_word1 = ", ".join(list(error_black_set[1]))
-            er_word2 = ", ".join(list(error_black_set[2]))
-            error_message += f"\n[Blacklist]\n<Illegal Condition>=[{er_word1}]\n<Illegal Object>=[{er_word2}]\n<Other Illegal Words or Characters>=[{er_word0}]\n"
-            error_message += "\n[Blacklist] Contains restricted elements.\n"+\
-                "If a word from <Illegal Condition> is encountered, choose the nearest parameter with a similar meaning from the [Condition] table to formulate the answer.\n"+\
-                "If a word from <Illegal Object> is encountered, choose the nearest parameter with a similar meaning from the [Object] table to formulate the answer."
-        prompt = prompt1 + prompt2 + error_message
-        return prompt
+            other_set = cond_set = obj_set = set()
+
+        # 累计进入黑名单
+        error_black_set[0] |= other_set
+        error_black_set[1] |= cond_set
+        error_black_set[2] |= obj_set
+
+        er_word0 = ", ".join(sorted(error_black_set[0]))
+        er_word1 = ", ".join(sorted(error_black_set[1]))
+        er_word2 = ", ".join(sorted(error_black_set[2]))
+
+        # 若三类均为空，则不给额外反馈
+        if not (er_word0 or er_word1 or er_word2):
+            return ""
+
+        feedback = []
+        feedback.append("\n[Blacklist]")
+        feedback.append(f"<Illegal Condition>=[{er_word1}]")
+        feedback.append(f"<Illegal Object>=[{er_word2}]")
+        feedback.append(f"<Other Illegal Words or Characters>=[{er_word0}]")
+        feedback.append("\n[Instruction]")
+        feedback.append("The above blacklist contains restricted elements.")
+        feedback.append("If a word from <Illegal Condition> is encountered, choose the nearest parameter with a similar meaning from the [Condition] table to formulate the answer.")
+        feedback.append("If a word from <Illegal Object> is encountered, choose the nearest parameter with a similar meaning from the [Object] table to formulate the answer.")
+        feedback.append("Return only a valid logic expression. Do not include explanations or the 'Goal:' prefix.")
+        return "\n".join(feedback)
 
     def generate_from_dataset(self, max_retry=6):
-        # 同步版本：对每个问题直接调用 infer 并立即处理返回结果
+        """
+        同步逐条推理 + 反馈重试。
+        返回：包含每条样本结果的列表。
+        """
         question_list = []
         correct_answer_list = []
         correct_answer_ls_set = []
-        outputs_list = [[] for _ in range(len(self.sections))]
 
         for i, s in enumerate(self.sections):
-            x, y = s.strip().splitlines()
-            x = x.strip()
-            y = y.strip().replace("Goal: ", "")
-            question_list.append(x)
-            correct_answer_list.append(y)
-            print(f"correct answer {i}: {y}")
-            correct_answer_ls_set.append(goal_transfer_ls_set(y))
+            q, ca = self._parse_section(s)
+            if not q or not ca:
+                print(f"[Warn] Skip malformed sample at section #{i}.")
+                continue
+            question_list.append(q)
+            correct_answer_list.append(ca)
+            correct_answer_ls_set.append(goal_transfer_ls_set(ca))
 
-        total_num = len(question_list)
-        error_black_ls = [[set(), set(), set()] for _ in range(total_num)]
-
-        # Metrics
-        finish_num = 0
-        SR = 0
-        GCR = 0
-        GR_ls = np.zeros(6)
         results = []
 
         for idx, question in enumerate(question_list):
-            # 初始推断
             outputs = []
-            attempt = 0
+            error_black_set = [set(), set(), set()]  # [Other, Condition, Object]
+            last_error_list = None
             correct = False
+            success = False  # 标记是否有一次尝试格式通过（不再重试）
 
-            while attempt < max_retry:
-                attempt += 1
-                answer = self.llm.infer(question)
-                print(f"answer {idx}: {answer}")
+            for attempt in range(1, max_retry + 1):
+                # 将上一轮的错误转为简短反馈附在问题后面
+                feedback = self.get_feedback_message(
+                    question,
+                    outputs[-1] if outputs else "",
+                    last_error_list,
+                    error_black_set
+                ) if last_error_list is not None else ""
+
+                prompt_text = f"{question}\n{feedback}" if feedback else question
+                print(f"[Info] Instruction: {question}")
+                answer = self.llm.infer(prompt_text).replace("Goal:", "").strip()
+                print(f"[Info] Sample #{idx} Attempt {attempt} Answer: {answer}")
                 outputs.append(answer)
+
                 format_correct, error_list = format_check(answer)
-
                 if not format_correct:
-                    # 构造反馈提示并重试
-                    if attempt < max_retry:
-                        new_prompt = self.get_feedback_prompt(idx, self.prompt1, self.prompt2, question, answer, error_list, error_black_ls[idx])
-                        # 直接用 infer 发送带反馈的 prompt（同步）
-                        question = question  # question text stays same; prompt is passed via system/user in LLM wrapper if supported
-                        # 使用 prompt 作为 system prompt temporarily by calling add_system_prompt with caution
-                        # 为保持简单性，直接将 new_prompt 作为 system prompt for this infer call if VLMInference supports it:
-                        # fallback: call infer with new_prompt as text (many LLM wrappers expect full prompt)
-                        answer = self.llm.infer(new_prompt)
-                        # replace last recorded answer with feedback-influenced one
-                        outputs[-1] = answer
-                        format_correct, error_list = format_check(answer)
-                        if not format_correct:
-                            continue
-                        # else fall through to success handling
-                    else:
-                        # exhausted retries
-                        GR_flag = False
-                        results.append({
-                            "id": idx,
-                            "question": question,
-                            "answer": outputs,
-                            "correct_answer": correct_answer_list[idx],
-                            "correct": False
-                        })
-                        break
+                    last_error_list = error_list
+                    continue
 
-                # 格式正确，评估是否语义匹配
-                GR_ls[len(outputs)-1] += 1
+                # 格式正确（成功取得一次有效格式），不再重试
+                success = True
+
+                # 若格式正确，做严格集合匹配评估
                 answer_ls_set = goal_transfer_ls_set(answer)
                 if answer_ls_set == correct_answer_ls_set[idx]:
-                    SR += 1
-                    GCR += 1
                     correct = True
-                else:
-                    # partial match score
-                    if len(correct_answer_ls_set[idx]) > 0:
-                        GCR += len([a_set for a_set in answer_ls_set if a_set in correct_answer_ls_set[idx]]) * 1.0 / len(correct_answer_ls_set[idx])
-                results.append({
-                    "id": idx,
-                    "question": question,
-                    "answer": outputs,
-                    "correct_answer": correct_answer_list[idx],
-                    "correct": correct
-                })
-                break  # move to next question
 
-        # self.llm.close()  # keep existing behavior
-        return results
+                break  # 不再尝试更多重试
+            
+            # 尝试结束后统一记录结果
+            # if success:
+            #     results.append({
+            #         "id": idx,
+            #         "question": question,
+            #         "answer": outputs,  # 历次尝试
+            #         "correct_answer": correct_answer_list[idx],
+            #         "correct": correct
+            #     })
+            # else:
+            #     # 用尽重试仍失败（格式未通过）
+            #     results.append({
+            #         "id": idx,
+            #         "question": question,
+            #         "answer": outputs,
+            #         "correct_answer": correct_answer_list[idx],
+            #         "correct": False
+            #     })
 
-    def generate_single(self, question, correct_answer=None, max_retry=6):
+        # return results
+
+    def generate_single(self, question, max_retry=6):
         """
-        对单个 question 进行同步推断和反馈，返回最终结果。
-        correct_answer: 可选，若提供则用于正确性判定，否则仅做格式判定。
+        Retry-based single-question inference:
+        - perform up to max_retry LLM calls,
+        - attach concise feedback from previous format errors when available,
+        - return the valid answer string on first format-pass,
+        - return None if all retries fail.
         """
-        outputs = []
+        latest_answer = ""
         error_black_set = [set(), set(), set()]
+        last_error_list = None
 
-        attempt = 0
-        correct = False
+        for attempt in range(1, max_retry + 1):
+            feedback = self.get_feedback_message(
+                question,
+                latest_answer,
+                last_error_list,
+                error_black_set
+            ) if last_error_list is not None else ""
 
-        while attempt < max_retry:
-            attempt += 1
-            answer = self.llm.infer(question)
-            outputs.append(answer)
+            prompt_text = f"{question}\n{feedback}" if feedback else question
+            answer = self.llm.infer(prompt_text).replace("Goal:", "").strip()
+            print(f"[Info] Attempt {attempt} Answer: {answer}")
+            latest_answer = answer
+
             format_correct, error_list = format_check(answer)
+            if format_correct:
+                return answer
+            last_error_list = error_list
 
-            if not format_correct:
-                if attempt < max_retry:
-                    new_prompt = self.get_feedback_prompt(0, self.prompt1, self.prompt2, question, answer, error_list, error_black_set)
-                    # 同步用新 prompt 再次调用 infer
-                    answer = self.llm.infer(new_prompt)
-                    print(f"answer {idx}: {answer}")
-                    outputs[-1] = answer
-                    format_correct, error_list = format_check(answer)
-                    if not format_correct:
-                        continue
-                else:
-                    return {
-                        "question": question,
-                        "answer": outputs,
-                        "correct_answer": correct_answer,
-                        "correct": False
-                    }
+        # all retries exhausted, no valid format
+        return None
 
-            # 格式正确或经反馈后正确
-            if correct_answer is not None:
-                answer_ls_set = goal_transfer_ls_set(answer)
-                correct_answer_ls_set = goal_transfer_ls_set(correct_answer)
-                if answer_ls_set == correct_answer_ls_set:
-                    correct = True
-                else:
-                    correct = False
-            else:
-                correct = format_correct
-
-            return {
-                "question": question,
-                "answer": outputs,
-                "correct_answer": correct_answer,
-                "correct": correct
-            }
-
-        # 超出重试仍未成功
-        return {
-            "question": question,
-            "answer": outputs,
-            "correct_answer": correct_answer,
-            "correct": False
-        }
 
 if __name__ == "__main__":
     generator = LogicGoalGenerator()
     # 批量推理
-    results = generator.generate_from_dataset()
-    # for r in results:
-    #     print(f"Q: {r['question']}\nA: {r['answer']}\nCA: {r['correct_answer']}\nCorrect: {r['correct']}\n")
+    # results = generator.generate_from_dataset()
     # 单个问题推理示例
-    single_result = generator.generate_single("请将桌上的苹果拿到厨房", correct_answer="IsNear(self,kitchen) & IsCaptured(apple)")
-    print(single_result)
+    single_result = generator.generate_single("在窗户拍摄并上报火情。")

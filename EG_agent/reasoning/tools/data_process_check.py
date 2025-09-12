@@ -1,4 +1,3 @@
-
 from sympy import symbols, Not, Or, And, to_dnf
 # from sympy import symbols, simplify_logic
 
@@ -6,28 +5,53 @@ import re
 
 split_characters = r'[()&|~ ]'  # 用正则表达式定义多个字符，包括逗号、句号、分号和感叹号等
 
-predicate_list = {"RobotNear","On","Holding","Exists","IsClean","Active","Closed","Low"}
-object_list = {'Coffee', 'Water', 'Dessert', 'Softdrink', 'BottledDrink', 'Yogurt', 'ADMilk', 'MilkDrink', 'Milk','VacuumCup','Chips', 'NFCJuice', 'Bernachon', 'ADMilk', 'SpringWater',
-'Apple','Banana','Mangosteen','Orange','Glass','OrangeJuice','Tray','CoconutMilk','Kettle','PaperCup','Bread','Cake','LunchBox','Teacup','Tissue','Chocolate','Sandwiches','Mugs','Ice',
-'Bar', 'Bar2', 'WaterStation', 'CoffeeStation', 'Table1', 'Table2', 'Table3','WindowTable4','WindowTable5','WindowTable6','QuietTable1','QuietTable2','ReadingNook','Entrance','Exit','LoungeArea','HighSeats','VIPLounge','MerchZone',
-'Table1','Floor','Chairs','AC','TubeLight','HallLight','Curtain','ACTemperature'
-               }
+# Updated predicate list to match prompts/zh/scene.txt [Condition]
+predicate_list = {"RobotNear", "IsCaptured", "IsMarked", "IsReported"}
 
-dic_pred_obj={}
-dic_pred_obj['RobotNear']=['Coffee', 'Water', 'Dessert', 'Softdrink', 'BottledDrink', 'Yogurt', 'ADMilk', 'MilkDrink', 'Milk', 'VacuumCup','Chips', 'NFCJuice', 'Bernachon', 'ADMilk', 'SpringWater', 'Apple', 'Banana', 'Mangosteen', 'Orange','Kettle', 'PaperCup', 'Bread', 'LunchBox','Teacup', 'Chocolate', 'Sandwiches', 'Mugs','Watermelon', 'Tomato', 'CleansingFoam','CocountMilk','SugarlessGum', 'MedicalAdhensiveTape', 'SourMilkDrink', 'PaperCup','Tissue', 'YogurtDrink', 'Newspaper', 'Box','PaperCupStarbucks', 'CoffeeMachine', 'Straw', 'Cake','Tray', 'Bread','Glass', 'Door','Mug', 'Machine','PackagedCoffee', 'CubeSugar','Apple', 'Spoon','Drinks', 'Drink','Ice', 'Saucer','TrashBin', 'Knife','Cube']
-dic_pred_obj['RobotNear']+=['Bar', 'Bar2', 'WaterStation', 'CoffeeStation', 'Table1', 'Table2', 'Table3', 'WindowTable6','WindowTable4', 'WindowTable5','QuietTable1', 'QuietTable2', 'QuietTable3', 'ReadingNook', 'Entrance', 'Exit', 'LoungeArea', 'HighSeats','VIPLounge', 'MerchZone']
-dic_pred_obj['IsClean']=['Table1','Floor','Chairs']
-dic_pred_obj['Active']=['AC','TubeLight','HallLight']
-dic_pred_obj['Closed']=['Curtain']
-dic_pred_obj['Low']=['ACTemperature']
+# Updated object list to match prompts/zh/scene.txt [Object] (places + targets) in PascalCase
+object_list = {
+    # places
+    "StagingArea", "Corridor", "Intersection", "Stairwell", "Office",
+    "Warehouse", "ControlRoom", "LoadingBay", "Lobby", "ChargingStation",
+    "Outdoor", "Indoor", "Wall", "Doorway", "Window", "ElectricalPanel",
+    "GasMeter", "Equipment", "StructuralCrack", "SmokeSource", "WaterLeak",
+    "BlockedExit",
+    # targets
+    "Blood", "Fire", "Gas", "Debris", "Victim", "Rescuer", "Visitor", "Staff"
+}
 
-# object_list = {'Coffee', 'Water', 'Dessert', 'Softdrink', 'BottledDrink', 'Yogurt', 'ADMilk',
-#                'MilkDrink', 'Milk','VacuumCup','Chips', 'NFCJuice', 'Bernachon', 'ADMilk', 'SpringWater',
-#                 'Bar', 'Bar2', 'WaterTable', 'CoffeeTable', 'Table1', 'Table2', 'Table3','BrightTable6',
-#                 'Table1','Floor','Chairs',
-#                 'AC','TubeLight','HallLight',
-#                 'Curtain','ACTemperature'
+# Updated predicate->allowed objects mapping based on scene.txt semantics (PascalCase).
+dic_pred_obj = {}
+# RobotNear accepts both place and target names (union)
+dic_pred_obj["RobotNear"] = sorted(set(object_list))
+
+# predicates that operate on targets (PascalCase)
+targets = {
+    "Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
+    "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",
+    "Blood", "Fire", "Gas", "Debris", "Victim", "Rescuer", "Visitor", "Staff"
+}
+dic_pred_obj["IsCaptured"] = sorted(targets)
+dic_pred_obj["IsMarked"] = sorted(targets)
+dic_pred_obj["IsReported"] = sorted(targets)
+
+
+# predicate_list = {"RobotNear","On","Holding","Exists","IsClean","Active","Closed","Low"}
+# object_list = {'Coffee', 'Water', 'Dessert', 'Softdrink', 'BottledDrink', 'Yogurt', 'ADMilk', 'MilkDrink', 'Milk','VacuumCup','Chips', 'NFCJuice', 'Bernachon', 'ADMilk', 'SpringWater',
+# 'Apple','Banana','Mangosteen','Orange','Glass','OrangeJuice','Tray','CoconutMilk','Kettle','PaperCup','Bread','Cake','LunchBox','Teacup','Tissue','Chocolate','Sandwiches','Mugs','Ice',
+# 'Bar', 'Bar2', 'WaterStation', 'CoffeeStation', 'Table1', 'Table2', 'Table3','WindowTable4','WindowTable5','WindowTable6','QuietTable1','QuietTable2','ReadingNook','Entrance','Exit','LoungeArea','HighSeats','VIPLounge','MerchZone',
+# 'Table1','Floor','Chairs','AC','TubeLight','HallLight','Curtain','ACTemperature'
 #                }
+
+# dic_pred_obj={}
+# dic_pred_obj['RobotNear']=['Coffee', 'Water', 'Dessert', 'Softdrink', 'BottledDrink', 'Yogurt', 'ADMilk', 'MilkDrink', 'Milk', 'VacuumCup','Chips', 'NFCJuice', 'Bernachon', 'ADMilk', 'SpringWater', 'Apple', 'Banana', 'Mangosteen', 'Orange','Kettle', 'PaperCup', 'Bread', 'LunchBox','Teacup', 'Chocolate', 'Sandwiches', 'Mugs','Watermelon', 'Tomato', 'CleansingFoam','CocountMilk','SugarlessGum', 'MedicalAdhensiveTape', 'SourMilkDrink', 'PaperCup','Tissue', 'YogurtDrink', 'Newspaper', 'Box','PaperCupStarbucks', 'CoffeeMachine', 'Straw', 'Cake','Tray', 'Bread','Glass', 'Door','Mug', 'Machine','PackagedCoffee', 'CubeSugar','Apple', 'Spoon','Drinks', 'Drink','Ice', 'Saucer','TrashBin', 'Knife','Cube']
+# dic_pred_obj['RobotNear']+=['Bar', 'Bar2', 'WaterStation', 'CoffeeStation', 'Table1', 'Table2', 'Table3', 'WindowTable6','WindowTable4', 'WindowTable5','QuietTable1', 'QuietTable2', 'QuietTable3', 'ReadingNook', 'Entrance', 'Exit', 'LoungeArea', 'HighSeats','VIPLounge', 'MerchZone']
+# dic_pred_obj['IsClean']=['Table1','Floor','Chairs']
+# dic_pred_obj['Active']=['AC','TubeLight','HallLight']
+# dic_pred_obj['Closed']=['Curtain']
+# dic_pred_obj['Low']=['ACTemperature']
+
+
 def format_check(result):
     try:
         goal_dnf = str(to_dnf(result, simplify=True))

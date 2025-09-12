@@ -1,8 +1,8 @@
 import re
-from btpg.algos.llm_client.tools import goal_transfer_str, act_str_process
-from btpg.utils import ROOT_PATH
+from EG_agent.planning.btpg.algos.llm_client.tools import goal_transfer_str, act_str_process
+from EG_agent.planning.btpg.utils import ROOT_PATH
 # 导入向量数据库检索的相关函数
-from btpg.algos.llm_client.vector_database_env_goal import search_nearest_examples
+from EG_agent.planning.btpg.algos.llm_client.vector_database_env_goal import search_nearest_examples
 from ordered_set import OrderedSet
 
 

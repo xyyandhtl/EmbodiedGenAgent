@@ -1,6 +1,6 @@
 import re
 import os
-from btpg.utils import ROOT_PATH
+from EG_agent.planning.btpg.utils import ROOT_PATH
 # os.chdir(f'{ROOT_PATH}/../test_examples')
 import random
 import numpy as np
@@ -8,22 +8,22 @@ seed = 0
 random.seed(seed)
 np.random.seed(seed)
 
-from btpg.algos.base.tools import get_btml
-from btpg.algos.bt_planning.examples import *
-from btpg.algos.base.planning_action import state_transition
+from EG_agent.planning.btpg.algos.base.tools import get_btml
+from EG_agent.planning.btpg.algos.bt_planning.examples import *
+from EG_agent.planning.btpg.algos.base.planning_action import state_transition
 
-from btpg.algos.bt_planning.bt_expansion import BTExpansion
-from btpg.algos.bt_planning.reactive_planner import ReactivePlanning
-from btpg.algos.bt_planning.obtea import OBTEA
-from btpg.algos.bt_planning.hbtp import HBTP
-from btpg.algos.bt_planning.uhbtp import UHBTP
+from EG_agent.planning.btpg.algos.bt_planning.bt_expansion import BTExpansion
+from EG_agent.planning.btpg.algos.bt_planning.reactive_planner import ReactivePlanning
+from EG_agent.planning.btpg.algos.bt_planning.obtea import OBTEA
+from EG_agent.planning.btpg.algos.bt_planning.hbtp import HBTP
+from EG_agent.planning.btpg.algos.bt_planning.uhbtp import UHBTP
 
 
 # Used for experimental test data recording
-from btpg.algos.bt_planning_exp.bt_expansion_test import BTExpansionTest
-from btpg.algos.bt_planning_exp.obtea_test import OBTEATest
-from btpg.algos.bt_planning_exp.hbtp_test import HBTPTest
-from btpg.algos.bt_planning_exp.uhbtp_test import UHBTPTest
+from EG_agent.planning.btpg.algos.bt_planning_exp.bt_expansion_test import BTExpansionTest
+from EG_agent.planning.btpg.algos.bt_planning_exp.obtea_test import OBTEATest
+from EG_agent.planning.btpg.algos.bt_planning_exp.hbtp_test import HBTPTest
+from EG_agent.planning.btpg.algos.bt_planning_exp.uhbtp_test import UHBTPTest
 # from metric.Execution_Robustnes.tools import modify_condition_set_Random_Perturbations
 
 
@@ -331,7 +331,7 @@ class BTPlannerInterface:
 
 
     def execute_bt(self,goal,state,verbose=True):
-        from btpg.algos.base.tools import state_transition
+        from EG_agent.planning.btpg.algos.base.tools import state_transition
         steps = 0
         current_cost = 0
         current_tick_time = 0
@@ -373,7 +373,7 @@ class BTPlannerInterface:
         return error,state,act_num-1,current_cost,record_act[:-1],current_tick_time
 
     def execute_bt_Random_Perturbations(self,scene,SimAct,objects,goal,state, verbose=True, p=0.2):
-        from btpg.algos.base.tools import state_transition
+        from EG_agent.planning.btpg.algos.base.tools import state_transition
         steps = 0
         current_cost = 0
         current_tick_time = 0
@@ -482,7 +482,7 @@ def collect_action_nodes(behavior_lib):
 
 
 def collect_conditions(node):
-    from btpg.algos.base.behaviour_tree import Leaf
+    from EG_agent.planning.btpg.algos.base.behaviour_tree import Leaf
     conditions = set()
     if isinstance(node, Leaf) and node.type == 'cond':
         # 如果是叶子节点并且类型为'cond'，则将内容添加到集合中

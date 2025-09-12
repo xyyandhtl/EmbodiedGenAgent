@@ -1,5 +1,5 @@
 import os
-from btpg.utils import ROOT_PATH
+from EG_agent.planning.btpg.utils import ROOT_PATH
 import importlib.util
 
 def get_classes_from_folder(folder_path):

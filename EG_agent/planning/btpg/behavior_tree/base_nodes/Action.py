@@ -1,4 +1,4 @@
-from btpg.behavior_tree.base_nodes.BehaviorNode import BahaviorNode
+from EG_agent.planning.btpg.behavior_tree.base_nodes.BehaviorNode import BahaviorNode
 
 class Action(BahaviorNode):
     print_name_prefix = "Action "

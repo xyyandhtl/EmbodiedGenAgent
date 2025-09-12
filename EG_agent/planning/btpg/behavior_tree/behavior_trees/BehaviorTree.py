@@ -1,21 +1,21 @@
-# from btpg.behavior_tree.scene.scene import Scene
-# from btpg.behavior_tree.behavior_tree.btml.btmlCompiler import load
+# from EG_agent.planning.btpg.behavior_tree.scene.scene import Scene
+# from EG_agent.planning.btpg.behavior_tree.behavior_tree.btml.btmlCompiler import load
 
 import os
 import py_trees as ptree
-from btpg.behavior_tree.utils.visitor import StatusVisitor
-from btpg.utils.path import get_root_path
-from btpg.utils.tree.tree_node import new_tree_like,traverse_and_modify_tree
+from EG_agent.planning.btpg.behavior_tree.utils.visitor import StatusVisitor
+from EG_agent.planning.btpg.utils.path import get_root_path
+from EG_agent.planning.btpg.utils.tree.tree_node import new_tree_like,traverse_and_modify_tree
 
-from btpg.behavior_tree.utils.draw import render_dot_tree
-from btpg.behavior_tree.utils.load import load_btml, print_tree_from_root
-from btpg.behavior_tree.base_nodes import base_node_map, composite_node_map
+from EG_agent.planning.btpg.behavior_tree.utils.draw import render_dot_tree
+from EG_agent.planning.btpg.behavior_tree.utils.load import load_btml, print_tree_from_root
+from EG_agent.planning.btpg.behavior_tree.base_nodes import base_node_map, composite_node_map
 
 import os
-from btpg.utils.path import get_root_path
-from btpg.utils.tree.tree_node import new_tree_like
+from EG_agent.planning.btpg.utils.path import get_root_path
+from EG_agent.planning.btpg.utils.tree.tree_node import new_tree_like
 
-from btpg.behavior_tree.base_nodes import base_node_map, composite_node_map,base_node_type_map
+from EG_agent.planning.btpg.behavior_tree.base_nodes import base_node_map, composite_node_map,base_node_type_map
 
 
 

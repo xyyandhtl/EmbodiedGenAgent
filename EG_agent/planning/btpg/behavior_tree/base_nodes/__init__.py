@@ -1,8 +1,8 @@
-from btpg.behavior_tree.base_nodes.Action import Action
-from btpg.behavior_tree.base_nodes.Condition import Condition
-from btpg.behavior_tree.base_nodes.Inverter import Inverter
-from btpg.behavior_tree.base_nodes.Selector import Selector
-from btpg.behavior_tree.base_nodes.Sequence import Sequence
+from EG_agent.planning.btpg.behavior_tree.base_nodes.Action import Action
+from EG_agent.planning.btpg.behavior_tree.base_nodes.Condition import Condition
+from EG_agent.planning.btpg.behavior_tree.base_nodes.Inverter import Inverter
+from EG_agent.planning.btpg.behavior_tree.base_nodes.Selector import Selector
+from EG_agent.planning.btpg.behavior_tree.base_nodes.Sequence import Sequence
 
 
 base_node_map = {

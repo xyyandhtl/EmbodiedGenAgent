@@ -1,8 +1,8 @@
 import py_trees as ptree
-from btpg.behavior_tree.btml import btmlCompiler
+from EG_agent.planning.btpg.behavior_tree.btml import btmlCompiler
 import os
 import importlib.util
-from btpg.utils.path import get_root_path
+from EG_agent.planning.btpg.utils.path import get_root_path
 
 def load_btml(btml_path):
     tree_root = btmlCompiler.load(btml_path)

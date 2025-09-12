@@ -1,9 +1,9 @@
 import shortuuid
 # import py_trees as ptree
-# from btpg.behavior_tree.base_nodes import Inverter,Selector,Sequence
-# from btpg.behavior_tree.base_nodes.AbsAct import AbsAct
-# from btpg.behavior_tree.base_nodes.AbsCond import AbsCond
-from btpg.utils.tree.tree_node import TreeNode
+# from EG_agent.planning.btpg.behavior_tree.base_nodes import Inverter,Selector,Sequence
+# from EG_agent.planning.btpg.behavior_tree.base_nodes.AbsAct import AbsAct
+# from EG_agent.planning.btpg.behavior_tree.base_nodes.AbsCond import AbsCond
+from EG_agent.planning.btpg.utils.tree.tree_node import TreeNode
 
 
 if "." in __name__:

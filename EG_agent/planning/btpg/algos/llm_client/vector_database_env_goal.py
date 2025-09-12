@@ -2,9 +2,9 @@ import re
 import os
 import faiss
 import numpy as np
-from btpg.utils import ROOT_PATH
-from btpg.algos.llm_client.llms.gpt3 import LLMGPT3
-from btpg.algos.llm_client.llms.gpt4 import LLMGPT4
+from EG_agent.planning.btpg.utils import ROOT_PATH
+from EG_agent.planning.btpg.algos.llm_client.llms.gpt3 import LLMGPT3
+from EG_agent.planning.btpg.algos.llm_client.llms.gpt4 import LLMGPT4
 
 # def parse_and_prepare_data(file_path):
 #     """从文本文件中解析数据，并生成键值对"""

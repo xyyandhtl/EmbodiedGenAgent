@@ -1,5 +1,5 @@
 import py_trees as ptree
-from btpg.behavior_tree.base_nodes.BehaviorNode import BahaviorNode, Status
+from EG_agent.planning.btpg.behavior_tree.base_nodes.BehaviorNode import BahaviorNode, Status
 
 class Condition(BahaviorNode):
     print_name_prefix = "Condition "

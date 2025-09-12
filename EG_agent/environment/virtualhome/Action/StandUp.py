@@ -2,7 +2,7 @@ import py_trees as ptree
 
 from typing import Any
 from EG_agent.environment.virtualhome._base.vh_action import VHAction
-from btpg.behavior_tree import Status
+from EG_agent.planning.btpg.behavior_tree import Status
 
 class StandUp(VHAction):
     can_be_expanded = False

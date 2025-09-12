@@ -3,10 +3,10 @@ import time
 import random
 import heapq
 import re
-from btpg.algos.base.planning_action import PlanningAction
-from btpg.algos.base.btp_base import BTPlannerBase,CondActPair
+from EG_agent.planning.btpg.algos.base.planning_action import PlanningAction
+from EG_agent.planning.btpg.algos.base.btp_base import BTPlannerBase,CondActPair
 from collections import deque
-from btpg.algos.base.tools import *
+from EG_agent.planning.btpg.algos.base.tools import *
 seed = 0
 random.seed(seed)
 np.random.seed(seed)

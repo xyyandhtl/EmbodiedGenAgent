@@ -1,9 +1,9 @@
-# from btpg.behavior_tree.scene.scene import Scene
-# from btpg.behavior_tree.behavior_tree.btml.btmlCompiler import load
+# from EG_agent.planning.btpg.behavior_tree.scene.scene import Scene
+# from EG_agent.planning.btpg.behavior_tree.behavior_tree.btml.btmlCompiler import load
 
 import os
-from btpg.behavior_tree import Robot, task_map
-from btpg.behavior_tree.utils.bt.draw import render_dot_tree
+from EG_agent.planning.btpg.behavior_tree import Robot, task_map
+from EG_agent.planning.btpg.behavior_tree.utils.bt.draw import render_dot_tree
 
 if __name__ == '__main__':
     TASK_NAME = 'OT'

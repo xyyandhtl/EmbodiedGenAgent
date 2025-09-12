@@ -1,3 +1,3 @@
 
 
-from btpg.behavior_tree.behavior_libs.ExecBehaviorLibrary import ExecBehaviorLibrary
+from EG_agent.planning.btpg.behavior_tree.behavior_libs.ExecBehaviorLibrary import ExecBehaviorLibrary

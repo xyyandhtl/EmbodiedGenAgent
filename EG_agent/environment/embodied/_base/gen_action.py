@@ -1,5 +1,5 @@
-from btpg.behavior_tree.base_nodes import Action
-from btpg.behavior_tree import Status
+from EG_agent.planning.btpg.behavior_tree.base_nodes import Action
+from EG_agent.planning.btpg.behavior_tree import Status
 
 class EmbodiedAction(Action):
     can_be_expanded = True
@@ -8,21 +8,22 @@ class EmbodiedAction(Action):
     # SAR/inspection domain categories
     # Navigation targets (areas/waypoints)
     LOCATIONS = {
-        "entry", "staging_area", "corridor", "intersection", "stairwell",
-        "room_a", "room_b", "warehouse", "control_room", "loading_bay", "outdoor",
-        "lobby", "exit", "charging_station"
+        "StagingArea", "Corridor", "Intersection", "Stairwell",
+        "Office", "Warehouse", "ControlRoom", "LoadingBay", 
+        "Lobby", "ChargingStation", "Outdoor", "Indoor", "Wall"
     }
     # Points of interest the robot may inspect/capture/mark
     INSPECTION_POINTS = {
-        "doorway", "window", "electrical_panel", "gas_meter",
-        "structural_crack", "smoke_source", "water_leak", "blocked_exit",
-        "anomaly", "equipment"
+        "Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
+        "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",
     }
     # Dynamic entities/incidents
     INCIDENTS = {
-        "hazard", "gas_leak", "fire", "obstacle", "debris", "leak"
+        "Blood", "Fire", "Gas", "Debris"
     }
-    PERSONS = {"victim", "rescuer"}
+    PERSONS = {
+        "Victim", "Rescuer", "Visitor", "Staff"
+    }
 
     # Derived sets for convenience
     NAV_POINTS = LOCATIONS | INSPECTION_POINTS

@@ -2,9 +2,9 @@ import copy
 import heapq
 import random
 import numpy as np
-from btpg.algos.base.tools import *
-from btpg.algos.base.btp_base import BTPlannerBase
-from btpg.utils.string_format import parse_predicate_logic
+from EG_agent.planning.btpg.algos.base.tools import *
+from EG_agent.planning.btpg.algos.base.btp_base import BTPlannerBase
+from EG_agent.planning.btpg.utils.string_format import parse_predicate_logic
 seed = 0
 random.seed(seed)
 np.random.seed(seed)

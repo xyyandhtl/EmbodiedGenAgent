@@ -1,28 +1,33 @@
 [Condition]
-RobotNear_<place_target>, IsCaptured_<target>, IsMarked_<target>, IsReported_<target>
+RobotNear_<place/target>, IsCaptured_<target>, IsMarked_<target>, IsReported_<target>
 
 [Object]
-<place>=["entry", "staging_area", "corridor", "intersection", "stairwell",
-        "room_a", "room_b", "warehouse", "control_room", "loading_bay", "outdoor",
-        "lobby", "exit", "charging_station", "doorway", "window", "electrical_panel", "gas_meter"]
-<target>=["doorway", "window", "electrical_panel", "gas_meter", "structural_crack", "smoke_source", "water_leak", "blocked_exit", "anomaly", "equipment", "hazard", "gas_leak", "fire", "obstacle", "debris", "leak", "victim", "rescuer"]
+<place>=["StagingArea", "Corridor", "Intersection", "Stairwell",
+        "Office", "Warehouse", "ControlRoom", "LoadingBay", 
+        "Lobby", "ChargingStation", "Outdoor", "Indoor", "Wall",
+        "Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
+        "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",]
+<target>=["Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
+        "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",
+        "Blood", "Fire", "Gas", "Debris",
+        "Victim", "Rescuer", "Visitor", "Staff"]
 
 [Examples]
 
 指令: "请前往控制室。"
-Goal: RobotNear_control_room
+Goal: RobotNear_ControlRoom
 
 指令: "请在仓库标记异常。"
-Goal: IsMarked_anomaly
+Goal: IsMarked_Warehouse
 
 指令: "拍摄并报告楼梯口的烟雾源。"
-Goal: IsCaptured_smoke_source & IsReported_smoke_source
+Goal: IsCaptured_Gas & IsReported_Gas
 
 指令: "请在出口处救援受困人员。"
-Goal: RobotNearself,exit & IsCapturedvictim
+Goal: RobotNear_Doorway & IsReported_Victim
 
-指令: "请报告房间A的水泄漏情况。"
-Goal: IsCapturedwater_leak & IsReportedwater_leak
+指令: "请报告房间A的着火情况。"
+Goal: RobotNear_Room & IsCaptured_Fire & IsReported_Fire
 
 [提示]
 - 用户的语言指令为中文，生成的 Goal 必须为英文格式。

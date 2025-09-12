@@ -12,10 +12,11 @@ A Generative Embodied Agent that transforms open-ended instructions into behavio
 - Implement the usage examples for bt tree execution loop in simulator
 
 ## Usage
-module standalone test: [examples](examples/examples.md)
+module standalone test: [examples](examples/EXAMPLES.md)
 
 
 ## Acknowledgments
-- Prompts for well-formed first-order logic goal generation modified from: https://github.com/HPCL-EI/RoboWaiter
+- Prompts for well-formed first-order logic goal prompts modified from: https://github.com/HPCL-EI/RoboWaiter.git
 - BehaviorTree generator modified from: https://github.com/DIDS-EI/BTPG.git
-- Simulator: https://github.com/isaac-sim/IsaacLab
+- Object/Place querying in the unkown world using open-vocabulary mapping: https://github.com/Eku127/DualMap.git
+- Simulator: https://github.com/isaac-sim/IsaacLab.git

@@ -1,5 +1,5 @@
-from btpg.behavior_tree.base_nodes import Action
-from btpg.behavior_tree import Status
+from EG_agent.planning.btpg.behavior_tree.base_nodes import Action
+from EG_agent.planning.btpg.behavior_tree import Status
 
 class VHAction(Action):
     can_be_expanded = True

@@ -1,10 +1,10 @@
-# from btpg.behavior_tree.scene.scene import Scene
-# from btpg.behavior_tree.behavior_tree.btml.btmlCompiler import load
+# from EG_agent.planning.btpg.behavior_tree.scene.scene import Scene
+# from EG_agent.planning.btpg.behavior_tree.behavior_tree.btml.btmlCompiler import load
 
 import os
-from btpg.utils.path import get_root_path
-from btpg.behavior_tree.utils.draw import render_dot_tree
-from btpg.behavior_tree.utils.load import load_bt_from_btml
+from EG_agent.planning.btpg.utils.path import get_root_path
+from EG_agent.planning.btpg.behavior_tree.utils.draw import render_dot_tree
+from EG_agent.planning.btpg.behavior_tree.utils.load import load_bt_from_btml
 
 if __name__ == '__main__':
 

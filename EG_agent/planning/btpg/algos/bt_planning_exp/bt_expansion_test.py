@@ -2,8 +2,8 @@
 import random
 import heapq
 import re
-from btpg.algos.base.behaviour_tree import Leaf, ControlBT
-from btpg.algos.base.planning_action import PlanningAction,state_transition
+from EG_agent.planning.btpg.algos.base.behaviour_tree import Leaf, ControlBT
+from EG_agent.planning.btpg.algos.base.planning_action import PlanningAction,state_transition
 import random
 import numpy as np
 import time
@@ -12,8 +12,8 @@ seed=0
 random.seed(seed)
 np.random.seed(seed)
 
-from btpg.algos.base.tools  import calculate_priority_percentage
-from btpg.algos.base.tools  import *
+from EG_agent.planning.btpg.algos.base.tools  import calculate_priority_percentage
+from EG_agent.planning.btpg.algos.base.tools  import *
 
 
 class CondActPair:

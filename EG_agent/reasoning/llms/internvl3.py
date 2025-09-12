@@ -94,7 +94,7 @@ class VLMInference:
             prompt = self._format_prompt(text) if self.template_infer else text
 
             # Log consolidated information
-            logger.info(f"Infer called | text: {prompt} | image: {image_url is not None} | template_infer: {self.template_infer}")
+            # logger.info(f"Infer called | text: {prompt} | image: {image_url is not None} | template_infer: {self.template_infer}")
 
             return self._call_llm(image_url, prompt)
         except Exception as exc:

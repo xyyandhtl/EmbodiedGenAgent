@@ -3,16 +3,16 @@ import time
 import random
 import heapq
 import re
-from btpg.algos.base.behaviour_tree import Leaf, ControlBT
-from btpg.algos.base.planning_action import PlanningAction, state_transition
+from EG_agent.planning.btpg.algos.base.behaviour_tree import Leaf, ControlBT
+from EG_agent.planning.btpg.algos.base.planning_action import PlanningAction, state_transition
 from collections import deque
 import random
 import numpy as np
 import asyncio
-from btpg.algos.llm_client.llms.gpt3 import LLMGPT3
-from btpg.algos.llm_client.tools import goal_transfer_str, act_str_process
-from btpg.algos.base.tools  import calculate_priority_percentage
-from btpg.algos.base.tools  import *
+from EG_agent.planning.btpg.algos.llm_client.llms.gpt3 import LLMGPT3
+from EG_agent.planning.btpg.algos.llm_client.tools import goal_transfer_str, act_str_process
+from EG_agent.planning.btpg.algos.base.tools  import calculate_priority_percentage
+from EG_agent.planning.btpg.algos.base.tools  import *
 
 seed = 0
 random.seed(seed)

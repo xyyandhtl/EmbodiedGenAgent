@@ -1,10 +1,10 @@
 
-from btpg.algos.base.planning_action import PlanningAction
-from btpg.utils.read_dataset import read_dataset
-from btpg.utils import ROOT_PATH
-# from btpg.envs.RobotHow.exec_lib._base.RHAction import RHAction
-import pickle
-import btpg
+from EG_agent.planning.btpg.algos.base.planning_action import PlanningAction
+from EG_agent.planning.btpg.utils.read_dataset import read_dataset
+from EG_agent.planning.btpg.utils import ROOT_PATH
+# from EG_agent.planning.btpg.envs.RobotHow.exec_lib._base.RHAction import RHAction
+# import pickle
+import EG_agent.planning.btpg as btpg
 
 # 读入环境文件
 def read_env_file(file_path):
@@ -123,10 +123,10 @@ def write_to_file(data, file_path):
 
 
 # def setup_environment(scene):
-#     from btpg.utils.tools import collect_action_nodes
+#     from EG_agent.planning.btpg.utils.tools import collect_action_nodes
 #     if scene == "RW":
 #         # ===================== RoboWaiter ========================
-#         from btpg.envs.robowaiter.exec_lib._base.rw_action import RWAction
+#         from EG_agent.planning.btpg.envs.robowaiter.exec_lib._base.rw_action import RWAction
 #         env = btpg.make("RW")
 #         cur_cond_set = env.agents[0].condition_set = {'RobotNear(Bar)', 'Holding(Nothing)'}
 #         cur_cond_set |= {f'Exists({arg})' for arg in RWAction.all_object - {'Coffee', 'Water', 'Dessert'}}
@@ -147,7 +147,7 @@ def write_to_file(data, file_path):
 
 #     elif scene == "OG":
 #         # ===================== OmniGibson ========================
-#         from btpg.envs.omnigibson.exec_lib._base.og_action import OGAction
+#         from EG_agent.planning.btpg.envs.omnigibson.exec_lib._base.og_action import OGAction
 #         env = btpg.make("OG")
 #         cur_cond_set = env.agents[0].condition_set = {"IsRightHandEmpty(self)", "IsLeftHandEmpty(self)",
 #                                                       "IsStanding(self)"}
@@ -159,7 +159,7 @@ def write_to_file(data, file_path):
 
 #     elif scene == "RH":
 #         # ===================== RobotHow ========================
-#         from btpg.envs.robothow.exec_lib._base.rh_action import RHAction as RHB
+#         from EG_agent.planning.btpg.envs.robothow.exec_lib._base.rh_action import RHAction as RHB
 #         env = btpg.make("RH")
 #         cur_cond_set = env.agents[0].condition_set = {"IsRightHandEmpty(self)", "IsLeftHandEmpty(self)",
 #                                                       "IsStanding(self)"}

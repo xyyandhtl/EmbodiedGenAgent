@@ -5,10 +5,10 @@ import numpy as np
 import random
 import time
 
-# from btpg.algos.bt_planning.Action import Action,generate_random_state,state_transition
-# from btpg.algos.bt_planning.OptimalBTExpansionAlgorithm import OptBTExpAlgorithm
+# from EG_agent.planning.btpg.algos.bt_planning.Action import Action,generate_random_state,state_transition
+# from EG_agent.planning.btpg.algos.bt_planning.OptimalBTExpansionAlgorithm import OptBTExpAlgorithm
 
-from btpg.algos.base.behaviour_tree import Leaf, ControlBT
+from EG_agent.planning.btpg.algos.base.behaviour_tree import Leaf, ControlBT
 
 
 def set_to_tuple(s):
@@ -139,7 +139,7 @@ def check_conflict(conds):
 
 
 def execute_bt(bt,goal, state, verbose=True):
-    from btpg.algos.bt_planning.tools import state_transition
+    from EG_agent.planning.btpg.algos.bt_planning.tools import state_transition
     steps = 0
     current_cost = 0
     current_tick_time = 0

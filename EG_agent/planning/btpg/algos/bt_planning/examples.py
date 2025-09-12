@@ -1,5 +1,5 @@
 
-from btpg.algos.base.planning_action import PlanningAction
+from EG_agent.planning.btpg.algos.base.planning_action import PlanningAction
 
 
 

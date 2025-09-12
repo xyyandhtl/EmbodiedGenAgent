@@ -1,6 +1,6 @@
 import time
 
-from btpg.algos.llm_client.llms.ERNIE_Bot_4 import LLMERNIE
+from EG_agent.planning.btpg.algos.llm_client.llms.ERNIE_Bot_4 import LLMERNIE
 from sympy import to_dnf
 
 import re

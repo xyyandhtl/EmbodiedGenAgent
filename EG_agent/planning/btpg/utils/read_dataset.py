@@ -13,7 +13,7 @@ example =
     ......
 ]
 """
-from btpg.algos.llm_client.tools import goal_transfer_str, act_str_process
+from EG_agent.planning.btpg.algos.llm_client.tools import goal_transfer_str, act_str_process
 
 def read_dataset(filename='./dataset_old_0410.txt'):
     with open(filename, 'r') as f:
