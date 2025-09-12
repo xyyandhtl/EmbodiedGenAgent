@@ -1,7 +1,7 @@
 Instruction: "请前往控制室。"
 Goal: RobotNear_ControlRoom
 
-Instruction: "请在仓库标记异常。"
+Instruction: "请在仓库标记异常设备。"
 Goal: RobotNear_Warehouse & IsMarked_Equipment
 
 Instruction: "拍摄并报告楼梯口的烟雾源。"

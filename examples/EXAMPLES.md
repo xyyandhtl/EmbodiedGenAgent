@@ -2,26 +2,33 @@
 `python -m examples.goal_infer`
 ```shell
 [Info] Instruction: Instruction: "请前往控制室。"
-2025-09-12 09:54:22 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
-2025-09-12 09:54:22 - INFO - vlm_inference - LLM latency 0.31s
+2025-09-12 11:27:14 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
+2025-09-12 11:27:14 - INFO - vlm_inference - LLM latency 0.34s
 [Info] Sample #0 Attempt 1 Answer: RobotNear_ControlRoom
-[Info] Instruction: Instruction: "请在仓库标记异常。"
-2025-09-12 09:54:22 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
-2025-09-12 09:54:22 - INFO - vlm_inference - LLM latency 0.20s
-[Info] Sample #1 Attempt 1 Answer: IsMarked_Warehouse
-[Info] Instruction: Instruction: "请在仓库标记异常。"
-2025-09-12 09:54:22 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
-2025-09-12 09:54:22 - INFO - vlm_inference - LLM latency 0.18s
-[Info] Sample #1 Attempt 2 Answer: IsMarked_Warehouse
-[Info] Instruction: Instruction: "请在仓库标记异常。"
-2025-09-12 09:54:23 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
-2025-09-12 09:54:23 - INFO - vlm_inference - LLM latency 0.18s
-[Info] Sample #1 Attempt 3 Answer: IsMarked_Warehouse
-[Info] Instruction: Instruction: "请在仓库标记异常。"
-2025-09-12 09:54:23 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
-2025-09-12 09:54:23 - INFO - vlm_inference - LLM latency 0.17s
-[Info] Sample #1 Attempt 4 Answer: IsMarked_Warehouse
-[Info] Instruction: Instruction: "请在仓库标记异常。"
+[Info] Instruction: Instruction: "请在仓库标记异常设备。"
+2025-09-12 11:27:14 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
+2025-09-12 11:27:14 - INFO - vlm_inference - LLM latency 0.21s
+[Info] Sample #1 Attempt 1 Answer: IsMarked_Equipment
+[Info] Instruction: Instruction: "拍摄并报告楼梯口的烟雾源。"
+2025-09-12 11:27:15 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
+2025-09-12 11:27:15 - INFO - vlm_inference - LLM latency 0.38s
+[Info] Sample #2 Attempt 1 Answer: IsCaptured_SmokeSource & IsReported_SmokeSource
+[Info] Instruction: Instruction: "请在出口处救援受困人员。"
+2025-09-12 11:27:15 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
+2025-09-12 11:27:15 - INFO - vlm_inference - LLM latency 0.31s
+[Info] Sample #3 Attempt 1 Answer: RobotNear_Doorway & IsReported_Victim
+[Info] Instruction: Instruction: "请报告房间A的水泄漏情况。"
+2025-09-12 11:27:15 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
+2025-09-12 11:27:15 - INFO - vlm_inference - LLM latency 0.49s
+[Info] Sample #4 Attempt 1 Answer: RobotNear_RoomA & IsCaptured_WaterLeak & IsReported_WaterLeak
+[Info] Instruction: Instruction: "请报告房间A的水泄漏情况。"
+2025-09-12 11:27:16 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
+2025-09-12 11:27:16 - INFO - vlm_inference - LLM latency 0.36s
+[Info] Sample #4 Attempt 2 Answer: IsCaptured_WaterLeak & IsReported_WaterLeak
+[Info] Instruction: Instruction: "请前往大厅或充电站。"
+2025-09-12 11:27:16 - INFO - httpx - HTTP Request: POST http://127.0.0.1:8000/v1/chat/completions "HTTP/1.1 200 OK"
+2025-09-12 11:27:16 - INFO - vlm_inference - LLM latency 0.29s
+[Info] Sample #5 Attempt 1 Answer: RobotNear_Lobby | RobotNear_ChargingStation
 ...
 ```
 

@@ -6,7 +6,7 @@ RobotNear_<place/target>, IsCaptured_<target>, IsMarked_<target>, IsReported_<ta
         "Office", "Warehouse", "ControlRoom", "LoadingBay", 
         "Lobby", "ChargingStation", "Outdoor", "Indoor", "Wall",
         "Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
-        "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",]
+        "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit"]
 <target>=["Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
         "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",
         "Blood", "Fire", "Gas", "Debris",
