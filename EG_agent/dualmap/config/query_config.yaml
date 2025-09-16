@@ -1,0 +1,6 @@
+defaults:
+  - system_config
+  - _self_
+
+#map_dir: ${output_path}/${dataset_name}_${scene_id}/map
+map_dir: /media/lenovo/1/DualMap/replica_room_0/map
