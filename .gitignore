@@ -2,3 +2,9 @@
 .idea/
 
 __pycache__/
+
+output/
+outputs/
+dataset/
+
+*.pt

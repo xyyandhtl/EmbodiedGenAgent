@@ -1,0 +1,36 @@
+# basic dependencies
+opencv-python
+torch
+torchvision
+torchaudio
+hydra-core
+pillow
+
+# reasoning module
+openai
+
+# planning module
+py_trees
+faiss-cpu
+plotly==3.10.0
+antlr4-python3-runtime~=4.13.1
+protobuf==3.20.3
+
+# dualmap module
+open_clip_torch
+ultralytics==8.3.103
+supervision==0.25.1
+open3d
+imageio
+natsort
+kornia
+tabulate
+pympler
+plyfile
+rerun-sdk==0.22.1
+git+https://github.com/ultralytics/CLIP.git
+git+https://github.com/apple/ml-mobileclip.git
+
+# simulation deployment test
+isaacsim==5.0.0.0
+isaaclab==0.44.9  # version v2.2.0

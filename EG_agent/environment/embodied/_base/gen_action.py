@@ -1,38 +1,26 @@
 from EG_agent.planning.btpg.behavior_tree.base_nodes import Action
 from EG_agent.planning.btpg.behavior_tree import Status
+# import shared object sets
+from EG_agent.prompts.object_sets import *
 
 class EmbodiedAction(Action):
     can_be_expanded = True
     num_args = 1
 
-    # SAR/inspection domain categories
-    # Navigation targets (areas/waypoints)
-    LOCATIONS = {
-        "StagingArea", "Corridor", "Intersection", "Stairwell",
-        "Office", "Warehouse", "ControlRoom", "LoadingBay", 
-        "Lobby", "ChargingStation", "Outdoor", "Indoor", "Wall"
-    }
-    # Points of interest the robot may inspect/capture/mark
-    INSPECTION_POINTS = {
-        "Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
-        "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",
-    }
-    # Dynamic entities/incidents
-    INCIDENTS = {
-        "Blood", "Fire", "Gas", "Debris"
-    }
-    PERSONS = {
-        "Victim", "Rescuer", "Visitor", "Staff"
-    }
+    # use shared sets from object_sets.py
+    LOCATIONS = LOCATIONS
+    INSPECTION_POINTS = INSPECTION_POINTS
+    INCIDENTS = INCIDENTS
+    PERSONS = PERSONS
 
     # Derived sets for convenience
-    NAV_POINTS = LOCATIONS | INSPECTION_POINTS
-    CAPTUREABLE = INSPECTION_POINTS | INCIDENTS | PERSONS
-    MARKABLE = CAPTUREABLE
-    REPORTABLE = CAPTUREABLE
+    NAV_POINTS = NAV_POINTS
+    CAPTUREABLE = CAPTUREABLE
+    MARKABLE = MARKABLE
+    REPORTABLE = REPORTABLE
 
     # Backward-compat: single roll-up set if needed elsewhere
-    AllObject = NAV_POINTS | CAPTUREABLE
+    AllObject = AllObject
 
     @property
     def action_class_name(self):

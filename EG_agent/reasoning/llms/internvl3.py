@@ -3,11 +3,8 @@ import io
 import json
 import logging
 import time
-from collections import deque
-from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, TypedDict, Union
-from importlib import resources
+from typing import Union
 
 import numpy as np
 from openai import OpenAI

@@ -1,20 +1,10 @@
-import time
-
-from EG_agent.planning.btpg.behavior_tree.behavior_libs.ExecBehaviorLibrary import ExecBehaviorLibrary
-from EG_agent.planning.bt_planning import BTGenerator
+from EG_agent.planning.bt_planner import BTGenerator
 
 if __name__ == "__main__":
-    max_goal_num=5
-    diffcult_type= "mix" #"single"  #"mix" "multi"
-    scene = "VH" # RH RHS RW
-
-    headless = False
-
     test_env = "embodied"  # "virtualhome"  # "embodied"
 
     if test_env == "embodied":
         cur_cond_set = set()
-        from EG_agent.environment.embodied._base.gen_action import EmbodiedAction
         goal_str = 'RobotNear_Doorway & IsCaptured_Victim'
         key_objects = ["StagingArea", "Corridor", "Intersection", "Stairwell",
                         "Office", "Warehouse", "ControlRoom", "LoadingBay", 
