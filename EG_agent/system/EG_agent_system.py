@@ -11,7 +11,7 @@ from EG_agent.reasoning.logic_goal import LogicGoalGenerator
 from EG_agent.planning.bt_planner import BTGenerator, BTAgent
 
 
-class RobotAgentSystem:
+class EGAgentSystem:
     def __init__(self):
         # 初始化 逻辑Goal 生成器
         self.goal_generator = LogicGoalGenerator()
@@ -55,7 +55,7 @@ class RobotAgentSystem:
         pass
 
 if __name__ == "__main__":
-    agent_system = RobotAgentSystem()
+    agent_system = EGAgentSystem()
     # agent_system.set_env(isacclab_env)
     # env_loop:
     # ...
