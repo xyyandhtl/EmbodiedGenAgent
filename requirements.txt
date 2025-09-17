@@ -1,10 +1,13 @@
 # basic dependencies
-opencv-python
+numpy<2.0
+opencv-python==4.10.0.84
 torch
 torchvision
 torchaudio
 hydra-core
 pillow
+plotly
+tqdm
 
 # reasoning module
 openai
@@ -12,7 +15,6 @@ openai
 # planning module
 py_trees
 faiss-cpu
-plotly==3.10.0
 antlr4-python3-runtime~=4.13.1
 protobuf==3.20.3
 
@@ -26,10 +28,14 @@ natsort
 kornia
 tabulate
 pympler
-plyfile
 rerun-sdk==0.22.1
 git+https://github.com/ultralytics/CLIP.git
 git+https://github.com/apple/ml-mobileclip.git
+# if use habitat-data-collector
+# habitat-sim==0.3.2
+# habitat-lab==0.3.2
+# gym==0.23.0
+# antlr4-python3-runtime==4.9.3 # conflict with btpg required version 4.13.1
 
 # simulation deployment test
 isaacsim==5.0.0.0

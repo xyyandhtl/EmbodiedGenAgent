@@ -2,15 +2,23 @@
 A Generative Embodied Agent that transforms open-ended instructions into behavior trees for autonomous decision-making and action execution loop
 
 ## Plans
-- [x] Implement the intent understanding: vlm prompt/reflective feedback to generate the first-order logic goal
+- [x] Implement the intent understanding: vlm prompt / reflective feedback to generate the first-order logic goal
 - [x] Implement the bt tree generator to generate the bt tree
 - [ ] Implement the Isaaclab simulator, scene usd, robot and its locomotion policy
 - [ ] Define and implement the atomic actions and conditions to connect agent and simulator
 - [ ] Implement online/offline dualmap generation
 - [ ] Implement the path planner and cmd_vel controller
-- [ ] Enhance the prompts engineering with memory and map for better reasoning
+- [ ] Enhance the prompts engineering with memory / map for better reasoning and interactive task
 - [ ] Implement the usage examples for EG_system running in simulator
 - [ ] Implement the frontier exploration navigator for task-oriented exploration
+
+## Dependencies
+- Python >= 3.10
+- see [requirements.txt](requirements.txt)
+> to deploy and test EG_agent in IsaacSim
+  IsaacSim == 5.0.0  
+  IsaacLab == 2.2.0
+
 
 ## Usage
 module standalone test: [examples](examples/EXAMPLES.md)

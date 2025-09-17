@@ -34,7 +34,7 @@ use_parallel: true
 ### END PROCESS CONFIG
 # if True, the system save the map objects, calculate the time cost, and end the process safely
 # In ROS mode, this will trigger the end of the system if no new data input for a while
-use_end_process: False
+use_end_process: true
 
 
 # ============================================================
@@ -42,10 +42,31 @@ use_end_process: False
 # ============================================================
 # If True, run local mapping only and get local map
 # If False, run both local and global mapping and get global map
-run_local_mapping_only: true
+run_local_mapping_only: false
 
 # Save the generated local map
-save_local_map: true
+save_local_map: false
 
 # Save the global map (set False if run_local_mapping_only is True)
-save_global_map: false
+save_global_map: true
+
+
+# ============================================================
+# PRELOADING CONFIG
+# ============================================================
+# Preload an existing global map from disk
+preload_global_map: true
+
+# Preload an existing layout pcd and wall pcd from disk
+# If preload the layout, the layout pcd thread will be disabled
+preload_layout: true
+
+# Path to preload map data.
+# If empty, the system will use the default preload path
+preload_path: "outputs/Nfvxx8J5NCo/map"
+# preload_path: "dataset/HM3D_collect/00829-QaLdnwvtxbs/global_map/hm3d"
+# preload_path: "output/map_results/replica_room_0/map"
+
+# Preload action paths for visualization
+use_given_path: false
+given_path_dir: ""
