@@ -1,8 +1,14 @@
 import torch
 
 import isaaclab.utils.math as math_utils
+from isaaclab.envs import ManagerBasedRLEnv
 
-def camera_follow(env, camera_offset_=(-2.0, -2.0, 1.0), smoothing_window=50):
+
+def camera_follow(
+        env: ManagerBasedRLEnv,
+        camera_offset_: tuple[float, float, float] = (-2.0, -2.0, 1.0),
+        smoothing_window: int = 50
+):
     """
     Make the camera track the robot's movement.
 

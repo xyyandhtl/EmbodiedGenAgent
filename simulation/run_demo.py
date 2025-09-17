@@ -6,8 +6,6 @@ import sys
 import hydra
 import time
 
-
-from typing import TYPE_CHECKING
 from pathlib import Path
 # Add the project root to the python path to allow for absolute imports
 PROJECT_PATH = str(Path(__file__).resolve().parent.parent)
@@ -39,8 +37,12 @@ def main(cfg):
     from isaaclab.utils.assets import check_file_path, read_file
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
+    import simulation.mdp as mdp
     from simulation.env.go2w_locomotion_env_cfg import LocomotionVelocityEnvCfg
-    from simulation.utils import LabGo2WEnvHistoryWrapper, camera_follow
+    from simulation.utils import (
+        LabGo2WEnvHistoryWrapper,
+        camera_follow,
+    )
 
     # --- 2. Get Environment Configs ---
     env_cfg = LocomotionVelocityEnvCfg()
@@ -74,22 +76,19 @@ def main(cfg):
     policy_step_dt = float(env_cfg.sim.dt * env_cfg.decimation)
     obs, _ = env.reset()
     print(f"[INFO] init-observation shape: {obs.shape}")
-    print(f"[INFO] init-observation: {obs}")
+
+    # --- Set goal position ---
+    goal_position = torch.tensor([-3.0, 8.0, 0.4], device=cfg.policy_device)
     
     while simulation_app.is_running():
         start_time = time.time()
 
         with torch.inference_mode():
-            # Change the velocity command to the policy observation
-            # get velocity command from the planner
-            velocity_command = torch.tensor([[1.0, 0.0, 0.1]], device=cfg.policy_device)
-
-            num_envs = obs.shape[0]
-            history_len = env.history_len
-            base_obs_dim = env.base_obs_dim
-            obs_reshaped = obs.view(num_envs, history_len, base_obs_dim)
-            obs_reshaped[:, 0, 6:9] = velocity_command.unsqueeze(1)  # 历史观测窗口覆盖 0.02 * 6 = 0.12s
-            obs = obs_reshaped.view(num_envs, -1)
+            # Controller to generate velocity command
+            lin_vel_x, ang_vel_z = mdp.compute_velocity_with_goalPoint(env, goal_position)
+            velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=cfg.policy_device)
+            # Update observation with the new velocity command
+            obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
 
             # agent stepping
             actions = policy(obs)
