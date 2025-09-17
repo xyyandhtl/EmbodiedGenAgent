@@ -92,15 +92,15 @@ class VelocitySceneCfg(InteractiveSceneCfg):
         debug_vis=True,
         track_air_time=True
     )
-    height_scanner = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/base",
-        offset=RayCasterCfg.OffsetCfg(pos=[0.0, 0.0, 20.0]),
-        ray_alignment='yaw',
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
-        debug_vis=True,
-        mesh_prim_paths=["/World/ground"],
-        max_distance=100.0,
-    )
+    # height_scanner = RayCasterCfg(
+    #     prim_path="{ENV_REGEX_NS}/Robot/base",
+    #     offset=RayCasterCfg.OffsetCfg(pos=[0.0, 0.0, 20.0]),
+    #     ray_alignment='yaw',
+    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
+    #     debug_vis=False,
+    #     mesh_prim_paths=["/World/ground"],
+    #     max_distance=100.0,
+    # )
 
 
 
@@ -290,8 +290,8 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
 
         # update sensor update periods
         # we tick all the sensors based on the smallest update period (physics update period)
-        if self.scene.height_scanner is not None:
-            self.scene.height_scanner.update_period = self.sim.dt * self.decimation
+        # if self.scene.height_scanner is not None:
+        #     self.scene.height_scanner.update_period = self.sim.dt * self.decimation
 
         if self.scene.terrain.terrain_generator is not None:
             self.scene.terrain.terrain_generator.curriculum = False
