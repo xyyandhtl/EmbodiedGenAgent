@@ -5,7 +5,7 @@ from EG_agent.planning.btpg.algos.llm_client.tools import goal_transfer_str
 from EG_agent.planning.btpg.algos.bt_planning.bt_planner_interface import BTPlannerInterface
 from EG_agent.planning.btpg.behavior_tree.behavior_libs.ExecBehaviorLibrary import ExecBehaviorLibrary
 from EG_agent.planning.btpg import BehaviorTree
-from EG_agent.system.path import AGENT_ENV_PATH
+from EG_agent.system.module_path import AGENT_ENV_PATH
 
 class BTGenerator:
     """

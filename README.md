@@ -15,9 +15,10 @@ A Generative Embodied Agent that transforms open-ended instructions into behavio
 ## Dependencies
 - Python >= 3.10
 - see [requirements.txt](requirements.txt)
-> to deploy and test EG_agent in IsaacSim
-  IsaacSim == 5.0.0  
-  IsaacLab == 2.2.0
+
+> to deploy and test EG_agent in Simulation:
+- IsaacSim == 5.0.0  
+- IsaacLab == 2.2.0
 
 
 ## Usage

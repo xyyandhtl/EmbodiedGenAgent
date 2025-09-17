@@ -9,21 +9,22 @@ import numpy as np
 from EG_agent.prompts.object_sets import AllObject
 from EG_agent.reasoning.logic_goal import LogicGoalGenerator
 from EG_agent.planning.bt_planner import BTGenerator, BTAgent
+from EG_agent.vlmap.vl_map_nav import VLMapNav
 
 
 class EGAgentSystem:
     def __init__(self):
-        # 初始化 逻辑Goal 生成器
+        # 初始化 '逻辑Goal生成器'
         self.goal_generator = LogicGoalGenerator()
 
-        # 构建 BT规划器 及其 Agent载体（Agent实现和环境交互）
+        # 构建 'BT规划器' 及其 'Agent载体'（Agent实现和环境交互）
         bt_generator = BTGenerator(env_name="embodied", 
                                    cur_cond_set=set(), 
                                    key_objects=list(AllObject))
         self.bt_agent = BTAgent(bt_generator)
 
-        # 载入VLM地图导航模块
-        self.dual_map = None  # TODO
+        # 载入 'VLM地图导航模块'
+        self.dual_map = VLMapNav()
 
         # 由外部设置具体环境实例
         self.env = None  

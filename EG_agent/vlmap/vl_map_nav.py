@@ -14,7 +14,7 @@ from utils.types import DataInput
 from utils.time_utils import timing_context
 
 
-class DemoApp:
+class VLMapNav:
     def __init__(self, cfg: DictConfig = None):
         # If no cfg provided, load it here using Hydra (config_path matches previous main)
         if cfg is None:
@@ -151,6 +151,7 @@ class DemoApp:
             self.prev_count = self.stop_count
 
             use_end = getattr(self.cfg, "use_end_process", False) if self.cfg is not None else False
+            # if no new frames for 50 x 0.1 = 5s, end_process, map would be saved
             if use_end and end_count > 50:
                 print("No new frames detected. Terminating...")
                 if self.dualmap is not None:
@@ -183,6 +184,6 @@ class DemoApp:
 
 
 if __name__ == "__main__":
-    app = DemoApp()
+    app = VLMapNav()
     app.connect_to_simulation()
     app.run()

@@ -2,7 +2,7 @@ import re
 
 from EG_agent.reasoning.llms.internvl3 import VLMInference
 from EG_agent.reasoning.tools.data_process_check import format_check, goal_transfer_ls_set
-from EG_agent.system.path import AGENT_PROMPT_PATH
+from EG_agent.system.module_path import AGENT_PROMPT_PATH
 
 
 class LogicGoalGenerator:
