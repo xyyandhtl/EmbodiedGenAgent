@@ -1,0 +1,16 @@
+defaults:
+  - _self_
+
+# locomotion config
+policy: eilab  # (reconstructed from legged-loco)
+observation_len: 5
+policy_device: cuda:0
+
+# ui config
+sim_app:
+  headless: False
+  record_video: False
+  anti_aliasing: 0
+  width: 1280
+  height: 720
+  hide_ui: False
