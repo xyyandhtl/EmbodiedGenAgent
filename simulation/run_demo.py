@@ -33,7 +33,9 @@ def main(cfg):
     carb_settings_iface.set("/persistent/isaac/asset_root/cloud",
                            "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0")
 
+    from isaaclab.devices import Se2Keyboard, Se2KeyboardCfg
     from isaaclab.envs import ManagerBasedRLEnv
+    from isaaclab.managers import ObservationTermCfg as ObsTerm
     from isaaclab.utils.assets import check_file_path, read_file
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
@@ -46,6 +48,19 @@ def main(cfg):
 
     # --- 2. Get Environment Configs ---
     env_cfg = LocomotionVelocityEnvCfg()
+
+    if cfg.controller == "keyboard":
+        # env_cfg.commands.base_velocity.debug_vis = False
+        controller = Se2Keyboard(
+            Se2KeyboardCfg(
+                v_x_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_x[1],
+                v_y_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_y[1],
+                omega_z_sensitivity=env_cfg.commands.base_velocity.ranges.ang_vel_z[1],
+            )
+        )
+        env_cfg.observations.policy.velocity_commands = ObsTerm(
+            func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32).unsqueeze(0).to(env.device)
+        )
 
     # --- 3. Create Environment ---
     # The environment wrapper for Isaac Lab
@@ -85,10 +100,11 @@ def main(cfg):
 
         with torch.inference_mode():
             # Controller to generate velocity command
-            lin_vel_x, ang_vel_z = mdp.compute_velocity_with_goalPoint(env, goal_position)
-            velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=cfg.policy_device)
-            # Update observation with the new velocity command
-            obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
+            if not cfg.controller == "keyboard":
+                lin_vel_x, ang_vel_z = mdp.compute_velocity_with_goalPoint(env, goal_position)
+                velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=cfg.policy_device)
+                # Update observation with the new velocity command
+                obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
 
             # agent stepping
             actions = policy(obs)
