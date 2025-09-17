@@ -40,14 +40,13 @@ def main(cfg):
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
     from simulation.env.go2w_locomotion_env_cfg import LocomotionVelocityEnvCfg
-    from simulation.utils.wrappers import LabGo2WEnvHistoryWrapper
+    from simulation.utils import LabGo2WEnvHistoryWrapper, camera_follow
 
     # --- 2. Get Environment Configs ---
     env_cfg = LocomotionVelocityEnvCfg()
 
     # --- 3. Create Environment ---
     # The environment wrapper for Isaac Lab
-    # env = ManagerBasedRLEnv(env_cfg)
     env = ManagerBasedRLEnv(cfg=env_cfg, render_mode="rgb_array" if cfg.sim_app.record_video else None)
 
     print(f"[INFO] joint names (IsaacLab Default): {env.scene['robot'].joint_names}")
@@ -97,6 +96,8 @@ def main(cfg):
 
             # env stepping
             obs, _, _, _ = env.step(actions)
+
+            camera_follow(env, camera_offset_=(-2.0, -2.0, 1.0))
 
             # time delay for real-time evaluation
             elapsed_time = time.time() - start_time
