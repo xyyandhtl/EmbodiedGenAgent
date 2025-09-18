@@ -12,7 +12,7 @@ PROJECT_PATH = str(Path(__file__).resolve().parent.parent)
 sys.path.append(PROJECT_PATH)
 
 from simulation.assets import SIMULATION_DIR, SIMULATION_DATA_DIR
-from isaacsim import SimulationApp
+from isaaclab.app import AppLauncher
 import carb
 
 
@@ -21,18 +21,18 @@ def main(cfg):
     """Main function to run the Go2W locomotion demo."""
 
     # --- 1. Launch Omniverse App ---
-    simulation_app = SimulationApp({
-        "headless": cfg.sim_app.headless,
-        "anti_aliasing": cfg.sim_app.anti_aliasing,
-        "width": cfg.sim_app.width,
-        "height": cfg.sim_app.height,
-        "hide_ui": cfg.sim_app.hide_ui,
-        # "renderer": cfg.sim_app.renderer, # "RayTracedLighting"、"PathTracing"、"HydraStorm"
-    })
-    # for not setting
-    carb_settings_iface = carb.settings.get_settings()
-    carb_settings_iface.set("/persistent/isaac/asset_root/cloud",
-                           "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0")
+    simulation_app = AppLauncher(
+        headless=cfg.sim_app.headless,
+        enable_cameras=cfg.sim_app.record_video,  # if record_video=True, should set enable_cameras=True in simulation_app
+        anti_aliasing=cfg.sim_app.anti_aliasing,
+        width=cfg.sim_app.width,
+        height=cfg.sim_app.height,
+        hide_ui=cfg.sim_app.hide_ui,
+    ).app
+    # use SimulaitonApp directly should set carb_settings
+    # carb_settings_iface = carb.settings.get_settings()
+    # carb_settings_iface.set("/persistent/isaac/asset_root/cloud",
+    #                        "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0")
 
     from isaaclab.devices import Se2Keyboard, Se2KeyboardCfg
     from isaaclab.envs import ManagerBasedRLEnv
@@ -46,6 +46,7 @@ def main(cfg):
     from simulation.utils import (
         LabGo2WEnvHistoryWrapper,
         camera_follow,
+        debug_rgbd_camera
     )
 
     # --- 2. Get Environment Configs ---
@@ -61,9 +62,10 @@ def main(cfg):
                 omega_z_sensitivity=env_cfg.commands.base_velocity.ranges.ang_vel_z[1],
             )
         )
+        print(controller)
         env_cfg.observations.policy.velocity_commands = ObsTerm(
             func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32).unsqueeze(0).to(env.device)
-        )    
+        )
 
     # --- 3. Create Environment ---
     # The environment wrapper for Isaac Lab
@@ -116,6 +118,9 @@ def main(cfg):
             obs, _, _, _ = env.step(actions)
 
             # camera_follow(env, camera_offset_=(-2.0, -2.0, 1.0))
+
+            # debug rgbd camera data (immediate)
+            debug_rgbd_camera(env)
 
             # time delay for real-time evaluation
             elapsed_time = time.time() - start_time

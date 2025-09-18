@@ -6,7 +6,7 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import RayCasterCfg, patterns, ContactSensorCfg
+from isaaclab.sensors import CameraCfg, ContactSensorCfg, RayCasterCfg, patterns
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
@@ -21,6 +21,7 @@ import simulation.mdp as user_mdp
 ##
 from simulation.assets.robots.unitree import UNITREE_GO2W_CFG
 from simulation.assets.terrains.terrain_cfg import FLAT_TERRAINS_CFG
+from simulation.utils import compute_cam_cfg
 
 
 GO2W_LEG_JOINT_NAMES = [
@@ -63,12 +64,17 @@ class VelocitySceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = UNITREE_GO2W_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # Sensors
-    contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*_foot",
-        update_period=0.0,
-        history_length=3,
-        debug_vis=True,
-        track_air_time=True
+    rgbd_camera = CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base/rgbd_camera",
+        update_period=0.1,
+        height=480,
+        width=640,
+        data_types=["rgb", "distance_to_image_plane"],
+        spawn=compute_cam_cfg(W=640, H=480, fov_deg_x=90.0),
+        # spawn=sim_utils.PinholeCameraCfg(
+        #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=54.0, clipping_range=(0.1, 1.0e5)
+        # ),
+        offset=CameraCfg.OffsetCfg(pos=(0.32487, -0.00095, 0.05362), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
     )
     # height_scanner = RayCasterCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base",
@@ -79,7 +85,13 @@ class VelocitySceneCfg(InteractiveSceneCfg):
     #     mesh_prim_paths=["/World/ground"],
     #     max_distance=100.0,
     # )
-
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*",
+        update_period=0.0,
+        history_length=3,
+        debug_vis=True,
+        track_air_time=True
+    )
 
 
 @configclass
