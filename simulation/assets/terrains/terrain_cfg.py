@@ -1,5 +1,7 @@
 import isaaclab.terrains as terrain_gen
-from isaaclab.terrains import TerrainGeneratorCfg
+from isaaclab.terrains import TerrainGeneratorCfg, TerrainImporterCfg
+from isaaclab.sim import RigidBodyMaterialCfg, MdlFileCfg
+from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 
 ##
 # Configuration for sub terrains.
@@ -105,4 +107,24 @@ ROUGH_BLIND_TERRAINS_CFG = TerrainGeneratorCfg(
         "hf_pyramid_slope": HF_PYRAMID_SLOPE.replace(proportion=0.1),
         "hf_pyramid_slope_inv": HF_PYRAMID_SLOPE_INV.replace(proportion=0.1),
     },
+)
+
+ROUGH_TERRAIN = TerrainImporterCfg(
+    prim_path="/World/ground",
+    terrain_type="generator",
+    terrain_generator=ROUGH_TERRAINS_CFG.replace(curriculum=False),
+    max_init_terrain_level=5,
+    collision_group=-1,
+    physics_material=RigidBodyMaterialCfg(
+        friction_combine_mode="multiply",
+        restitution_combine_mode="multiply",
+        static_friction=1.0,
+        dynamic_friction=1.0,
+    ),
+    visual_material=MdlFileCfg(
+        mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+        project_uvw=True,
+        texture_scale=(0.25, 0.25),
+    ),
+    debug_vis=False,
 )

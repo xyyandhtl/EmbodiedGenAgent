@@ -53,14 +53,27 @@ def main(cfg):
         # env_cfg.commands.base_velocity.debug_vis = False
         controller = Se2Keyboard(
             Se2KeyboardCfg(
-                v_x_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_x[1],
-                v_y_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_y[1],
+                v_x_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_x[1] * 2,
+                v_y_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_y[1] * 2,
                 omega_z_sensitivity=env_cfg.commands.base_velocity.ranges.ang_vel_z[1],
             )
         )
         env_cfg.observations.policy.velocity_commands = ObsTerm(
             func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32).unsqueeze(0).to(env.device)
         )
+
+    if cfg.terrian == "rough":
+        from simulation.assets.terrains.terrain_cfg import ROUGH_TERRAIN
+        env_cfg.scene.terrain = ROUGH_TERRAIN
+    elif cfg.terrian == "carla":
+        from simulation.assets.terrains.usd_scene import ASSET_CARLA
+        env_cfg.scene.terrain = ASSET_CARLA
+    elif cfg.terrian == "warehouse":
+        from simulation.assets.terrains.usd_scene import ASSET_WAREHOUSE
+        env_cfg.scene.terrain = ASSET_WAREHOUSE
+    else:
+        raise NotImplementedError(f"Terrain '{cfg.terrian}' not implemented.")
+    
 
     # --- 3. Create Environment ---
     # The environment wrapper for Isaac Lab
@@ -77,7 +90,7 @@ def main(cfg):
     if cfg.policy == "eilab":
         env = LabGo2WEnvHistoryWrapper(env, history_len=cfg.observation_len)
     else:
-        env = RslRlVecEnvWrapper(env)
+        raise NotImplementedError(f"Policy '{cfg.policy}' not implemented.")
 
     # --- 4. Load Policy ---
     # Path to the pre-trained low-level locomotion policy

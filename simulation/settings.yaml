@@ -1,7 +1,11 @@
 defaults:
   - _self_
 
-controller: "goal_point"  # keyboard / goal_point
+# scene config
+terrian: "rough"  # carla / warehouse / rough
+
+# agent controll config
+controller: "keyboard"  # keyboard / goal_point
 
 # locomotion config
 policy: eilab  # (reconstructed from legged-loco)

@@ -1,10 +1,9 @@
 # basic dependencies
 numpy<2.0
 opencv-python==4.10.0.84
-torch
-torchvision
-torchaudio
-hydra-core
+# torch   # recommend to install with isaacsim
+# torchvision
+hydra-core==1.3.2
 pillow
 plotly
 tqdm
@@ -17,6 +16,7 @@ py_trees
 faiss-cpu
 antlr4-python3-runtime~=4.13.1
 protobuf==3.20.3
+autopep8~=2.0.4
 
 # dualmap module
 open_clip_torch
@@ -30,13 +30,13 @@ tabulate
 pympler
 rerun-sdk==0.22.1
 git+https://github.com/ultralytics/CLIP.git
-git+https://github.com/apple/ml-mobileclip.git
+-e git+https://github.com/apple/ml-mobileclip.git --no-deps
 # if use habitat-data-collector
-# habitat-sim==0.3.2
-# habitat-lab==0.3.2
+# habitat-sim==0.3.2  # source install
+# habitat-lab==0.3.2  # source install
 # gym==0.23.0
-# antlr4-python3-runtime==4.9.3 # conflict with btpg required version 4.13.1
+# antlr4-python3-runtime==4.9.3 # todo: fix conflict with btpg required version 4.13.1
 
 # simulation deployment test
-isaacsim==5.0.0.0
-isaaclab==0.44.9  # version v2.2.0
+# isaacsim==5.0.0.0
+# isaaclab==0.45.9  # version v2.2.1
