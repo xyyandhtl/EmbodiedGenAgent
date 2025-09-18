@@ -2,7 +2,7 @@ defaults:
   - _self_
 
 # scene config
-terrian: "rough"  # carla / warehouse / rough
+terrain: "carla"  # see assets/terrains/usd_scene.py
 
 # agent controll config
 controller: "keyboard"  # keyboard / goal_point
