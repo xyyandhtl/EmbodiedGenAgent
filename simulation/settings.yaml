@@ -21,7 +21,7 @@ policy_device: cuda:0
 # ui config
 sim_app:
   headless: False
-  record_video: False
+  record_video: True  # if record_video=True, should set enable_cameras=True in simulation_app
   anti_aliasing: 0
   width: 1280
   height: 720
