@@ -46,6 +46,7 @@ def main(cfg):
     from simulation.utils import (
         LabGo2WEnvHistoryWrapper,
         camera_follow,
+        debug_rgbd_camera
     )
 
     # --- 2. Get Environment Configs ---
@@ -118,10 +119,8 @@ def main(cfg):
 
             # camera_follow(env, camera_offset_=(-2.0, -2.0, 1.0))
 
-            # print(f"[INFO] rgbd_camera data [rgb] shape: {env.unwrapped.scene['rgbd_camera'].data.output['rgb'].shape}")
-            # print(f"[INFO] rgbd_camera data [depth] shape: {env.unwrapped.scene['rgbd_camera'].data.output['distance_to_image_plane'].shape}")
-            # print(f"[INFO] rgbd_camera data [depth] max: {env.unwrapped.scene['rgbd_camera'].data.output['distance_to_image_plane'].max()} m, "
-            #       f"min: {env.unwrapped.scene['rgbd_camera'].data.output['distance_to_image_plane'].min()} m")
+            # debug rgbd camera data (immediate)
+            debug_rgbd_camera(env)
 
             # time delay for real-time evaluation
             elapsed_time = time.time() - start_time
