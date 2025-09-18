@@ -27,6 +27,7 @@ def main(cfg):
         "width": cfg.sim_app.width,
         "height": cfg.sim_app.height,
         "hide_ui": cfg.sim_app.hide_ui,
+        # "renderer": cfg.sim_app.renderer, # "RayTracedLighting"、"PathTracing"、"HydraStorm"
     })
     # for not setting
     carb_settings_iface = carb.settings.get_settings()
@@ -39,6 +40,7 @@ def main(cfg):
     from isaaclab.utils.assets import check_file_path, read_file
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
+    from simulation.assets.terrains.usd_scene import ASSET_DICT
     import simulation.mdp as mdp
     from simulation.env.go2w_locomotion_env_cfg import LocomotionVelocityEnvCfg
     from simulation.utils import (
@@ -48,19 +50,20 @@ def main(cfg):
 
     # --- 2. Get Environment Configs ---
     env_cfg = LocomotionVelocityEnvCfg()
+    env_cfg.scene.terrain = ASSET_DICT[cfg.terrain]
 
     if cfg.controller == "keyboard":
         # env_cfg.commands.base_velocity.debug_vis = False
         controller = Se2Keyboard(
             Se2KeyboardCfg(
-                v_x_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_x[1],
-                v_y_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_y[1],
+                v_x_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_x[1] * 2,
+                v_y_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_y[1] * 2,
                 omega_z_sensitivity=env_cfg.commands.base_velocity.ranges.ang_vel_z[1],
             )
         )
         env_cfg.observations.policy.velocity_commands = ObsTerm(
             func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32).unsqueeze(0).to(env.device)
-        )
+        )    
 
     # --- 3. Create Environment ---
     # The environment wrapper for Isaac Lab
@@ -77,7 +80,7 @@ def main(cfg):
     if cfg.policy == "eilab":
         env = LabGo2WEnvHistoryWrapper(env, history_len=cfg.observation_len)
     else:
-        env = RslRlVecEnvWrapper(env)
+        raise NotImplementedError(f"Policy '{cfg.policy}' not implemented.")
 
     # --- 4. Load Policy ---
     # Path to the pre-trained low-level locomotion policy
@@ -112,7 +115,7 @@ def main(cfg):
             # env stepping
             obs, _, _, _ = env.step(actions)
 
-            camera_follow(env, camera_offset_=(-2.0, -2.0, 1.0))
+            # camera_follow(env, camera_offset_=(-2.0, -2.0, 1.0))
 
             # time delay for real-time evaluation
             elapsed_time = time.time() - start_time

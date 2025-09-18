@@ -1,8 +1,3 @@
-import os
-import math
-
-from isaaclab.actuators import DCMotorCfg, DelayedPDActuatorCfg, ImplicitActuatorCfg
-
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
@@ -44,26 +39,9 @@ GO2W_JOINT_NAMES = GO2W_LEG_JOINT_NAMES + GO2W_WHEEL_JOINT_NAMES
 
 @configclass
 class VelocitySceneCfg(InteractiveSceneCfg):
-    # Ground
-    terrain = TerrainImporterCfg(
-        prim_path="/World/ground",
-        terrain_type="generator",
-        terrain_generator=FLAT_TERRAINS_CFG,
-        max_init_terrain_level=5,
-        collision_group=-1,
-        physics_material=sim_utils.RigidBodyMaterialCfg(
-            friction_combine_mode="multiply",
-            restitution_combine_mode="multiply",
-            static_friction=1.0,
-            dynamic_friction=1.0,
-        ),
-        visual_material=sim_utils.MdlFileCfg(
-            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
-            project_uvw=True,
-            texture_scale=(0.25, 0.25),
-        ),
-        debug_vis=False,
-    )
+    # Terrain
+    terrain = None  # to be set outside
+
     # Lights
     light = AssetBaseCfg(
         prim_path="/World/light",
@@ -205,33 +183,6 @@ class ObservationsCfg:
 
 @configclass
 class EventCfg:
-    randomize_reset_base = EventTerm(  # 随机更改env的base 位置、速度（ ± ）
-        func=mdp.reset_root_state_uniform,
-        mode="reset",
-        params={
-            "pose_range": {
-                "x": (-0.5, 0.5),
-                "y": (-0.5, 0.5),
-                "z": (0.0, 0.0),
-                "roll": (2.88, 3.14),
-                "pitch": (0.0, 0.0),
-                "yaw": (-3.14, 3.14),
-            },
-            "velocity_range": {
-                "x": (-0.5, 0.5),
-                "y": (-0.5, 0.5),
-                "z": (-0.5, 0.5),
-                "roll": (-0.5, 0.5),
-                "pitch": (-0.5, 0.5),
-                "yaw": (-0.5, 0.5),
-            },
-            "asset_cfg": SceneEntityCfg(name="robot")
-        },
-    )
-
-
-@configclass
-class EventCfg:
     """Configuration for events."""
     pass
 
@@ -292,8 +243,5 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
         # we tick all the sensors based on the smallest update period (physics update period)
         # if self.scene.height_scanner is not None:
         #     self.scene.height_scanner.update_period = self.sim.dt * self.decimation
-
-        if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.curriculum = False
 
         self.is_finite_horizon = False

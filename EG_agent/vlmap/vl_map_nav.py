@@ -185,5 +185,5 @@ class VLMapNav:
 
 if __name__ == "__main__":
     app = VLMapNav()
-    app.connect_to_simulation()
+    # app.connect_to_simulation()
     app.run()

@@ -1,7 +1,11 @@
 defaults:
   - _self_
 
-controller: "goal_point"  # keyboard / goal_point
+# scene config
+terrain: "carla"  # see assets/terrains/usd_scene.py
+
+# agent controll config
+controller: "keyboard"  # keyboard / goal_point
 
 # locomotion config
 policy: eilab  # (reconstructed from legged-loco)
