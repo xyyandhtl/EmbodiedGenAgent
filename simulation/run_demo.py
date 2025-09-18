@@ -61,6 +61,7 @@ def main(cfg):
                 omega_z_sensitivity=env_cfg.commands.base_velocity.ranges.ang_vel_z[1],
             )
         )
+        print(controller)
         env_cfg.observations.policy.velocity_commands = ObsTerm(
             func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32).unsqueeze(0).to(env.device)
         )    
