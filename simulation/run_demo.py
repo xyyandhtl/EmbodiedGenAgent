@@ -1,61 +1,60 @@
-import argparse
-import numpy as np
 import torch
 import os
 import sys
-import hydra
 import time
 import threading
 
 from pathlib import Path
+from omegaconf import OmegaConf
+
 # Add the project root to the python path to allow for absolute imports
 PROJECT_PATH = str(Path(__file__).resolve().parent.parent)
 sys.path.append(PROJECT_PATH)
 
 from simulation.assets import SIMULATION_DIR, SIMULATION_DATA_DIR
+
+CONFIG_PATH = os.path.join(SIMULATION_DIR, "settings.yaml")
+CFG = OmegaConf.load(CONFIG_PATH)
+
 from isaaclab.app import AppLauncher
 import carb
 
+# --- Launch Omniverse App ---
+simulation_app = AppLauncher(
+    headless=CFG.sim_app.headless,
+    enable_cameras=CFG.sim_app.record_video,  # if record_video=True, should set enable_cameras=True in simulation_app
+    anti_aliasing=CFG.sim_app.anti_aliasing,
+    width=CFG.sim_app.width,
+    height=CFG.sim_app.height,
+    hide_ui=CFG.sim_app.hide_ui,
+).app
+# Use SimulaitonApp directly should set carb_settings
+# carb_settings_iface = carb.settings.get_settings()
+# carb_settings_iface.set("/persistent/isaac/asset_root/cloud", "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0")
 
-@hydra.main(config_path=SIMULATION_DIR, config_name="settings", version_base=None)
-def main(cfg):
+
+from isaaclab.devices import Se2Keyboard, Se2KeyboardCfg
+from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.managers import ObservationTermCfg as ObsTerm
+from isaaclab.utils.assets import check_file_path, read_file
+from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
+
+from simulation.assets.terrains.usd_scene import ASSET_DICT
+import simulation.mdp as mdp
+from simulation.env.go2w_locomotion_env_cfg import LocomotionVelocityEnvCfg
+from simulation.utils import camera_follow, LabGo2WEnvHistoryWrapper, IsaacLabSensorHandler, SimpleCameraViewer
+from EG_agent.vlmap.vl_map_nav import VLMapNav
+
+
+def main():
     """Main function to run the Go2W locomotion demo."""
 
-    # --- 1. Launch Omniverse App ---
-    simulation_app = AppLauncher(
-        headless=cfg.sim_app.headless,
-        enable_cameras=cfg.sim_app.record_video,  # if record_video=True, should set enable_cameras=True in simulation_app
-        anti_aliasing=cfg.sim_app.anti_aliasing,
-        width=cfg.sim_app.width,
-        height=cfg.sim_app.height,
-        hide_ui=cfg.sim_app.hide_ui,
-    ).app
-    # use SimulaitonApp directly should set carb_settings
-    # carb_settings_iface = carb.settings.get_settings()
-    # carb_settings_iface.set("/persistent/isaac/asset_root/cloud",
-    #                        "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0")
-
-    from isaaclab.devices import Se2Keyboard, Se2KeyboardCfg
-    from isaaclab.envs import ManagerBasedRLEnv
-    from isaaclab.managers import ObservationTermCfg as ObsTerm
-    from isaaclab.utils.assets import check_file_path, read_file
-    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
-
-    from simulation.assets.terrains.usd_scene import ASSET_DICT
-    import simulation.mdp as mdp
-    from simulation.env.go2w_locomotion_env_cfg import LocomotionVelocityEnvCfg
-    from simulation.utils import (
-        LabGo2WEnvHistoryWrapper,
-        camera_follow,
-        SensorHandler
-    )
-    from EG_agent.vlmap.vl_map_nav import VLMapNav
-
-    # --- 2. Get Environment Configs ---
+    # --- 1. Get Environment Configs ---
     env_cfg = LocomotionVelocityEnvCfg()
-    env_cfg.scene.terrain = ASSET_DICT[cfg.terrain]
+    # update configs
+    env_cfg.scene.terrain = ASSET_DICT[CFG.terrain]
 
-    if cfg.controller == "keyboard":
+    if CFG.controller == "keyboard":
         # env_cfg.commands.base_velocity.debug_vis = False
         controller = Se2Keyboard(
             Se2KeyboardCfg(
@@ -69,9 +68,9 @@ def main(cfg):
             func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32).unsqueeze(0).to(env.device)
         )
 
-    # --- 3. Create Environment ---
+    # --- 2. Create Environment ---
     # The environment wrapper for Isaac Lab
-    env = ManagerBasedRLEnv(cfg=env_cfg, render_mode="rgb_array" if cfg.sim_app.record_video else None)
+    env = ManagerBasedRLEnv(cfg=env_cfg, render_mode="rgb_array" if CFG.sim_app.record_video else None)
 
     print(f"[INFO] joint names (IsaacLab Default): {env.scene['robot'].joint_names}")
     print(f"[INFO] joint_pos names (IsaacLab Actual): {env.action_manager.get_term('joint_pos')._joint_names}")
@@ -81,10 +80,10 @@ def main(cfg):
     print("[INFO] env.observation_manager.group_obs_term_dim: ", env.observation_manager.group_obs_term_dim)
 
     # wrap around environment for rsl-rl
-    if cfg.policy == "eilab":
-        env = LabGo2WEnvHistoryWrapper(env, history_len=cfg.observation_len)
+    if CFG.policy == "eilab":
+        env = LabGo2WEnvHistoryWrapper(env, history_len=CFG.observation_len)
     else:
-        raise NotImplementedError(f"Policy '{cfg.policy}' not implemented.")
+        raise NotImplementedError(f"Policy '{CFG.policy}' not implemented.")
 
     # --- Initialize VL-Map Navigation and Sensor Handler ---
     sensor_handler = SensorHandler(env, camera_name="rgbd_camera")
@@ -102,7 +101,7 @@ def main(cfg):
     if not check_file_path(policy_ckpt_path):
         raise FileNotFoundError(f"Checkpoint file '{policy_ckpt_path}' not found. Please place your trained policy model (.jit file) in the 'ckpts' directory.")
     file_bytes = read_file(policy_ckpt_path)
-    policy = torch.jit.load(file_bytes).to(cfg.policy_device).eval()
+    policy = torch.jit.load(file_bytes).to(CFG.policy_device).eval()
 
     # --- 5. Run Simulation Loop ---
     policy_step_dt = float(env_cfg.sim.dt * env_cfg.decimation)
@@ -110,16 +109,16 @@ def main(cfg):
     print(f"[INFO] init-observation shape: {obs.shape}")
 
     # --- Set goal position ---
-    goal_position = torch.tensor([-3.0, 8.0, 0.4], device=cfg.policy_device)
+    goal_position = torch.tensor([-3.0, 8.0, 0.4], device=CFG.policy_device)
     
     while simulation_app.is_running():
         start_time = time.time()
 
         with torch.inference_mode():
             # Controller to generate velocity command
-            if not cfg.controller == "keyboard":
+            if not CFG.controller == "keyboard":
                 lin_vel_x, ang_vel_z = mdp.compute_velocity_with_goalPoint(env, goal_position)
-                velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=cfg.policy_device)
+                velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
                 # Update observation with the new velocity command
                 obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
 

@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from isaaclab.sensors.camera.camera import Camera
 
 
-class SensorHandler:
+class IsaacLabSensorHandler:
     """
     A handler to interface Isaac Lab sensors with an external agent.
 
