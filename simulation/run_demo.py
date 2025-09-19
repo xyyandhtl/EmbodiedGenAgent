@@ -85,15 +85,25 @@ def main():
     else:
         raise NotImplementedError(f"Policy '{CFG.policy}' not implemented.")
 
-    # --- Initialize VL-Map Navigation and Sensor Handler ---
-    sensor_handler = SensorHandler(env, camera_name="rgbd_camera")
-    print(f"[INFO] SensorHandler : {sensor_handler}")
+    # --- 3. Connect with VL-Map Navigation / Camera Viewer ---
+    # vl_map_agent = VLMapNav()
+    # # Initialize the sensor handler and connect it to the agent
+    # sensor_handler = IsaacLabSensorHandler(env, camera_name="rgbd_camera")
+    # print(f"[INFO] SensorHandler: {sensor_handler}")
+    #
+    # vl_map_agent.connect_to_simulation(sensor_handler)
+    # # Start the VL-Map processing in a separate thread
+    # vl_map_thread = threading.Thread(target=vl_map_agent.start_processing_stream, daemon=True)
+    # vl_map_thread.start()
 
-    vl_map_agent = VLMapNav()
-    vl_map_agent.connect_to_simulation(sensor_handler)
-    # --- Start the VL-Map processing in a separate thread ---
-    vl_map_thread = threading.Thread(target=vl_map_agent.start_processing_stream, daemon=True)
-    vl_map_thread.start()
+    # --- Setup Camera Viewer for testing ---
+    camera_viewer = SimpleCameraViewer()
+    sensor_handler = IsaacLabSensorHandler(env, camera_name="rgbd_camera")
+    print(f"[INFO] SensorHandler: {sensor_handler}")
+    camera_viewer.connect_to_simulation(sensor_handler)
+    # --- 4.b Start the viewer processing in a separate thread ---
+    viewer_thread = threading.Thread(target=camera_viewer.start_viewing_stream, daemon=True)
+    viewer_thread.start()
 
     # --- 4. Load Policy ---
     # Path to the pre-trained low-level locomotion policy
