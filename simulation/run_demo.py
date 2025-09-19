@@ -39,7 +39,7 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.utils.assets import check_file_path, read_file
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
-from simulation.assets.terrains.usd_scene import ASSET_DICT
+from simulation.assets.terrains.usd_scene import ASSET_DICT, add_collision_and_material
 import simulation.mdp as mdp
 from simulation.env.go2w_locomotion_env_cfg import LocomotionVelocityEnvCfg
 from simulation.utils import camera_follow, LabGo2WEnvHistoryWrapper, IsaacLabSensorHandler, SimpleCameraViewer
@@ -85,16 +85,22 @@ def main():
     else:
         raise NotImplementedError(f"Policy '{CFG.policy}' not implemented.")
 
+    if CFG.add_physics:
+        import omni.usd
+        stage = omni.usd.get_context().get_stage()
+        terrain_prim = stage.GetPrimAtPath("/World/Terrain")
+        add_collision_and_material(terrain_prim, static_friction=0.8, dynamic_friction=0.6)
+
     # --- 3. Connect with VL-Map Navigation / Camera Viewer ---
-    # vl_map_agent = VLMapNav()
-    # # Initialize the sensor handler and connect it to the agent
-    # sensor_handler = IsaacLabSensorHandler(env, camera_name="rgbd_camera")
-    # print(f"[INFO] SensorHandler: {sensor_handler}")
-    #
-    # vl_map_agent.connect_to_simulation(sensor_handler)
-    # # Start the VL-Map processing in a separate thread
-    # vl_map_thread = threading.Thread(target=vl_map_agent.start_processing_stream, daemon=True)
-    # vl_map_thread.start()
+    vl_map_agent = VLMapNav()
+    # Initialize the sensor handler and connect it to the agent
+    sensor_handler = IsaacLabSensorHandler(env, camera_name="rgbd_camera")
+    print(f"[INFO] SensorHandler: {sensor_handler}")
+    
+    vl_map_agent.connect_to_simulation(sensor_handler)
+    # Start the VL-Map processing in a separate thread
+    vl_map_thread = threading.Thread(target=vl_map_agent.start_processing_stream, daemon=True)
+    vl_map_thread.start()
 
     # --- Setup Camera Viewer for testing ---
     camera_viewer = SimpleCameraViewer()

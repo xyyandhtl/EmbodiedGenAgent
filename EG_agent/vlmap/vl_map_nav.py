@@ -3,7 +3,6 @@ import threading
 import cv2
 import numpy as np
 import hydra
-
 from collections import deque
 from threading import Event
 from omegaconf import DictConfig
@@ -18,13 +17,13 @@ class VLMapNav:
     def __init__(self, cfg: DictConfig = None):
         # If no cfg provided, load it here using Hydra (config_path matches previous main)
         if cfg is None:
+            # from hydra.core.global_hydra import GlobalHydra
+            # if GlobalHydra.instance().is_initialized():
+            #     GlobalHydra.instance().clear()
             hydra.initialize(version_base=None, config_path="./config/")
             self.cfg = hydra.compose(config_name="runner_isaaclab")
         else:
             self.cfg = cfg
-
-        # instantiate Dualmap with the resolved cfg
-        self.dualmap = Dualmap(self.cfg)
 
         self.event = Event()
         self.session = None
@@ -69,7 +68,8 @@ class VLMapNav:
     def start_processing_stream(self):
         while True:
             self.event.wait()  # Wait for a new frame signal from the simulation
-
+            
+            print("New frame received, processing...")
             # 1. Get data from the sensor handler
             depth = self.sensor.get_depth_frame()
             rgb = self.sensor.get_rgb_frame()

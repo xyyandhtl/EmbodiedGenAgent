@@ -12,7 +12,7 @@ defaults:
 ros_rate: 15
 
 # Path to ROS topic configuration file
-ros_stream_config_path: ./config/data_config/ros/self_collected.yaml
+ros_stream_config_path: ./config/data_config/ros.yaml
 
 # If RGB & Depth topics are published as compressed image topics, set to true
 # If false, topics are expected to be raw image topics

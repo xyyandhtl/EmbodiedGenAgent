@@ -58,6 +58,7 @@ clip:
 
 device: cuda
 
+given_classes_id_color: ""
 
 # ============================================================
 # DUALMAP CONFIG
