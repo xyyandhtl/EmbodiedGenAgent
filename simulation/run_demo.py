@@ -5,6 +5,7 @@ import os
 import sys
 import hydra
 import time
+import threading
 
 from pathlib import Path
 # Add the project root to the python path to allow for absolute imports
@@ -46,8 +47,9 @@ def main(cfg):
     from simulation.utils import (
         LabGo2WEnvHistoryWrapper,
         camera_follow,
-        debug_rgbd_camera
+        SensorHandler
     )
+    from EG_agent.vlmap.vl_map_nav import VLMapNav
 
     # --- 2. Get Environment Configs ---
     env_cfg = LocomotionVelocityEnvCfg()
@@ -84,6 +86,16 @@ def main(cfg):
     else:
         raise NotImplementedError(f"Policy '{cfg.policy}' not implemented.")
 
+    # --- Initialize VL-Map Navigation and Sensor Handler ---
+    sensor_handler = SensorHandler(env, camera_name="rgbd_camera")
+    print(f"[INFO] SensorHandler : {sensor_handler}")
+
+    vl_map_agent = VLMapNav()
+    vl_map_agent.connect_to_simulation(sensor_handler)
+    # --- Start the VL-Map processing in a separate thread ---
+    vl_map_thread = threading.Thread(target=vl_map_agent.start_processing_stream, daemon=True)
+    vl_map_thread.start()
+
     # --- 4. Load Policy ---
     # Path to the pre-trained low-level locomotion policy
     policy_ckpt_path = os.path.join(SIMULATION_DATA_DIR, "ckpts/go2w/blind/policy_roughRecover.jit")
@@ -119,8 +131,8 @@ def main(cfg):
 
             # camera_follow(env, camera_offset_=(-2.0, -2.0, 1.0))
 
-            # debug rgbd camera data (immediate)
-            debug_rgbd_camera(env)
+            # Signal to the VL-Map agent that a new frame is ready
+            sensor_handler.update()
 
             # time delay for real-time evaluation
             elapsed_time = time.time() - start_time

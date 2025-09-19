@@ -9,10 +9,10 @@ import numpy as np
 import networkx as nx
 from omegaconf import DictConfig
 
-from utils.types import Observation, GlobalObservation, GoalMode
-from utils.object import LocalObject, LocalObjStatus
-from utils.base_map_manager import BaseMapManager
-from utils.navigation_helper import NavigationGraph
+from EG_agent.vlmap.utils.types import Observation, GlobalObservation, GoalMode
+from EG_agent.vlmap.utils.object import LocalObject, LocalObjStatus
+from EG_agent.vlmap.utils.base_map_manager import BaseMapManager
+from EG_agent.vlmap.utils.navigation_helper import NavigationGraph
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)

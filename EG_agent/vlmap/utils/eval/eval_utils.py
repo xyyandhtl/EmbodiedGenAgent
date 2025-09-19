@@ -7,7 +7,7 @@ import open3d as o3d
 import numpy as np
 
 from sklearn.neighbors import BallTree
-from utils.eval.scannet200_constants import *
+from EG_agent.vlmap.utils.eval.scannet200_constants import *
 
 
 def load_replica_ply(ply_path: str, semantic_info_path: str):

@@ -1,7 +1,7 @@
 from omegaconf import DictConfig
 
-from utils.tracker import Tracker
-from utils.visualizer import ReRunVisualizer
+from EG_agent.vlmap.utils.tracker import Tracker
+from EG_agent.vlmap.utils.visualizer import ReRunVisualizer
 
 class BaseMapManager:
     def __init__(
