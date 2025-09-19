@@ -73,18 +73,18 @@ class VLMapNav:
             # 1. Get data from the sensor handler
             depth = self.sensor.get_depth_frame()
             rgb = self.sensor.get_rgb_frame()
-            intrinsics = self.sensor.get_intrinsics()
+            intrinsics_matrix = self.sensor.get_intrinsics()
             pose = self.sensor.get_camera_pose()
 
             # Check if data is valid
-            if rgb is None or depth is None or pose is None or intrinsics is None:
+            if rgb is None or depth is None or pose is None or intrinsics_matrix is None:
                 self.event.clear() # Clear event and continue to next frame
                 continue
 
             # 2. Convert torch tensors to numpy arrays
             rgb = rgb.cpu().numpy()
             depth = depth.cpu().numpy()
-            intrinsics = intrinsics.cpu().numpy()
+            intrinsics = intrinsics_matrix.cpu().numpy()
             cam_pos, cam_quat = pose[0].cpu().numpy(), pose[1].cpu().numpy()
 
             # 3. Process data (pose transformation, etc.)
