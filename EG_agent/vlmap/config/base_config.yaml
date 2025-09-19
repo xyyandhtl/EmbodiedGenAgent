@@ -28,7 +28,7 @@ dataset_conf_path: config/data_config/dataset/self_collected.yaml
 # dataset_conf_path: config/data_config/dataset/tum_rgbd.yaml
 
 # ============================================================
-# SIMULATION DATA CONFIG
+# ONLINE SIMULATION CONFIG
 # ============================================================
 camera_params:
   image_height: 480
@@ -39,6 +39,11 @@ camera_params:
   cy: 240.0
   # depth_scale: 1000.0 #for depth image in png format
   # crop_edge: 0
+
+# ============================================================
+# ONLINE ROS CONFIG
+# ============================================================
+ros_stream_config_path: "" # ./config/data_config/ros.yaml
 
 # ============================================================
 # OUTPUT CONFIG

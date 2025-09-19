@@ -40,6 +40,17 @@ class Dualmap:
         Initialize Dualmap with configuration and essential components.
         """
         self.cfg = cfg
+        dualmap_dir = str(Path(__file__).resolve().parent.parent)
+        self.cfg.output_path = f'{dualmap_dir}/{self.cfg.output_path}'
+        self.cfg.logging_config = f'{dualmap_dir}/{self.cfg.logging_config}'
+        self.cfg.yolo.given_classes_path = f'{dualmap_dir}/{self.cfg.yolo.given_classes_path}'
+        self.cfg.yolo.model_path = f'{dualmap_dir}/{self.cfg.yolo.model_path}'
+        self.cfg.sam.model_path = f'{dualmap_dir}/{self.cfg.sam.model_path}'
+        self.cfg.fastsam.model_path = f'{dualmap_dir}/{self.cfg.fastsam.model_path}'
+        self.cfg.config_file_path = f'{dualmap_dir}/{self.cfg.config_file_path}'
+        self.cfg.ros_stream_config_path = f'{dualmap_dir}/{self.cfg.ros_stream_config_path}'
+        self.cfg.given_classes_id_color = f'{dualmap_dir}/{self.cfg.given_classes_id_color}'
+        self.cfg.preload_path
 
         # print config into console
         self.print_cfg()
