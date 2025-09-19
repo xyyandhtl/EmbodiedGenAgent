@@ -10,10 +10,10 @@ import numpy as np
 import open3d as o3d
 from omegaconf import DictConfig
 
-from utils.object import GlobalObject
-from utils.types import Observation, GoalMode
-from utils.base_map_manager import BaseMapManager
-from utils.navigation_helper import NavigationGraph, LayoutMap
+from EG_agent.vlmap.utils.object import GlobalObject
+from EG_agent.vlmap.utils.types import Observation, GoalMode
+from EG_agent.vlmap.utils.base_map_manager import BaseMapManager
+from EG_agent.vlmap.utils.navigation_helper import NavigationGraph, LayoutMap
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)

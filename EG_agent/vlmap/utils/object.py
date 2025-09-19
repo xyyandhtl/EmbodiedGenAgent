@@ -15,7 +15,7 @@ import open3d as o3d
 from omegaconf import DictConfig
 
 # Local module imports
-from utils.types import Observation
+from EG_agent.vlmap.utils.types import Observation
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)

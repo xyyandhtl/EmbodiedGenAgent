@@ -11,18 +11,18 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from omegaconf import OmegaConf, DictConfig
 
-from utils.types import DataInput, GoalMode
-from utils.object_detector import Detector
-from utils.local_map_manager import LocalMapManager
-from utils.global_map_manager import GlobalMapManager
-from utils.visualizer import ReRunVisualizer
-from utils.time_utils import (
+from EG_agent.vlmap.utils.types import DataInput, GoalMode
+from EG_agent.vlmap.utils.object_detector import Detector
+from EG_agent.vlmap.utils.local_map_manager import LocalMapManager
+from EG_agent.vlmap.utils.global_map_manager import GlobalMapManager
+from EG_agent.vlmap.utils.visualizer import ReRunVisualizer
+from EG_agent.vlmap.utils.time_utils import (
     timing_context,
     print_timing_results,
     save_timing_results,
     get_map_memory_usage,
 )
-from utils.navigation_helper import (
+from EG_agent.vlmap.utils.navigation_helper import (
     remaining_path,
     remove_sharp_turns_3d,
 )

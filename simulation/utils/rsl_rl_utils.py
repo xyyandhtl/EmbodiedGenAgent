@@ -75,27 +75,3 @@ def compute_cam_cfg(W=640, H=480, fov_deg_x=90.0):
     print(f"[INFO] Sensor width={cam_cfg.horizontal_aperture} cm, height={cam_cfg.vertical_aperture} cm")
     print(f"[INFO] Physical focal length ≈ {cam_cfg.focal_length:.2f} cm")
     return cam_cfg
-
-
-def debug_rgbd_camera(env: ManagerBasedRLEnv)->None:
-    rgbd_camera: Camera = env.unwrapped.scene['rgbd_camera']
-    log_info = "  "
-
-    if "rgb" in rgbd_camera.data.output.keys():
-        rgb_data = rgbd_camera.data.output['rgb']
-        log_info += f"rgbd_camera: rgb-shape: {tuple(rgb_data.shape)}"
-
-    if "distance_to_image_plane" in rgbd_camera.data.output.keys():
-        depth_data = rgbd_camera.data.output['distance_to_image_plane']
-        log_info += f", depth-shape: {tuple(depth_data.shape)}"
-
-        valid_depth = depth_data[torch.isfinite(depth_data)]
-        if len(valid_depth) > 0:
-            depth_90_percentile = torch.quantile(valid_depth, 0.9).item()
-            depth_min = valid_depth.min().item()
-            log_info += f", 90% percentile: {depth_90_percentile:.2f} m, min: {depth_min:.2f} m"
-        else:
-            log_info += ", all values are invalid (inf or nan)"
-
-    if log_info:
-        print("\r" + log_info, end='', flush=True)

@@ -18,14 +18,14 @@ from PIL import Image
 from omegaconf import DictConfig
 from sklearn.metrics.pairwise import cosine_similarity
 
-from utils.types import DataInput, ObjectClasses, LocalObservation
-from utils.pcd_utils import (
+from EG_agent.vlmap.utils.types import DataInput, ObjectClasses, LocalObservation
+from EG_agent.vlmap.utils.pcd_utils import (
     mask_depth_to_points,
     refine_points_with_clustering,
     safe_create_bbox,
 )
-from utils.visualizer import ReRunVisualizer, visualize_result_rgb
-from utils.time_utils import timing_context
+from EG_agent.vlmap.utils.visualizer import ReRunVisualizer, visualize_result_rgb
+from EG_agent.vlmap.utils.time_utils import timing_context
 
 import pdb
 

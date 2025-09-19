@@ -9,9 +9,9 @@ from threading import Event
 from omegaconf import DictConfig
 from scipy.spatial.transform import Rotation as R
 
-from dualmap.core import Dualmap
-from utils.types import DataInput
-from utils.time_utils import timing_context
+from EG_agent.vlmap.dualmap.core import Dualmap
+from EG_agent.vlmap.utils.types import DataInput
+from EG_agent.vlmap.utils.time_utils import timing_context
 
 
 class VLMapNav:
@@ -58,26 +58,38 @@ class VLMapNav:
         print("Stream stopped")
 
     def connect_to_simulation(self, handler):
-        # todo: isaaclab sensor handler
-        # self.sensor = 
-        # self.session.set_new_frame_callback(self.on_new_frame)
-        # self.session.set_stream_stopped_callback(self.on_stream_stopped)
-        pass
+        """Connects to the Isaac Lab sensor handler."""
+        self.sensor = handler
+        self.event = handler.new_frame_event
+        print("Successfully connected to Isaac Lab sensor handler.")
 
     def get_intrinsic_matrix(self, coeffs):
         return np.array([[coeffs.fx, 0, coeffs.tx], [0, coeffs.fy, coeffs.ty], [0, 0, 1]])
 
     def start_processing_stream(self):
         while True:
-            self.event.wait()
+            self.event.wait()  # Wait for a new frame signal from the simulation
 
+            # 1. Get data from the sensor handler
             depth = self.sensor.get_depth_frame()
             rgb = self.sensor.get_rgb_frame()
-            intrinsics = self.intrinsics
+            intrinsics = self.sensor.get_intrinsics()
             pose = self.sensor.get_camera_pose()
 
-            translation = np.array([pose.tx, pose.ty, pose.tz])
-            quaternion = np.array([pose.qx, pose.qy, pose.qz, pose.qw])
+            # Check if data is valid
+            if rgb is None or depth is None or pose is None or intrinsics is None:
+                self.event.clear() # Clear event and continue to next frame
+                continue
+
+            # 2. Convert torch tensors to numpy arrays
+            rgb = rgb.cpu().numpy()
+            depth = depth.cpu().numpy()
+            intrinsics = intrinsics.cpu().numpy()
+            cam_pos, cam_quat = pose[0].cpu().numpy(), pose[1].cpu().numpy()
+
+            # 3. Process data (pose transformation, etc.)
+            translation = cam_pos.flatten()
+            quaternion = cam_quat.flatten() # [qx, qy, qz, qw]
             rotation_matrix = R.from_quat(quaternion).as_matrix()
 
             # todo: isaaclab axis to dualmap axis

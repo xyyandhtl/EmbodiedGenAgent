@@ -10,9 +10,9 @@ import open3d as o3d
 from omegaconf import DictConfig
 from scipy.sparse.csgraph import connected_components
 
-from utils.types import Observation
-from utils.object import BaseObject
-from utils.visualizer import plot_similarity_matrix
+from EG_agent.vlmap.utils.types import Observation
+from EG_agent.vlmap.utils.object import BaseObject
+from EG_agent.vlmap.utils.visualizer import plot_similarity_matrix
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)
