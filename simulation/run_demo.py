@@ -91,25 +91,20 @@ def main():
         terrain_prim = stage.GetPrimAtPath("/World/Terrain")
         add_collision_and_material(terrain_prim, static_friction=0.8, dynamic_friction=0.6)
 
-    # --- 3. Connect with VL-Map Navigation / Camera Viewer ---
-    vl_map_agent = VLMapNav()
+    # TODO: --- 3. Communication with VL-Map will become ROS ---
     # Initialize the sensor handler and connect it to the agent
     sensor_handler = IsaacLabSensorHandler(env, camera_name="rgbd_camera")
     print(f"[INFO] SensorHandler: {sensor_handler}")
-    
+
+    vl_map_agent = VLMapNav()
     vl_map_agent.connect_to_simulation(sensor_handler)
     # Start the VL-Map processing in a separate thread
     vl_map_thread = threading.Thread(target=vl_map_agent.start_processing_stream, daemon=True)
     vl_map_thread.start()
 
-    # --- Setup Camera Viewer for testing ---
+    # TODO: Now use a simple class to test valid camera data
     camera_viewer = SimpleCameraViewer()
-    sensor_handler = IsaacLabSensorHandler(env, camera_name="rgbd_camera")
-    print(f"[INFO] SensorHandler: {sensor_handler}")
-    camera_viewer.connect_to_simulation(sensor_handler)
-    # --- 4.b Start the viewer processing in a separate thread ---
-    viewer_thread = threading.Thread(target=camera_viewer.start_viewing_stream, daemon=True)
-    viewer_thread.start()
+    print("[INFO] SensorHandler and SimpleCameraViewer initialized.")
 
     # --- 4. Load Policy ---
     # Path to the pre-trained low-level locomotion policy
@@ -138,26 +133,36 @@ def main():
                 # Update observation with the new velocity command
                 obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
 
-            # agent stepping
+            # Agent stepping
             actions = policy(obs)
 
-            # env stepping
+            # Env stepping
             obs, _, _, _ = env.step(actions)
 
             # camera_follow(env, camera_offset_=(-2.0, -2.0, 1.0))
 
             # Signal to the VL-Map agent that a new frame is ready
+            # TODO: --- 3. Communication with VL-Map will become ROS ---
             sensor_handler.update()
+            # TODO: Now use a simple class to test valid camera data
+            sensor_data = {
+                "rgb": sensor_handler.get_rgb_frame(),
+                "depth": sensor_handler.get_depth_frame(),
+                "pose": sensor_handler.get_camera_pose(),
+            }
+            camera_viewer.process_frame(sensor_data)
 
-            # time delay for real-time evaluation
+            # Time delay for real-time evaluation
             elapsed_time = time.time() - start_time
             sleep_time = policy_step_dt - elapsed_time
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
-        actual_loop_time = time.time() - start_time
-        rtf = min(1.0, policy_step_dt / elapsed_time)
-        print(f"\rPolicy Step time: {actual_loop_time * 1000:.2f}ms, Real Time Factor: {rtf:.2f}", end='', flush=True)
+        # Print policy step time info periodically to avoid spamming
+        if camera_viewer.frame_count % 50 == 1:
+            actual_loop_time = time.time() - start_time
+            rtf = min(1.0, policy_step_dt / elapsed_time)
+            print(f"[INFO] Policy Step time: {actual_loop_time * 1000:.2f}ms, Real Time Factor: {rtf:.2f}", flush=True)
 
     print("Simulation finished.")
     simulation_app.close()

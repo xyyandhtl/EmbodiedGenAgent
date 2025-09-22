@@ -89,7 +89,7 @@ class VLMapNav:
 
             # 3. Process data (pose transformation, etc.)
             translation = cam_pos.flatten()
-            quaternion = cam_quat.flatten() # [qx, qy, qz, qw]
+            quaternion = cam_quat.flatten() # [qw, qx, qy, qz], and follow ROS convention.
             rotation_matrix = R.from_quat(quaternion).as_matrix()
 
             # todo: isaaclab axis to dualmap axis
