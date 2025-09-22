@@ -20,13 +20,13 @@ from EG_agent.planning.btpg.behavior_tree.base_nodes import base_node_map, compo
 
 
 class BehaviorTree(ptree.trees.BehaviourTree):
-    def __init__(self,btml_path,behavior_lib=None):
+    def __init__(self, btml_path, behavior_lib=None):
         tree_root = load_btml(btml_path)
         self.behavior_lib = behavior_lib
         if behavior_lib:
-            bt_root = new_tree_like(tree_root,self.new_node_with_lib)
+            bt_root = new_tree_like(tree_root, self.new_node_with_lib)
         else:
-            bt_root = new_tree_like(tree_root,self.new_node)
+            bt_root = new_tree_like(tree_root, self.new_node)
 
         super().__init__(bt_root)
 
@@ -58,7 +58,7 @@ class BehaviorTree(ptree.trees.BehaviourTree):
             node.env = agent.env
             node.scene = agent.scene
 
-        traverse_and_modify_tree(self.root,func)
+        traverse_and_modify_tree(self.root, func)
 
 
     def print(self):

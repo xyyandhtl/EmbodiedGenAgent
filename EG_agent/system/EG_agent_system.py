@@ -9,7 +9,8 @@ import numpy as np
 from EG_agent.prompts.object_sets import AllObject
 from EG_agent.reasoning.logic_goal import LogicGoalGenerator
 from EG_agent.planning.bt_planner import BTGenerator, BTAgent
-from EG_agent.vlmap.vl_map_nav import VLMapNav
+from EG_agent.vlmap.vlmap_nav_ros2 import VLMapNavROS2
+from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
 
 
 class EGAgentSystem:
@@ -24,10 +25,10 @@ class EGAgentSystem:
         self.bt_agent = BTAgent(bt_generator)
 
         # 载入 'VLM地图导航模块'
-        self.dual_map = VLMapNav()
+        self.vlmap_backend = VLMapNavROS2()
 
         # 由外部设置具体环境实例
-        self.env = None  
+        self.env = IsaacsimEnv()
 
     def set_env(self, env):
         self.env = env
@@ -39,17 +40,19 @@ class EGAgentSystem:
 
     @property
     def finished(self) -> bool:
-        pass
+        # todo
+        return False
 
     @property
     def status(self) -> bool:
-        pass
+        # todo
+        return False
 
     def feed_observation(self, 
                          pose: np.ndarray,
                          intrinsics: np.ndarray, 
                          image: np.ndarray, 
-                         depth: np.ndarray = None):
+                         depth: np.ndarray):
         pass
 
     def feed_instruction(self, text: str):

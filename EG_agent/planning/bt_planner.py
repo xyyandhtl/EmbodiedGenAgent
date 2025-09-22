@@ -32,7 +32,7 @@ class BTGenerator:
         self.time_limit = 60
         self.heuristic_choice = 0
         self.output_just_best = True
-        self.use_priority_act = []
+        self.use_priority_act = False
 
         # instantiate planner here so it's ready for immediate use
         self.planner: BTPlannerInterface = BTPlannerInterface(

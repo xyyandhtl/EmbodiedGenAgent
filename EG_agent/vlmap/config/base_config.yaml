@@ -33,8 +33,8 @@ dataset_conf_path: config/data_config/dataset/self_collected.yaml
 camera_params:
   image_height: 480
   image_width: 640
-  fx: 480.0
-  fy: 480.0
+  fx: 640.0
+  fy: 640.0
   cx: 320.0
   cy: 240.0
   # depth_scale: 1000.0 #for depth image in png format

@@ -1,4 +1,4 @@
-dataset_name: 'self_collected'
+# dataset_name: 'self_collected'
 
 ros_topics:
   rgb: "/camera/rgb/image_raw"
@@ -7,7 +7,7 @@ ros_topics:
   camera_info: "/camera_info"
 
 intrinsic:
-  fx: 600
-  fy: 600
-  cx: 600
-  cy: 340
+  fx: 640
+  fy: 640
+  cx: 320
+  cy: 240
