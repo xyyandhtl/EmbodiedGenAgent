@@ -4,7 +4,8 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-import cv2
+import hydra
+from omegaconf import DictConfig
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
@@ -17,27 +18,39 @@ from sensor_msgs.msg import Image, CameraInfo, CompressedImage
 from EG_agent.vlmap.dualmap.core import Dualmap
 from EG_agent.vlmap.ros_runner.ros_publisher import ROSPublisher
 from EG_agent.vlmap.ros_runner.runner_ros_base import RunnerROSBase
+from EG_agent.vlmap.utils.logging_helper import setup_logging
 
 
-class RunnerROS2(Node, RunnerROSBase):
+class VLMapNavROS2(Node, RunnerROSBase):
     """
     ROS2-specific runner. Uses rclpy and ROS2 message_filters for synchronization,
     subscription, and publishing.
     """
-    def __init__(self, cfg):
+    def __init__(self):
         Node.__init__(self, 'runner_ros')
+        hydra.initialize(version_base=None, config_path="./config/")
+        self.cfg = hydra.compose(config_name="runner_ros")
         self.logger = logging.getLogger(__name__)
+        setup_logging(output_path=self.cfg.output_path, config_path=self.cfg.logging_config)
         self.logger.info("[Runner ROS2]")
-        self.logger.info(OmegaConf.to_yaml(cfg))
+        self.logger.info(OmegaConf.to_yaml(self.cfg))
 
-        self.cfg = cfg
-        self.dualmap = Dualmap(cfg)
-        RunnerROSBase.__init__(self, cfg, self.dualmap)
+        # self.cfg = cfg
+        self.dualmap = Dualmap(self.cfg)
+        RunnerROSBase.__init__(self, self.cfg, self.dualmap)
 
         self.bridge = CvBridge()
-        self.dataset_cfg = OmegaConf.load(cfg.ros_stream_config_path)
+        self.dataset_cfg = OmegaConf.load(self.cfg.ros_stream_config_path)
         self.intrinsics = self.load_intrinsics(self.dataset_cfg)
         self.extrinsics = self.load_extrinsics(self.dataset_cfg)
+        # self.orig_height = self.cfg.camera_params['image_height']
+        # self.orig_width = self.cfg.camera_params['image_width']
+        # self.fx = self.cfg.camera_params['fx']
+        # self.fy = self.cfg.camera_params['fy']
+        # self.cx = self.cfg.camera_params['cx']
+        # self.cy = self.cfg.camera_params['cy']
+
+        # self.intrinsics = np.array([[self.fx, 0, self.cx], [0, self.fy, self.cy], [0, 0, 1]])
 
         # Topic Subscribers
         if self.cfg.use_compressed_topic:
@@ -63,7 +76,7 @@ class RunnerROS2(Node, RunnerROSBase):
         self.create_subscription(CameraInfo, self.dataset_cfg.ros_topics.camera_info, self.camera_info_callback, 10)
 
         # Publisher and timer
-        self.publisher = ROSPublisher(self, cfg)
+        self.publisher = ROSPublisher(self, self.cfg)
         self.publish_executor = ThreadPoolExecutor(max_workers=2)
 
         timer_period = 1.0 / self.cfg.ros_rate
@@ -124,11 +137,29 @@ class RunnerROS2(Node, RunnerROSBase):
         self.shutdown_all_threads()
         super().destroy_node()
 
+    # ===============================================
+    # High-level API for navigation and querying
+    # ===============================================
+    def get_nav_path(self):
+        # todo: wrap the path planning from dualmap navigation_helper
+        pass
 
-def run_ros2(cfg):
+    def get_cmd_vel(self):
+        # todo: impl a simple velocity command generator based on the planned path
+        pass
+
+    def query_object(self, query: str):
+        # todo: query the object from bt, return the candidates infos 
+        pass
+
+
+# ===============================================
+# For unit test for dualmap with ros2
+# ===============================================
+if __name__ == "__main__":
     """Entry point for launching ROS2 runner."""
     rclpy.init()
-    runner = RunnerROS2(cfg)
+    runner = VLMapNavROS2()
     runner.logger.warning("[Main] ROS2 Runner started. Waiting for data stream...")
     try:
         while rclpy.ok() and not runner.shutdown_requested:

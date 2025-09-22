@@ -1,6 +1,7 @@
+from EG_agent.system.envs.base_env import BaseEnv
 
 class Agent(object):
-    env = None
+    env: BaseEnv = None
     scene = None
     response_frequency = 1
 
