@@ -11,9 +11,6 @@ defaults:
 # Controls how many times per second spin() calls run_once()
 ros_rate: 15
 
-# Path to ROS topic configuration file
-ros_stream_config_path: ./config/data_config/ros.yaml
-
 # If RGB & Depth topics are published as compressed image topics, set to true
 # If false, topics are expected to be raw image topics
 use_compressed_topic: false
@@ -63,7 +60,7 @@ use_end_process: true
 run_local_mapping_only: false
 
 # Save the generated local map
-save_local_map: false
+save_local_map: true
 
 # Save the global map (set False if run_local_mapping_only is True)
 save_global_map: true
@@ -73,15 +70,15 @@ save_global_map: true
 # PRELOADING CONFIG
 # ============================================================
 # Preload an existing global map from disk
-preload_global_map: true
+preload_global_map: false
 
 # Preload an existing layout pcd and wall pcd from disk
 # If preload the layout, the layout pcd thread will be disabled
-preload_layout: true
+preload_layout: false
 
 # Path to preload map data.
 # If empty, the system will use the default preload path
-preload_path: "outputs/Nfvxx8J5NCo/map"
+preload_path: "map"   # would be f'{output_path}/{dataset_name}/{preload_path}'
 # preload_path: "dataset/HM3D_collect/00829-QaLdnwvtxbs/global_map/hm3d"
 # preload_path: "output/map_results/replica_room_0/map"
 

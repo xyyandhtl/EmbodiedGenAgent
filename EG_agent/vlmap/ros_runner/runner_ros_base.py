@@ -36,7 +36,7 @@ class RunnerROSBase:
         intrinsic_cfg = dataset_cfg.get('intrinsic', None)
         if intrinsic_cfg:
             fx, fy, cx, cy = intrinsic_cfg['fx'], intrinsic_cfg['fy'], intrinsic_cfg['cx'], intrinsic_cfg['cy']
-            self.logger.warning("[Main] Loaded intrinsics from config.")
+            self.logger.info("[Main] Loaded intrinsics from config.")
             return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
         self.logger.warning("[Main] No intrinsics provided.")
         return None
@@ -47,7 +47,7 @@ class RunnerROSBase:
         if extrinsic_cfg:
             matrix = np.array(extrinsic_cfg)
             if matrix.shape == (4, 4):
-                self.logger.warning("[Main] Loaded extrinsics from config.")
+                self.logger.info("[Main] Loaded extrinsics from config.")
                 return matrix
         self.logger.warning("[Main] No valid extrinsics provided. Using identity matrix.")
         return np.eye(4)

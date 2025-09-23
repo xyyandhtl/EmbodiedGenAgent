@@ -7,9 +7,11 @@ from pathlib import Path
 import logging
 import psutil
 
+import yaml
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from omegaconf import OmegaConf, DictConfig
+# from omegaconf import OmegaConf, DictConfig
+from dynaconf import Dynaconf, LazySettings
 
 from EG_agent.vlmap.utils.types import DataInput, GoalMode
 from EG_agent.vlmap.utils.object_detector import Detector
@@ -28,29 +30,32 @@ from EG_agent.vlmap.utils.navigation_helper import (
 )
 
 # Optionally import pdb for debugging purposes
-import pdb
+# import pdb
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)
 
 
 class Dualmap:
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, cfg: LazySettings):
         """
         Initialize Dualmap with configuration and essential components.
         """
         self.cfg = cfg
         dualmap_dir = str(Path(__file__).resolve().parent.parent)
-        self.cfg.output_path = f'{dualmap_dir}/{self.cfg.output_path}'
+        # self.cfg.output_path = f'{dualmap_dir}/{self.cfg.output_path}'
         self.cfg.logging_config = f'{dualmap_dir}/{self.cfg.logging_config}'
         self.cfg.yolo.given_classes_path = f'{dualmap_dir}/{self.cfg.yolo.given_classes_path}'
         self.cfg.yolo.model_path = f'{dualmap_dir}/{self.cfg.yolo.model_path}'
         self.cfg.sam.model_path = f'{dualmap_dir}/{self.cfg.sam.model_path}'
         self.cfg.fastsam.model_path = f'{dualmap_dir}/{self.cfg.fastsam.model_path}'
         self.cfg.config_file_path = f'{dualmap_dir}/{self.cfg.config_file_path}'
-        self.cfg.ros_stream_config_path = f'{dualmap_dir}/{self.cfg.ros_stream_config_path}'
+        # self.cfg.ros_stream_config_path = f'{dualmap_dir}/{self.cfg.ros_stream_config_path}'
         self.cfg.given_classes_id_color = f'{dualmap_dir}/{self.cfg.given_classes_id_color}'
-        self.cfg.preload_path
+        self.cfg.preload_path = f'{self.cfg.output_path}/{self.cfg.dataset_name}/{self.cfg.preload_path}'
+
+        self.cfg.map_save_path = f"{self.cfg.output_path}/{self.cfg.dataset_name}/{self.cfg.map_save_path}"
+        self.cfg.detection_path = f"{self.cfg.output_path}/{self.cfg.dataset_name}/{self.cfg.detection_path}"
 
         # print config into console
         self.print_cfg()
@@ -159,8 +164,8 @@ class Dualmap:
         ]
 
         # if has cfg.ros_dataset_config, add it to the list
-        if 'ros_stream_config_path' in self.cfg:
-            cfg_items.append(("ROS Stream Config Path", self.cfg.ros_stream_config_path))
+        # if 'ros_stream_config_path' in self.cfg:
+        #     cfg_items.append(("ROS Stream Config Path", self.cfg.ros_stream_config_path))
 
         # Define separator line length
         line_length = 60
@@ -684,7 +689,7 @@ class Dualmap:
             try:
                 if config_file.exists():
                     # Load the configuration file
-                    config_data = OmegaConf.load(config_file)
+                    config_data = Dynaconf(settings_files=str(config_file))
 
                     # Access the field
                     if "calculate_path" in config_data:
@@ -698,7 +703,7 @@ class Dualmap:
 
                             # Save the modified configuration back to the file
                             with open(config_file, "w") as file:
-                                OmegaConf.save(config_data, file)
+                                yaml.dump(config_data.as_dict(), file)
 
                         calculate_path = config_data.calculate_path
 
@@ -723,7 +728,7 @@ class Dualmap:
 
                             # Save the modified configuration back to the file
                             with open(config_file, "w") as file:
-                                OmegaConf.save(config_data, file)
+                                yaml.dump(config_data.as_dict(), file)
 
                         trigger_find_next = config_data.trigger_find_next
 
@@ -749,7 +754,7 @@ class Dualmap:
                             self.get_goal_mode = GoalMode.RANDOM
                             config_data.get_goal_mode = GoalMode.RANDOM.value
                             with open(config_file, "w") as file:
-                                OmegaConf.save(config_data, file)
+                                yaml.dump(config_data.as_dict(), file)
                     # Access and handle 'inquiry_sentence'
                     # Get the sentence for inqury session
                     if "inquiry_sentence" in config_data:
@@ -768,7 +773,7 @@ class Dualmap:
 
     def set_calculate_path(self, config_file_path: str):
         config_file = Path(config_file_path)
-        config_data = OmegaConf.load(config_file)
+        config_data = Dynaconf(settings_files=str(config_file))
         if "calculate_path" in config_data:
             # Reset the global path calculation flag in YAML from false to true
             config_data.calculate_path = True
@@ -778,7 +783,7 @@ class Dualmap:
             #     self.reset_trigger_find_next = False
 
             with open(config_file, "w") as file:
-                OmegaConf.save(config_data, file)
+                yaml.dump(config_data.as_dict(), file)
 
     def stop_threading(self):
         self.stop_thread = True

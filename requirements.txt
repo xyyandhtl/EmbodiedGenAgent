@@ -3,7 +3,7 @@ numpy==1.26.4
 opencv-python==4.10.0.84
 # torch   # recommend to install with isaacsim
 # torchvision
-hydra-core==1.3.2
+# hydra-core==1.3.2   # already removed due to version conflict of antlr4
 pillow
 plotly
 tqdm
@@ -35,7 +35,7 @@ git+https://github.com/apple/ml-mobileclip.git --no-deps
 # habitat-sim==0.3.2  # source install
 # habitat-lab==0.3.2  # source install
 # gym==0.23.0
-# antlr4-python3-runtime==4.9.3 # todo: fix conflict with btpg required version 4.13.1
+# antlr4-python3-runtime==4.9.3   # conflict with btpg required version 4.13.1
 
 # simulation deployment test
 # isaacsim==5.0.0.0

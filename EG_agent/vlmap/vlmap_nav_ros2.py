@@ -4,17 +4,17 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-import hydra
-from omegaconf import DictConfig
+from dynaconf import Dynaconf
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 from nav_msgs.msg import Odometry
-from omegaconf import OmegaConf
+
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo, CompressedImage
 
+from EG_agent.system.module_path import AGENT_VLMAP_PATH
 from EG_agent.vlmap.dualmap.core import Dualmap
 from EG_agent.vlmap.ros_runner.ros_publisher import ROSPublisher
 from EG_agent.vlmap.ros_runner.runner_ros_base import RunnerROSBase
@@ -28,41 +28,39 @@ class VLMapNavROS2(Node, RunnerROSBase):
     """
     def __init__(self):
         Node.__init__(self, 'runner_ros')
-        hydra.initialize(version_base=None, config_path="./config/")
-        self.cfg = hydra.compose(config_name="runner_ros")
+        cfg_files = [f"{AGENT_VLMAP_PATH}/config/base_config.yaml", 
+                     f"{AGENT_VLMAP_PATH}/config/system_config.yaml", 
+                     f"{AGENT_VLMAP_PATH}/config/support_config/mobility_config.yaml",
+                     f"{AGENT_VLMAP_PATH}/config/support_config/demo_config.yaml", 
+                     f"{AGENT_VLMAP_PATH}/config/runner_ros.yaml",]
+        self.cfg = Dynaconf(settings_files=cfg_files, 
+                            lowercase_read=True, 
+                            merge_enabled=False,)
+        self.cfg.output_path = f'{AGENT_VLMAP_PATH}/{self.cfg.output_path}'
         self.logger = logging.getLogger(__name__)
-        setup_logging(output_path=self.cfg.output_path, config_path=self.cfg.logging_config)
-        self.logger.info("[Runner ROS2]")
-        self.logger.info(OmegaConf.to_yaml(self.cfg))
+        setup_logging(output_path=f'{self.cfg.output_path}/{self.cfg.dataset_name}', 
+                      config_path=str(self.cfg.logging_config))
+        self.logger.info("[VLMapNavROS2 RUNNER]")
+        # self.logger.info(self.cfg.as_dict())
 
-        # self.cfg = cfg
         self.dualmap = Dualmap(self.cfg)
         RunnerROSBase.__init__(self, self.cfg, self.dualmap)
 
         self.bridge = CvBridge()
-        self.dataset_cfg = OmegaConf.load(self.cfg.ros_stream_config_path)
-        self.intrinsics = self.load_intrinsics(self.dataset_cfg)
-        self.extrinsics = self.load_extrinsics(self.dataset_cfg)
-        # self.orig_height = self.cfg.camera_params['image_height']
-        # self.orig_width = self.cfg.camera_params['image_width']
-        # self.fx = self.cfg.camera_params['fx']
-        # self.fy = self.cfg.camera_params['fy']
-        # self.cx = self.cfg.camera_params['cx']
-        # self.cy = self.cfg.camera_params['cy']
-
-        # self.intrinsics = np.array([[self.fx, 0, self.cx], [0, self.fy, self.cy], [0, 0, 1]])
+        self.intrinsics = self.load_intrinsics(self.cfg)
+        self.extrinsics = self.load_extrinsics(self.cfg)
 
         # Topic Subscribers
         if self.cfg.use_compressed_topic:
             self.logger.warning("[Main] Using compressed topics.")
-            self.rgb_sub = Subscriber(self, CompressedImage, self.dataset_cfg.ros_topics.rgb)
-            self.depth_sub = Subscriber(self, CompressedImage, self.dataset_cfg.ros_topics.depth)
+            self.rgb_sub = Subscriber(self, CompressedImage, self.cfg.ros_topics.rgb)
+            self.depth_sub = Subscriber(self, CompressedImage, self.cfg.ros_topics.depth)
         else:
             self.logger.warning("[Main] Using uncompressed topics.")
-            self.rgb_sub = Subscriber(self, Image, self.dataset_cfg.ros_topics.rgb)
-            self.depth_sub = Subscriber(self, Image, self.dataset_cfg.ros_topics.depth)
+            self.rgb_sub = Subscriber(self, Image, self.cfg.ros_topics.rgb)
+            self.depth_sub = Subscriber(self, Image, self.cfg.ros_topics.depth)
 
-        self.odom_sub = Subscriber(self, Odometry, self.dataset_cfg.ros_topics.odom)
+        self.odom_sub = Subscriber(self, Odometry, self.cfg.ros_topics.odom)
 
         # Sync messages
         self.sync = ApproximateTimeSynchronizer(
@@ -73,7 +71,7 @@ class VLMapNavROS2(Node, RunnerROSBase):
         self.sync.registerCallback(self.synced_callback)
 
         # CameraInfo fallback
-        self.create_subscription(CameraInfo, self.dataset_cfg.ros_topics.camera_info, self.camera_info_callback, 10)
+        self.create_subscription(CameraInfo, self.cfg.ros_topics.camera_info, self.camera_info_callback, 10)
 
         # Publisher and timer
         self.publisher = ROSPublisher(self, self.cfg)

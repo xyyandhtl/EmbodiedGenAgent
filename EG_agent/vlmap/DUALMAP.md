@@ -5,6 +5,8 @@ This module provides open vocabulary mapping and generates navigation paths for 
 migrated and modified from DualMap:
 ![alt text](docs/dualmap.png)
 
+This module is the heaviest process of the agent, using ROS2 to obtain RGB-D and pose topics from the deployment env
+
 ### Usage
 Original detailed usage instructions and examples can refer to [DualMap](https://github.com/Eku127/DualMap?tab=readme-ov-file#applications).
 
@@ -20,14 +22,23 @@ given_classes_path: ./config/class_list/gpt_outdoor_general.txt
 
 [base_config.yaml](config/base_config.yaml)
 ```yaml
-# set the rgb sensor intrinsics
-camera_params:
-  image_height: 480
-  image_width: 640
-  fx: 480.0
-  fy: 480.0
-  cx: 320.0
-  cy: 240.0
+# set the rgbd sensor intrinsics
+dataset_name: 'carla'
+ros_topics:
+  rgb: "/camera/rgb/image_raw"
+  depth: "/camera/depth/image_raw"
+  odom: "/camera/pose"
+  camera_info: "/camera_info"
+intrinsic:
+  fx: 640
+  fy: 640
+  cx: 320
+  cy: 240
+# extrinsics:
+#   [1, 0, 0, 0, 
+#   0, 1, 0, 0, 
+#   0, 0, 1, 0,
+#   0, 0, 0, 1]
 ```
 
 ### Note
