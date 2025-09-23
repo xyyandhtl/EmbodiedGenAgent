@@ -37,6 +37,5 @@ git+https://github.com/apple/ml-mobileclip.git --no-deps
 # gym==0.23.0
 # antlr4-python3-runtime==4.9.3   # conflict with btpg required version 4.13.1
 
-# simulation deployment test
-# isaacsim==5.0.0.0
-# isaaclab==0.45.9  # version v2.2.1
+# isaacsim agent deployment env: see simulation/SIMULATION.md
+

@@ -7,6 +7,7 @@ import pickle
 
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import PoseStamped, TransformStamped
+from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge
 from tf2_ros import TransformBroadcaster
 
@@ -30,8 +31,8 @@ class ROSBridge(Node):
 
         self.rgb_pub = self.create_publisher(Image, "/camera/rgb/image_raw", 10)
         self.depth_pub = self.create_publisher(Image, "/camera/depth/image_raw", 10)
-        self.pose_pub = self.create_publisher(PoseStamped, "/camera/pose", 10)
-        self.camera_info_pub = self.create_publisher(CameraInfo, "/camera/camera_info", 10)
+        self.pose_pub = self.create_publisher(Odometry, "/camera/pose", 10)
+        self.camera_info_pub = self.create_publisher(CameraInfo, "/camera_info", 10)
 
         # --- Prepare CameraInfo message (sent once) ---
         self.camera_info_msg = self._prepare_camera_info(camera_params)
@@ -75,22 +76,36 @@ class ROSBridge(Node):
             quat_np_xyzw = np.roll(quat_np_wxyz, -1)
 
             # Publish PoseStamped
-            pose_msg = PoseStamped()
-            pose_msg.header.stamp = ros_time
-            pose_msg.header.frame_id = "odom"
-            pose_msg.pose.position.x = float(pos_np[0])
-            pose_msg.pose.position.y = float(pos_np[1])
-            pose_msg.pose.position.z = float(pos_np[2])
-            pose_msg.pose.orientation.x = float(quat_np_xyzw[0])
-            pose_msg.pose.orientation.y = float(quat_np_xyzw[1])
-            pose_msg.pose.orientation.z = float(quat_np_xyzw[2])
-            pose_msg.pose.orientation.w = float(quat_np_xyzw[3])
-            self.pose_pub.publish(pose_msg)
+            # pose_msg = PoseStamped()
+            # pose_msg.header.stamp = ros_time
+            # pose_msg.header.frame_id = "odom"
+            # pose_msg.pose.position.x = float(pos_np[0])
+            # pose_msg.pose.position.y = float(pos_np[1])
+            # pose_msg.pose.position.z = float(pos_np[2])
+            # pose_msg.pose.orientation.x = float(quat_np_xyzw[0])
+            # pose_msg.pose.orientation.y = float(quat_np_xyzw[1])
+            # pose_msg.pose.orientation.z = float(quat_np_xyzw[2])
+            # pose_msg.pose.orientation.w = float(quat_np_xyzw[3])
+            # self.pose_pub.publish(pose_msg)
+
+            # Publish Odometry
+            odom_msg = Odometry()
+            odom_msg.header.stamp = ros_time
+            odom_msg.header.frame_id = "map"
+            odom_msg.child_frame_id = "camera_link"
+            odom_msg.pose.pose.position.x = float(pos_np[0])
+            odom_msg.pose.pose.position.y = float(pos_np[1])
+            odom_msg.pose.pose.position.z = float(pos_np[2])
+            odom_msg.pose.pose.orientation.x = float(quat_np_xyzw[0])
+            odom_msg.pose.pose.orientation.y = float(quat_np_xyzw[1])
+            odom_msg.pose.pose.orientation.z = float(quat_np_xyzw[2])
+            odom_msg.pose.pose.orientation.w = float(quat_np_xyzw[3])
+            self.pose_pub.publish(odom_msg)
 
             # Broadcast TF
             t = TransformStamped()
             t.header.stamp = ros_time
-            t.header.frame_id = 'odom'
+            t.header.frame_id = 'map'
             t.child_frame_id = 'camera_link'
             t.transform.translation.x = float(pos_np[0])
             t.transform.translation.y = float(pos_np[1])
@@ -112,7 +127,7 @@ class ROSBridge(Node):
         # --- Depth Image ---
         depth_np = sensor_data.get("depth")
         if depth_np is not None:
-            depth_msg = self.bridge.cv2_to_imgmsg(depth_np, "32FC1")
+            depth_msg = self.bridge.cv2_to_imgmsg(depth_np, "16UC1")
             depth_msg.header.stamp = ros_time
             depth_msg.header.frame_id = "camera_link"
             self.depth_pub.publish(depth_msg)

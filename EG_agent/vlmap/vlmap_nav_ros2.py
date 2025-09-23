@@ -37,6 +37,7 @@ class VLMapNavROS2(Node, RunnerROSBase):
                             lowercase_read=True, 
                             merge_enabled=False,)
         self.cfg.output_path = f'{AGENT_VLMAP_PATH}/{self.cfg.output_path}'
+        self.cfg.logging_config = f'{AGENT_VLMAP_PATH}/{self.cfg.logging_config}'
         self.logger = logging.getLogger(__name__)
         setup_logging(output_path=f'{self.cfg.output_path}/{self.cfg.dataset_name}', 
                       config_path=str(self.cfg.logging_config))
@@ -47,7 +48,9 @@ class VLMapNavROS2(Node, RunnerROSBase):
         RunnerROSBase.__init__(self, self.cfg, self.dualmap)
 
         self.bridge = CvBridge()
-        self.intrinsics = self.load_intrinsics(self.cfg)
+        # Let the received intrinsics topic decide
+        self.intrinsics = None
+        # self.intrinsics = self.load_intrinsics(self.cfg)
         self.extrinsics = self.load_extrinsics(self.cfg)
 
         # Topic Subscribers
