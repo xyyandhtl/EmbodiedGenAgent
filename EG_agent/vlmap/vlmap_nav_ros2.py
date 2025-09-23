@@ -48,7 +48,9 @@ class VLMapNavROS2(Node, RunnerROSBase):
         RunnerROSBase.__init__(self, self.cfg, self.dualmap)
 
         self.bridge = CvBridge()
-        self.intrinsics = self.load_intrinsics(self.cfg)
+        # Let the received intrinsics topic decide
+        self.intrinsics = None
+        # self.intrinsics = self.load_intrinsics(self.cfg)
         self.extrinsics = self.load_extrinsics(self.cfg)
 
         # Topic Subscribers

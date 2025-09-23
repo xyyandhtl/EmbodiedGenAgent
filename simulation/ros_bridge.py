@@ -144,8 +144,8 @@ def main():
     camera_params = {
         'image_width': 640,
         'image_height': 480,
-        'fx': 640.0,
-        'fy': 640.0,
+        'fx': 320.0,
+        'fy': 320.0,
         'cx': 320.0,
         'cy': 240.0,
     }

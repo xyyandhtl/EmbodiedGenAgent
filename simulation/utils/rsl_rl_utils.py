@@ -63,7 +63,7 @@ def compute_cam_cfg(W=640, H=480, fov_deg_x=90.0):
         intrinsic_matrix=intrinsic_matrix,
         width=W,
         height=H,
-        clipping_range=(0.6, 100.0),  # 近、远平面，m
+        clipping_range=(0.6, 30.0),  # 近、远平面，m
         focal_length=12,  # 物理透视焦距，cm
         f_stop=0.0,  # 光圈（F值），用于模拟景深
     )

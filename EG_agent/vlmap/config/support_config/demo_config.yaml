@@ -10,14 +10,14 @@ show_debug_entities: false
 show_local_entities: True
 
 # global_mapping floor height in rerun
-floor_height: -1.2
+floor_height: 0.0 # -1.2
 
 # height of related bbox visualization in rerun
 related_height: -0.1
 
 # Robot height
 # this one change the path height in rerun
-robot_height: 1.5
+robot_height: 0.8
 
 # path visualization radius in rerun
 # this one change the path width
@@ -98,10 +98,10 @@ follower_roll: -20.0
 follower_pitch: -20.0
 follower_yaw: 0.0
 
-follower_translation2: [0.8, -3.2, -6.0]
-follower_roll2: -25.0
-follower_pitch2: -5.0
-follower_yaw2: 0.0
+# follower_translation2: [0.8, -3.2, -6.0]
+# follower_roll2: -25.0
+# follower_pitch2: -5.0
+# follower_yaw2: 0.0
 
 # back view setting
 # follower_translation: [0.0, -1.0, -2.0]

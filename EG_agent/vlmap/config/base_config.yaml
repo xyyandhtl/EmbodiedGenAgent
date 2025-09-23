@@ -30,15 +30,15 @@
 # ============================================================
 # ONLINE ROS CONFIG
 # ============================================================
-dataset_name: 'carla'
+dataset_name: 'test'
 ros_topics:
   rgb: "/camera/rgb/image_raw"
   depth: "/camera/depth/image_raw"
   odom: "/camera/pose"
   camera_info: "/camera_info"
 intrinsic:
-  fx: 640
-  fy: 640
+  fx: 320
+  fy: 320
   cx: 320
   cy: 240
 # extrinsics:
@@ -51,7 +51,7 @@ intrinsic:
 # OUTPUT CONFIG
 # ============================================================
 # output directory
-output_path: ./outputs/map_results
+output_path: ./outputs
 
 
 # ============================================================

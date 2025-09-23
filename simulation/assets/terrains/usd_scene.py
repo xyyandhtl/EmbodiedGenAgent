@@ -5,7 +5,7 @@ from isaaclab.sim import UsdFileCfg
 from ...assets import SIMULATION_DATA_DIR
 
 
-def add_collision_and_material(prim, static_friction=0.7, dynamic_friction=0.5, restitution=0.05):
+def add_collision_and_material(prim, static_friction=0.7, dynamic_friction=0.5, restitution=0.05, recursive=False):
     """递归给 prim 及子 Mesh 添加碰撞和摩擦"""
     if not prim or not prim.IsValid():
         return
@@ -23,8 +23,9 @@ def add_collision_and_material(prim, static_friction=0.7, dynamic_friction=0.5, 
         mat_api.CreateRestitutionAttr().Set(restitution)
 
     # 遍历子节点
-    for child in prim.GetChildren():
-        add_collision_and_material(child, static_friction, dynamic_friction, restitution)
+    if recursive:
+        for child in prim.GetChildren():
+            add_collision_and_material(child, static_friction, dynamic_friction, restitution)
 
 
 ASSET_DICT = {
@@ -34,7 +35,7 @@ ASSET_DICT = {
             visible=True,
             usd_path=f"{SIMULATION_DATA_DIR}/terrains/carla/carla.usd",
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(-200.0, -125.0, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(-200.0, -75.0, 0.0)),
     ),
     "warehouse": AssetBaseCfg(
         prim_path=f"/World/Terrain",
@@ -57,6 +58,7 @@ ASSET_DICT = {
         spawn=UsdFileCfg(
             visible=True,
             usd_path=f"{SIMULATION_DATA_DIR}/terrains/IsaacWarehouse/IsaacWarehouse.usd",
+            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/Conference/Roland.usd",
             # usd_path=f"{SIMULATION_DATA_DIR}/terrains/Ragnarok/Koenigsegg_Ragnarok.usd",
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, -0.5)),
