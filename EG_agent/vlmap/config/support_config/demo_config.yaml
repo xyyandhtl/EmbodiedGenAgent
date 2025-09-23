@@ -98,10 +98,10 @@ follower_roll: -20.0
 follower_pitch: -20.0
 follower_yaw: 0.0
 
-# follower_translation2: [0.8, -3.2, -6.0]
-# follower_roll2: -25.0
-# follower_pitch2: -5.0
-# follower_yaw2: 0.0
+follower_translation2: [0.8, -3.2, -6.0]
+follower_roll2: -25.0
+follower_pitch2: -5.0
+follower_yaw2: 0.0
 
 # back view setting
 # follower_translation: [0.0, -1.0, -2.0]

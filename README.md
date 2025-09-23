@@ -5,9 +5,10 @@ A Generative Embodied Agent that transforms open-ended instructions into behavio
 ## Plans
 - [x] Implement the intent understanding: vlm prompt / reflective feedback to generate the first-order logic goal
 - [x] Implement the bt tree generator to generate the bt tree
-- [ ] Implement the Isaaclab simulator, scene usd, robot and its locomotion policy and sensor configuration
+- [x] Implement the Isaaclab simulator, scene usd, robot and its locomotion policy and sensor configuration
+- [x] ROS bridge between the Isaacsim5 and ROS2
+- [x] Testing dualmap mapping with Isaacsim env 
 - [ ] Define and implement the atomic actions and conditions to connect agent and simulator
-- [ ] Implement online/offline dualmap 
 - [ ] Implement the online open-vacabulary object/place querying
 - [ ] Implement the path planner and cmd_vel controller
 - [ ] Enhance the prompts engineering with memory / map for better reasoning and interactive task
