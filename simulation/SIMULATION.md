@@ -80,3 +80,100 @@ The primary configuration is done in `simulation/settings.yaml`:
   - `False`: Run with the full graphical user interface.
   - `True`: Run in headless mode (no UI). This is useful for training or running on a server.
 - `policy_device`: The compute device (`cpu` or `cuda:0`) on which the policy will be executed.
+
+
+## 7. ROS2 Data Communication
+
+To integrate with external modules like `vlmap`, the simulation provides a real-time stream of sensor data (RGB, Depth, Pose) via ROS2 topics.
+
+### a. Architecture: The ZMQ Bridge
+
+A direct integration is not possible due to a Python version conflict: Isaac Sim 5.0 requires **Python 3.11**, while ROS2 Humble is built for **Python 3.10**. 
+
+To solve this, we use a **ZMQ Bridge** architecture, which decouples the simulation environment from the ROS environment.
+
+1.  **`run_demo.py` (Python 3.11)**: The main simulation script. It is **not** a ROS node. It uses the `ZMQDataPublisher` utility to send serialized sensor data over a ZMQ network socket.
+
+2.  **`ros_bridge.py` (Python 3.10)**: A standalone script that runs in a separate, ROS-enabled environment. It acts as a ZMQ subscriber to receive data from the simulation and as a ROS2 publisher to broadcast that data to the ROS network.
+
+3.  **`vlmap` module (Python 3.10)**: The final consumer, which subscribes to the ROS2 topics published by the `ros_bridge.py` script.
+
+This design allows each component to run in its required Python environment while communicating efficiently.
+
+### b. How to Run and Test
+
+Follow these steps to launch the full system and verify the data communication.
+
+#### Prerequisites
+
+1.  **Two Conda Environments**: 
+    - One for Isaac Sim with **Python 3.11**.
+    - One for VLMAP and ROS with **Python 3.10**.
+2.  **Install `pyzmq`**: Ensure `pyzmq` is installed in **both** conda environments:
+    ```bash
+    # In the Python 3.11 env
+    conda activate <your-isaac-env-name>
+    pip install pyzmq
+
+    # In the Python 3.10 env
+    conda activate <your-ros-env-name>
+    pip install pyzmq
+    ```
+
+#### Execution Steps
+
+You will need to open **at least three terminals**.
+
+**Terminal 1: Start the `vlmap` Subscriber**
+
+```bash
+# Activate ROS environment
+conda activate <your-ros-py3.10-env>
+
+# Run the vlmap node
+python EG_agent/vlmap/ros_runner/runner_ros.py
+```
+
+**Terminal 2: Start the ROS Bridge**
+
+```bash
+# Activate ROS environment
+conda activate <your-ros-py3.10-env>
+
+# Run the bridge script
+python simulation/ros_bridge.py
+```
+
+**Terminal 3: Start the Isaac Sim Simulation**
+
+```bash
+# Activate Isaac Sim environment
+conda activate <your-isaac-py3.11-env>
+
+# Run the main demo script
+python simulation/run_demo.py
+```
+
+#### Verification Steps
+
+Open a **fourth terminal** with the ROS environment activated.
+
+1.  **List ROS2 Topics**:
+    ```bash
+    ros2 topic list
+    ```
+    *Expected*: You should see `/camera/rgb/image_raw`, `/camera/depth/image_raw`, `/camera/pose`, `/camera_info`, and `/tf` among the listed topics.
+
+2.  **Check TF Transform**:
+    ```bash
+    ros2 run tf2_ros tf2_echo odom camera_link
+    ```
+    *Expected*: After a brief "Waiting for transform" message, you should see a continuous stream of translation and rotation data.
+
+3.  **Visualize Camera Feed**:
+    ```bash
+    rqt
+    ```
+    *Choose*: Plugins → Visualization → Image View
+
+    *Expected*: A graphical window will open. Select `/camera/rgb/image_raw` or  `/camera/depth/image_raw` from the dropdown to see the robot's live point-of-view.
