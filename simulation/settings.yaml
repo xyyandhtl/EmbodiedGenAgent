@@ -2,11 +2,6 @@ defaults:
   - _self_
 #  - override hydra/job_logging: stdout
 
-hydra:
-  run:
-    dir: outputs
-  output_subdir: null
-
 # scene config
 terrain: "carla"   # see assets/terrains/usd_scene.py
 add_physics: False # if the terrain usd dont have collision

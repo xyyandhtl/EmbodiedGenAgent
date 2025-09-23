@@ -150,7 +150,9 @@ def main():
             if rgb_tensor is not None:
                 data_to_send['rgb'] = rgb_tensor[0, :, :, :3].cpu().numpy().astype(np.uint8)
             if depth_tensor is not None:
-                data_to_send['depth'] = depth_tensor[0].cpu().numpy().astype(np.float32)
+                # data_to_send['depth'] = depth_tensor[0].cpu().numpy().astype(np.float32)
+                # Convert depth to uint16. If original depth is in meters and millimeter precision is needed:
+                data_to_send['depth'] = (depth_tensor[0] * 1000).clamp(0, 65535).cpu().numpy().astype(np.uint16)
             if pose_tuple is not None:
                 # Send as a tuple of numpy arrays (pos, quat_wxyz)
                 data_to_send['pose'] = (pose_tuple[0][0].cpu().numpy(), pose_tuple[1][0].cpu().numpy())

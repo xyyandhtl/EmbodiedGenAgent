@@ -74,7 +74,7 @@ class VelocitySceneCfg(InteractiveSceneCfg):
         # spawn=sim_utils.PinholeCameraCfg(
         #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=54.0, clipping_range=(0.1, 1.0e5)
         # ),
-        offset=CameraCfg.OffsetCfg(pos=(0.32487, -0.00095, 0.05362), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+        offset=CameraCfg.OffsetCfg(pos=(0.0, 0.0, 0.2), rot=(1.0, 0.0, 0.0, 0.0), convention="world"),
     )
     # height_scanner = RayCasterCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base",
@@ -85,13 +85,13 @@ class VelocitySceneCfg(InteractiveSceneCfg):
     #     mesh_prim_paths=["/World/ground"],
     #     max_distance=100.0,
     # )
-    contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*",
-        update_period=0.0,
-        history_length=3,
-        debug_vis=True,
-        track_air_time=True
-    )
+    # contact_forces = ContactSensorCfg(
+    #     prim_path="{ENV_REGEX_NS}/Robot/.*",
+    #     update_period=0.0,
+    #     history_length=3,
+    #     debug_vis=True,
+    #     track_air_time=True
+    # )
 
 
 @configclass

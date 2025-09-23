@@ -44,7 +44,7 @@ class Dualmap:
         self.cfg = cfg
         dualmap_dir = str(Path(__file__).resolve().parent.parent)
         # self.cfg.output_path = f'{dualmap_dir}/{self.cfg.output_path}'
-        self.cfg.logging_config = f'{dualmap_dir}/{self.cfg.logging_config}'
+        # self.cfg.logging_config = f'{dualmap_dir}/{self.cfg.logging_config}'
         self.cfg.yolo.given_classes_path = f'{dualmap_dir}/{self.cfg.yolo.given_classes_path}'
         self.cfg.yolo.model_path = f'{dualmap_dir}/{self.cfg.yolo.model_path}'
         self.cfg.sam.model_path = f'{dualmap_dir}/{self.cfg.sam.model_path}'
@@ -161,6 +161,8 @@ class Dualmap:
             ("Save Global Map?", self.cfg.save_global_map),
             ("Use Preload Global Map?", self.cfg.preload_global_map),
             ("Use Rerun for Visualization?", self.cfg.use_rerun),
+            ("Camera Intrinsics", str(self.cfg.intrinsic)),
+            # ("Cmaera Extrinsics": str(self.cfg.extrinsics)},
         ]
 
         # if has cfg.ros_dataset_config, add it to the list

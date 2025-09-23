@@ -549,6 +549,7 @@ class Detector:
             logger.warning("[Detector] No detections found in curr frame.")
             # set current results as empty dict
             self.curr_results = {}
+            self.curr_detections = sv.Detections.empty()
             return
         with timing_context("Segmentation", self):
             sam_out = self.sam.predict(color, bboxes=xyxy, verbose=False)
@@ -675,6 +676,10 @@ class Detector:
             if self.cfg.use_fastsam:
                 fastsam_thread.join()
 
+        if self.curr_detections.is_empty():
+            logger.warning("[Detector] No detections found in curr frame, skip!")
+            return
+        
         with timing_context("Detection Filter", self):
             self.filter.update_detections(self.curr_detections, color)
             filtered_detections = self.filter.run_filter()
