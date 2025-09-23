@@ -40,7 +40,9 @@
 
 ### test vlmap ros2 runner
 `python -m EG_agent.vlmap.vlmap_nav_ros2`
-- This module only requires ros2 rgb, depth and odom topics, you can first use habitat simulator to test, refer to [habitat-data-collector](https://github.com/Eku127/habitat-data-collector.git)
+- This module requires ros2 rgb, depth and odom topics, you can either use [habitat-simulator-collector](https://github.com/Eku127/habitat-data-collector.git) or [isaacsim-simulator](../simulation/SIMULATION.md) to test
+
+**Note**: not intended to deploy the agent in habitat-simulator, because it is rather a high-level simulator, sim2real gap would be huge
 
 ![vlmap_rerun_viewer](assets/vlmap_rerun_viewer.png)
 - after end_process, the global map will be saved and the timing statistics will be printed:
