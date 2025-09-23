@@ -63,7 +63,7 @@ preload_layout: true
 
 # Path to preload map data.
 # If empty, the system will use the default preload path
-preload_path: "outputs/Nfvxx8J5NCo/map"
+preload_path: "map"
 # preload_path: "dataset/HM3D_collect/00829-QaLdnwvtxbs/global_map/hm3d"
 # preload_path: "output/map_results/replica_room_0/map"
 

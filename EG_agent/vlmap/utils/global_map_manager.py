@@ -159,10 +159,10 @@ class GlobalMapManager(BaseMapManager):
         # get the directory
         save_dir = self.cfg.map_save_path
 
-        if os.path.exists(save_dir):
-            shutil.rmtree(save_dir)
-            logger.info(f"[GlobalMap] Cleared the directory: {save_dir}")
-        os.makedirs(save_dir)
+        # if os.path.exists(save_dir):
+        #     shutil.rmtree(save_dir)
+        #     logger.info(f"[GlobalMap] Cleared the directory: {save_dir}")
+        os.makedirs(save_dir, exist_ok=True)
         for i, obj in enumerate(self.global_map):
             if obj.save_path is not None:
                 obj.save_path = obj._initialize_save_path()

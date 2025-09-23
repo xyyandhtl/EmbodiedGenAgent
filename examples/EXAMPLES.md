@@ -40,6 +40,54 @@
 
 ### test vlmap ros2 runner
 `python -m EG_agent.vlmap.vlmap_nav_ros2`
-> Hint: this module only requires ros2 rgb, depth and odom topics, you can first use habitat simulator to test, refer to [habitat-data-collector](https://github.com/Eku127/habitat-data-collector.git)
+- This module only requires ros2 rgb, depth and odom topics, you can first use habitat simulator to test, refer to [habitat-data-collector](https://github.com/Eku127/habitat-data-collector.git)
 
 ![vlmap_rerun_viewer](assets/vlmap_rerun_viewer.png)
+- after end_process, the global map will be saved and the timing statistics will be printed:
+```shell
+INFO:EG_agent.vlmap.utils.object_detector:[Detector][Layout] Saving layout to: /home/lenovo/Projects/GenAgent/EG_agent/vlmap/./outputs/map_results/carla/map/layout.pcd
+INFO:EG_agent.vlmap.utils.time_utils:
+Dualmap Timing Results:
+INFO:EG_agent.vlmap.utils.time_utils:+------------------------+----------------+-----------------------+
+| Step                   |   Avg Time (s) |   90th Percentile (s) |
++========================+================+=======================+
+| Time Per Frame         |         0.2805 |                0.3965 |
++------------------------+----------------+-----------------------+
+| Observation Generation |         0.2785 |                0.3944 |
++------------------------+----------------+-----------------------+
+| Process Detection      |         0.2621 |                0.3627 |
++------------------------+----------------+-----------------------+
+| Save Detection         |         0.0001 |                0.0001 |
++------------------------+----------------+-----------------------+
+| Observation Formatting |         0.0163 |                0.0296 |
++------------------------+----------------+-----------------------+
+| Local Mapping          |         0.0468 |                0.106  |
++------------------------+----------------+-----------------------+
+| Global Mapping         |         0.0001 |                0.0001 |
++------------------------+----------------+-----------------------+
+| Merging                |         0      |                0      |
++------------------------+----------------+-----------------------+
+INFO:EG_agent.vlmap.utils.time_utils:
+Timing results saved to /home/lenovo/Projects/GenAgent/EG_agent/vlmap/./outputs/map_results/carla/map/../system_time.csv
+INFO:EG_agent.vlmap.utils.time_utils:
+Detector Timing Results:
+INFO:EG_agent.vlmap.utils.time_utils:+-------------------------------+----------------+-----------------------+
+| Step                          |   Avg Time (s) |   90th Percentile (s) |
++===============================+================+=======================+
+| Detection Filter              |         0.0549 |                0.0963 |
++-------------------------------+----------------+-----------------------+
+| YOLO+Segmentation+FastSAM     |         0.0811 |                0.1183 |
++-------------------------------+----------------+-----------------------+
+| YOLO                          |         0.0349 |                0.0495 |
++-------------------------------+----------------+-----------------------+
+| Segmentation                  |         0.046  |                0.0798 |
++-------------------------------+----------------+-----------------------+
+| CLIP+Create Object Pointcloud |         0.1017 |                0.1197 |
++-------------------------------+----------------+-----------------------+
+| Create Object Pointcloud      |         0.0836 |                0.1037 |
++-------------------------------+----------------+-----------------------+
+| CLIP                          |         0.101  |                0.1166 |
++-------------------------------+----------------+-----------------------+
+| Visualize Detection           |         0.0229 |                0.042  |
++-------------------------------+----------------+-----------------------+
+```

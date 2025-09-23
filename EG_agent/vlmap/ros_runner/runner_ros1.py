@@ -31,21 +31,21 @@ class RunnerROS1(RunnerROSBase):
         super().__init__(cfg, self.dualmap)
 
         self.bridge = CvBridge()
-        self.dataset_cfg = OmegaConf.load(cfg.ros_stream_config_path)
-        self.intrinsics = self.load_intrinsics(self.dataset_cfg)
-        self.extrinsics = self.load_extrinsics(self.dataset_cfg)
+        # self.dataset_cfg = OmegaConf.load(cfg.ros_stream_config_path)
+        self.intrinsics = self.load_intrinsics(self.cfg)
+        self.extrinsics = self.load_extrinsics(self.cfg)
 
         # Image and Odometry Subscribers
         if self.cfg.use_compressed_topic:
             self.logger.warning("[Main] Using compressed topics.")
-            self.rgb_sub = Subscriber(self.dataset_cfg.ros_topics.rgb, CompressedImage)
-            self.depth_sub = Subscriber(self.dataset_cfg.ros_topics.depth, CompressedImage)
+            self.rgb_sub = Subscriber(self.cfg.ros_topics.rgb, CompressedImage)
+            self.depth_sub = Subscriber(self.cfg.ros_topics.depth, CompressedImage)
         else:
             self.logger.warning("[Main] Using uncompressed topics.")
-            self.rgb_sub = Subscriber(self.dataset_cfg.ros_topics.rgb, Image)
-            self.depth_sub = Subscriber(self.dataset_cfg.ros_topics.depth, Image)
+            self.rgb_sub = Subscriber(self.cfg.ros_topics.rgb, Image)
+            self.depth_sub = Subscriber(self.cfg.ros_topics.depth, Image)
 
-        self.odom_sub = Subscriber(self.dataset_cfg.ros_topics.odom, Odometry)
+        self.odom_sub = Subscriber(self.cfg.ros_topics.odom, Odometry)
 
         # Sync RGB + Depth + Odometry
         self.sync = ApproximateTimeSynchronizer(
@@ -56,7 +56,7 @@ class RunnerROS1(RunnerROSBase):
         self.sync.registerCallback(self.synced_callback)
 
         # Fallback to camera_info topic if intrinsics not loaded
-        rospy.Subscriber(self.dataset_cfg.ros_topics.camera_info, CameraInfo, self.camera_info_callback)
+        rospy.Subscriber(self.cfg.ros_topics.camera_info, CameraInfo, self.camera_info_callback)
 
     def synced_callback(self, rgb_msg, depth_msg, odom_msg):
         """Callback for synchronized RGB, Depth, and Odom messages."""

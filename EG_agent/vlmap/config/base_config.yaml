@@ -2,10 +2,10 @@
 # DATASET CONFIG
 # ============================================================
 ## Self Collected Data
-dataset_name: self_collected
-scene_id: 00880-Nfvxx8J5NCo
-dataset_path: dataset/HM3D_collect/
-dataset_conf_path: config/data_config/dataset/self_collected.yaml
+# dataset_name: self_collected
+# scene_id: 00880-Nfvxx8J5NCo
+# dataset_path: dataset/HM3D_collect/
+# dataset_conf_path: config/data_config/dataset/self_collected.yaml
 
 ## Replica Dataset
 #dataset_name: replica
@@ -28,7 +28,7 @@ dataset_conf_path: config/data_config/dataset/self_collected.yaml
 # dataset_conf_path: config/data_config/dataset/tum_rgbd.yaml
 
 # ============================================================
-# ONLINE SIMULATION CONFIG
+# ONLINE NON-ROS CONFIG
 # ============================================================
 camera_params:
   image_height: 480
@@ -43,7 +43,22 @@ camera_params:
 # ============================================================
 # ONLINE ROS CONFIG
 # ============================================================
-ros_stream_config_path: "" # ./config/data_config/ros.yaml
+dataset_name: 'carla'
+ros_topics:
+  rgb: "/camera/rgb/image_raw"
+  depth: "/camera/depth/image_raw"
+  odom: "/camera/pose"
+  camera_info: "/camera_info"
+intrinsic:
+  fx: 640
+  fy: 640
+  cx: 320
+  cy: 240
+# extrinsics:
+#   [1, 0, 0, 0, 
+#   0, 1, 0, 0, 
+#   0, 0, 1, 0,
+#   0, 0, 0, 1]
 
 # ============================================================
 # OUTPUT CONFIG
