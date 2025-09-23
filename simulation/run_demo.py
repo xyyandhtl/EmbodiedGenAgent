@@ -2,7 +2,7 @@ import torch
 import os
 import sys
 import time
-import threading
+import numpy as np
 
 from pathlib import Path
 from omegaconf import OmegaConf
@@ -42,12 +42,16 @@ from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 from simulation.assets.terrains.usd_scene import ASSET_DICT, add_collision_and_material
 import simulation.mdp as mdp
 from simulation.env.go2w_locomotion_env_cfg import LocomotionVelocityEnvCfg
-from simulation.utils import camera_follow, LabGo2WEnvHistoryWrapper, IsaacLabSensorHandler, SimpleCameraViewer
-from EG_agent.vlmap.vl_map_nav import VLMapNav
-
+from simulation.utils import (
+    camera_follow,
+    LabGo2WEnvHistoryWrapper,
+    IsaacLabSensorHandler,
+    ZMQDataPublisher,
+    SimpleCameraViewer
+)
 
 def main():
-    """Main function to run the Go2W locomotion demo."""
+    """Main function to run the Go2W locomotion demo and publish sensor data via ZMQ."""
 
     # --- 1. Get Environment Configs ---
     env_cfg = LocomotionVelocityEnvCfg()
@@ -91,25 +95,14 @@ def main():
         terrain_prim = stage.GetPrimAtPath("/World/Terrain")
         add_collision_and_material(terrain_prim, static_friction=0.8, dynamic_friction=0.6)
 
-    # --- 3. Connect with VL-Map Navigation / Camera Viewer ---
-    vl_map_agent = VLMapNav()
-    # Initialize the sensor handler and connect it to the agent
+    # --- 3. Initialize Sensor Handlers and ZMQ Publisher ---
     sensor_handler = IsaacLabSensorHandler(env, camera_name="rgbd_camera")
     print(f"[INFO] SensorHandler: {sensor_handler}")
-    
-    vl_map_agent.connect_to_simulation(sensor_handler)
-    # Start the VL-Map processing in a separate thread
-    vl_map_thread = threading.Thread(target=vl_map_agent.start_processing_stream, daemon=True)
-    vl_map_thread.start()
 
-    # --- Setup Camera Viewer for testing ---
+    zmq_publisher = ZMQDataPublisher()
+
+    # [DEBUG] Use a simple class to test camera data
     camera_viewer = SimpleCameraViewer()
-    sensor_handler = IsaacLabSensorHandler(env, camera_name="rgbd_camera")
-    print(f"[INFO] SensorHandler: {sensor_handler}")
-    camera_viewer.connect_to_simulation(sensor_handler)
-    # --- 4.b Start the viewer processing in a separate thread ---
-    viewer_thread = threading.Thread(target=camera_viewer.start_viewing_stream, daemon=True)
-    viewer_thread.start()
 
     # --- 4. Load Policy ---
     # Path to the pre-trained low-level locomotion policy
@@ -127,6 +120,7 @@ def main():
     # --- Set goal position ---
     goal_position = torch.tensor([-3.0, 8.0, 0.4], device=CFG.policy_device)
     
+    frame_count = 0
     while simulation_app.is_running():
         start_time = time.time()
 
@@ -138,28 +132,50 @@ def main():
                 # Update observation with the new velocity command
                 obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
 
-            # agent stepping
+            # Agent stepping
             actions = policy(obs)
 
-            # env stepping
+            # Env stepping
             obs, _, _, _ = env.step(actions)
 
             # camera_follow(env, camera_offset_=(-2.0, -2.0, 1.0))
 
-            # Signal to the VL-Map agent that a new frame is ready
-            sensor_handler.update()
+            # --- Get sensor data and publish via ZMQ ---
+            rgb_tensor = sensor_handler.get_rgb_frame()
+            depth_tensor = sensor_handler.get_depth_frame()
+            pose_tuple = sensor_handler.get_camera_pose()
 
-            # time delay for real-time evaluation
+            # Prepare data for serialization: get 1st env data, and convert tensors to numpy arrays
+            data_to_send = {}
+            if rgb_tensor is not None:
+                data_to_send['rgb'] = rgb_tensor[0, :, :, :3].cpu().numpy().astype(np.uint8)
+            if depth_tensor is not None:
+                data_to_send['depth'] = depth_tensor[0].cpu().numpy().astype(np.float32)
+            if pose_tuple is not None:
+                # Send as a tuple of numpy arrays (pos, quat_wxyz)
+                data_to_send['pose'] = (pose_tuple[0][0].cpu().numpy(), pose_tuple[1][0].cpu().numpy())
+
+            if data_to_send:
+                zmq_publisher.publish_data(data_to_send)
+            # [DEBUG]
+            camera_viewer.process_frame(data_to_send)
+
+            # Time delay for real-time evaluation
             elapsed_time = time.time() - start_time
             sleep_time = policy_step_dt - elapsed_time
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
-        actual_loop_time = time.time() - start_time
-        rtf = min(1.0, policy_step_dt / elapsed_time)
-        print(f"\rPolicy Step time: {actual_loop_time * 1000:.2f}ms, Real Time Factor: {rtf:.2f}", end='', flush=True)
+        # Print policy step time info periodically to avoid spamming
+        frame_count += 1
+        if frame_count % 50 == 1:
+            actual_loop_time = time.time() - start_time
+            rtf = min(1.0, policy_step_dt / elapsed_time)
+            print(f"[INFO] Policy Step time: {actual_loop_time * 1000:.2f}ms, Real Time Factor: {rtf:.2f}", flush=True)
 
+    # --- 6. Cleanup ---
     print("Simulation finished.")
+    zmq_publisher.close()
     simulation_app.close()
 
 

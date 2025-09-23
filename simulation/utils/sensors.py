@@ -8,10 +8,16 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab.sensors.camera.camera import Camera
 
+from isaaclab.utils.math import (
+    quat_mul,
+    quat_apply,
+    convert_camera_frame_orientation_convention
+)
+
 
 class IsaacLabSensorHandler:
     """
-    A handler to interface Isaac Lab sensors with an external agent.
+    A thread-safe handler to interface Isaac Lab sensors with an external agent.
 
     This class retrieves data (RGB, depth, pose, intrinsics) from a specified
     camera in the Isaac Lab environment and uses a threading event to signal
@@ -30,37 +36,57 @@ class IsaacLabSensorHandler:
         self.camera_name = camera_name
         self.camera: Camera = self.env.unwrapped.scene[self.camera_name]
         self.new_frame_event = threading.Event()
+        self.data_lock = threading.Lock()
 
     def update(self):
         """Called by the simulation loop to signal a new frame is ready."""
         self.new_frame_event.set()
 
     def get_rgb_frame(self) -> torch.Tensor | None:
-        """Returns the latest RGB frame."""
-        if "rgb" in self.camera.data.output:
-            return self.camera.data.output["rgb"]
+        """Returns a thread-safe clone of the latest RGB frame."""
+        with self.data_lock:
+            if "rgb" in self.camera.data.output:
+                return self.camera.data.output["rgb"].clone()
         return None
 
     def get_depth_frame(self) -> torch.Tensor | None:
-        """Returns the latest depth frame."""
-        if "distance_to_image_plane" in self.camera.data.output:
-            return self.camera.data.output["distance_to_image_plane"]
+        """Returns a thread-safe clone of the latest depth frame."""
+        with self.data_lock:
+            if "distance_to_image_plane" in self.camera.data.output:
+                return self.camera.data.output["distance_to_image_plane"].clone()
         return None
 
     def get_camera_pose(self) -> tuple[torch.Tensor, torch.Tensor] | None:
-        """
-        Returns the camera's world pose as (position, quaternion).
-            - pos_w: camera position in world frame (following ROS convention)
-            - quat_w_ros: camera quaternion in world frame (w, x, y, z, following ROS convention)
-        """
-        if self.camera.data.pos_w is not None and self.camera.data.quat_w_ros is not None:
-            return self.camera.data.pos_w, self.camera.data.quat_w_ros
+        """Computes and returns a clone of the camera's world pose as (position, quaternion)."""
+        with self.data_lock:
+            # Get the robot articulation object from the environment
+            asset = self.env.unwrapped.scene["robot"]
+
+            # Get the world pose of the robot's root body, which is guaranteed to be up-to-date
+            base_pos_w = asset.data.root_pos_w
+            base_quat_w = asset.data.root_quat_w
+
+            # Get the camera's static offset from its configuration
+            offset_pos = torch.tensor(self.camera.cfg.offset.pos, device=asset.device).unsqueeze(0)
+            offset_quat = torch.tensor(self.camera.cfg.offset.rot, device=asset.device).unsqueeze(0)
+
+            # Manually compute the camera's world pose
+            # 1. Rotate the position offset by the base orientation and add to the base position
+            cam_pos_w = base_pos_w + quat_apply(base_quat_w, offset_pos)
+            # 2. Multiply the quaternions to get the final orientation
+            cam_quat_w_world = quat_mul(base_quat_w, offset_quat)
+
+            # Convert the world-frame quaternion to ROS convention for compatibility
+            cam_quat_w_ros = convert_camera_frame_orientation_convention(cam_quat_w_world, origin="world", target="ros")
+
+            return cam_pos_w.clone(), cam_quat_w_ros.clone()
         return None
 
     def get_intrinsics(self) -> torch.Tensor | None:
-        """Returns the camera's intrinsic matrix."""
-        if self.camera.data.intrinsic_matrices is not None:
-            return self.camera.data.intrinsic_matrices
+        """Returns a thread-safe clone of the camera's intrinsic matrix."""
+        with self.data_lock:
+            if self.camera.data.intrinsic_matrices is not None:
+                return self.camera.data.intrinsic_matrices.clone()
         return None
 
     def __str__(self) -> str:

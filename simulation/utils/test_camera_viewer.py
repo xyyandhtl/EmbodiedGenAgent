@@ -1,59 +1,38 @@
-import time
-import threading
 import numpy as np
 
-from simulation.utils.sensors import IsaacLabSensorHandler
-
-
 class SimpleCameraViewer:
-    """A simple class to test the camera data stream from Isaac Lab."""
+    """A simple, single-threaded class to process and display camera data."""
 
     def __init__(self):
         self.frame_count = 0
-        self.sensor = None
-        self.event = None
 
-    def connect_to_simulation(self, handler: IsaacLabSensorHandler):
-        """Connects to the Isaac Lab sensor handler."""
-        self.sensor = handler
-        self.event = handler.new_frame_event
-        print("[SimpleCameraViewer] Successfully connected to sensor handler.")
+    def process_frame(self, sensor_data: dict):
+        """Receives sensor data, processes it, and prints information."""
+        self.frame_count += 1
 
-    def start_viewing_stream(self):
-        """The main loop to wait for and process data frames."""
-        while True:
-            if self.event is None:
-                time.sleep(0.1)
-                continue
+        # Print info every 30 frames to avoid spamming the console
+        if self.frame_count % 50 == 0:
+            rgb_np = sensor_data.get("rgb")
+            depth_np = sensor_data.get("depth")
+            pose_np = sensor_data.get("pose")
 
-            self.event.wait()  # Wait for a new frame signal
+            if rgb_np is None or depth_np is None or pose_np is None:
+                print("\n[CameraViewer] Incomplete sensor data received.")
+                return
 
-            # 1. Get data from the sensor handler
-            rgb = self.sensor.get_rgb_frame()
-            depth = self.sensor.get_depth_frame()
-            pose = self.sensor.get_camera_pose()
+            valid_depth = depth_np[np.isfinite(depth_np)]
+            depth_90p = np.percentile(valid_depth, 90) if len(valid_depth) > 0 else -1.0
 
-            # 2. Check if data is valid
-            if rgb is None or depth is None or pose is None:
-                self.event.clear()
-                continue
+            pos_w_np, quat_w_ros_np = pose_np
+            pos_np = pos_w_np.flatten()
+            quat_np = quat_w_ros_np.flatten()
 
-            self.frame_count += 1
-
-            # 3. Print info every 60 frames to avoid spamming the console
-            if self.frame_count % 60 == 0:
-                cam_pos, _ = pose
-                pos_np = cam_pos.cpu().numpy().flatten()
-                depth_np = depth.cpu().numpy()
-                valid_depth = depth_np[np.isfinite(depth_np)]
-                depth_90p = np.percentile(valid_depth, 90) if len(valid_depth) > 0 else -1.0
-
-                log_msg = (
-                    f"\r[Viewer] Frame: {self.frame_count:<5} | "
-                    f"RGB: {tuple(rgb.shape)} | "
-                    f"Depth 90%: {depth_90p:.2f}m | "
-                    f"Pose: [x={pos_np[0]:.2f}, y={pos_np[1]:.2f}, z={pos_np[2]:.2f}]"
-                )
-                print(log_msg, end="", flush=True)
-
-            self.event.clear()  # Clear the event to wait for the next signal
+            log_msg = (
+                f"\n[Camera] Frame: {self.frame_count:<5} | "
+                f"RGB: {tuple(rgb_np.shape)} | "
+                f"Depth: {tuple(depth_np.shape)} | "
+                f"Depth 90%: {depth_90p:.2f}m | "
+                f"Pos: [x={pos_np[0]:.3f}, y={pos_np[1]:.3f}, z={pos_np[2]:.3f}] | "
+                f"Quat: [w={quat_np[0]:.3f}, x={quat_np[1]:.3f}, y={quat_np[2]:.3f}, z={quat_np[3]:.3f}]"
+            )
+            print(log_msg, flush=True)
