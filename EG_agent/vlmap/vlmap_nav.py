@@ -5,7 +5,6 @@ import numpy as np
 import hydra
 from collections import deque
 from threading import Event
-from omegaconf import DictConfig
 from scipy.spatial.transform import Rotation as R
 
 from EG_agent.vlmap.dualmap.core import Dualmap
@@ -14,16 +13,14 @@ from EG_agent.vlmap.utils.time_utils import timing_context
 
 
 class VLMapNav:
-    def __init__(self, cfg: DictConfig = None):
+    def __init__(self):
         # If no cfg provided, load it here using Hydra (config_path matches previous main)
-        if cfg is None:
-            # from hydra.core.global_hydra import GlobalHydra
-            # if GlobalHydra.instance().is_initialized():
-            #     GlobalHydra.instance().clear()
-            hydra.initialize(version_base=None, config_path="./config/")
-            self.cfg = hydra.compose(config_name="runner_isaaclab")
-        else:
-            self.cfg = cfg
+
+        # from hydra.core.global_hydra import GlobalHydra
+        # if GlobalHydra.instance().is_initialized():
+        #     GlobalHydra.instance().clear()
+        hydra.initialize(version_base=None, config_path="./config/")
+        self.cfg = hydra.compose(config_name="runner_isaaclab")
 
         self.event = Event()
         self.session = None

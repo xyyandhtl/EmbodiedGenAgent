@@ -4,17 +4,17 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-import hydra
-from omegaconf import DictConfig
+from dynaconf import Dynaconf
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 from nav_msgs.msg import Odometry
-from omegaconf import OmegaConf
+
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo, CompressedImage
 
+from EG_agent.system.module_path import AGENT_VLMAP_PATH
 from EG_agent.vlmap.dualmap.core import Dualmap
 from EG_agent.vlmap.ros_runner.ros_publisher import ROSPublisher
 from EG_agent.vlmap.ros_runner.runner_ros_base import RunnerROSBase
@@ -28,19 +28,25 @@ class VLMapNavROS2(Node, RunnerROSBase):
     """
     def __init__(self):
         Node.__init__(self, 'runner_ros')
-        hydra.initialize(version_base=None, config_path="./config/")
-        self.cfg = hydra.compose(config_name="runner_ros")
+        cfg_files = [f"{AGENT_VLMAP_PATH}/config/base_config.yaml", 
+                     f"{AGENT_VLMAP_PATH}/config/system_config.yaml", 
+                     f"{AGENT_VLMAP_PATH}/config/support_config/mobility_config.yaml",
+                     f"{AGENT_VLMAP_PATH}/config/support_config/demo_config.yaml", 
+                     f"{AGENT_VLMAP_PATH}/config/runner_ros.yaml",]
+        self.cfg = Dynaconf(settings_files=cfg_files, 
+                            lowercase_read=True, 
+                            merge_enabled=False,)
         self.logger = logging.getLogger(__name__)
-        setup_logging(output_path=self.cfg.output_path, config_path=self.cfg.logging_config)
+        setup_logging(output_path=self.cfg.output_path, config_path=str(self.cfg.logging_config))
         self.logger.info("[Runner ROS2]")
-        self.logger.info(OmegaConf.to_yaml(self.cfg))
+        self.logger.info(self.cfg.as_dict())
 
         # self.cfg = cfg
         self.dualmap = Dualmap(self.cfg)
         RunnerROSBase.__init__(self, self.cfg, self.dualmap)
 
         self.bridge = CvBridge()
-        self.dataset_cfg = OmegaConf.load(self.cfg.ros_stream_config_path)
+        self.dataset_cfg = Dynaconf(settings_files=self.cfg.ros_stream_config_path)
         self.intrinsics = self.load_intrinsics(self.dataset_cfg)
         self.extrinsics = self.load_extrinsics(self.dataset_cfg)
         # self.orig_height = self.cfg.camera_params['image_height']
