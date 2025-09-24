@@ -47,6 +47,7 @@ from simulation.utils import (
     LabGo2WEnvHistoryWrapper,
     IsaacLabSensorHandler,
     ZMQDataPublisher,
+    ZMQDataSubscriber,
     SimpleCameraViewer
 )
 
@@ -58,19 +59,19 @@ def main():
     # update configs
     env_cfg.scene.terrain = ASSET_DICT[CFG.terrain]
 
-    if CFG.controller == "keyboard":
-        # env_cfg.commands.base_velocity.debug_vis = False
-        controller = Se2Keyboard(
-            Se2KeyboardCfg(
-                v_x_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_x[1] * 2,
-                v_y_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_y[1] * 2,
-                omega_z_sensitivity=env_cfg.commands.base_velocity.ranges.ang_vel_z[1],
-            )
+    # if CFG.controller == "keyboard":
+    # env_cfg.commands.base_velocity.debug_vis = False
+    controller = Se2Keyboard(
+        Se2KeyboardCfg(
+            v_x_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_x[1] * 2,
+            v_y_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_y[1] * 2,
+            omega_z_sensitivity=env_cfg.commands.base_velocity.ranges.ang_vel_z[1],
         )
-        print(controller)
-        env_cfg.observations.policy.velocity_commands = ObsTerm(
-            func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32).unsqueeze(0).to(env.device)
-        )
+    )
+    print(controller)
+    env_cfg.observations.policy.velocity_commands = ObsTerm(
+        func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32).unsqueeze(0).to(env.device)
+    )
 
     # --- 2. Create Environment ---
     # The environment wrapper for Isaac Lab
@@ -99,7 +100,14 @@ def main():
     sensor_handler = IsaacLabSensorHandler(env, camera_name="rgbd_camera")
     print(f"[INFO] SensorHandler: {sensor_handler}")
 
+    # 信息发布器 的封装
     zmq_publisher = ZMQDataPublisher()
+    # 底层指令接收器 的封装 ---
+    zmq_subscriber = ZMQDataSubscriber("tcp://localhost:5556")
+
+    latest_cmd_vel = (0.0, 0.0)  # tuple (lin_x, ang_z)
+    marks = []
+    report_file = os.path.join(SIMULATION_DATA_DIR, "ros_command_reports.txt")
 
     # [DEBUG] Use a simple class to test camera data
     camera_viewer = SimpleCameraViewer()
@@ -112,7 +120,7 @@ def main():
     file_bytes = read_file(policy_ckpt_path)
     policy = torch.jit.load(file_bytes).to(CFG.policy_device).eval()
 
-    # --- 5. Run Simulation Loop ---
+    # --- 5. Run Simulation Loop (reordered) ---
     policy_step_dt = float(env_cfg.sim.dt * env_cfg.decimation)
     obs, _ = env.reset()
     print(f"[INFO] init-observation shape: {obs.shape}")
@@ -125,43 +133,55 @@ def main():
         start_time = time.time()
 
         with torch.inference_mode():
-            # Controller to generate velocity command
-            if not CFG.controller == "keyboard":
-                lin_vel_x, ang_vel_z = mdp.compute_velocity_with_goalPoint(env, goal_position)
-                velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
-                # Update observation with the new velocity command
-                obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
-
-            # Agent stepping
-            actions = policy(obs)
-
-            # Env stepping
-            obs, _, _, _ = env.step(actions)
-
-            camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
-
-            # --- Get sensor data and publish via ZMQ ---
+            # 1) 先获取观测（sensor frames + pose)
             rgb_tensor = sensor_handler.get_rgb_frame()
             depth_tensor = sensor_handler.get_depth_frame()
             pose_tuple = sensor_handler.get_camera_pose()
 
-            # Prepare data for serialization: get 1st env data, and convert tensors to numpy arrays
+            # 2) 再处理接收 topic 并响应：poll + 更新状态/执行 enum action
+            zmq_subscriber.poll()
+            # update latest cmd_vel if provided
+            if zmq_subscriber.latest_cmd_vel is not None:
+                latest_cmd_vel = zmq_subscriber.latest_cmd_vel
+                print(f"[CMD] Received cmd_vel -> lin_x={latest_cmd_vel[0]}, ang_z={latest_cmd_vel[1]}")
+            # update nav goal if provided
+            if zmq_subscriber.nav_pose is not None:
+                pos_np, quat_np = zmq_subscriber.nav_pose
+                goal_position = torch.tensor([float(pos_np[0]), float(pos_np[1]), float(pos_np[2])], device=CFG.policy_device)
+                print(f"[CMD] Received nav_pose -> new goal_position={goal_position.cpu().numpy()}")
+            # handle enum command immediately using available frames/pose
+            if zmq_subscriber.enum_cmd is not None:
+                zmq_subscriber.handle_enum_action(zmq_subscriber.enum_cmd, rgb_tensor, depth_tensor, pose_tuple, SIMULATION_DATA_DIR, marks, report_file)
+
+            # 3) 最后运行 policy 并 step（使用可能被覆盖的 latest_cmd_vel / goal_position）
+            if CFG.controller == "goal":
+                lin_vel_x, ang_vel_z = mdp.compute_velocity_with_goalPoint(env, goal_position)   
+                velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
+                # Update observation with the new velocity command
+                obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
+            elif CFG.controller == "cmd_vel":
+                lin_vel_x, ang_vel_z = latest_cmd_vel[0], latest_cmd_vel[1]
+                velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
+                # Update observation with the new velocity command
+                obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
+  
+            actions = policy(obs)
+            obs, _, _, _ = env.step(actions)
+            camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
+
+            # --- 发布 sensor 数据（保持原逻辑） ---
             data_to_send = {}
             if rgb_tensor is not None:
                 data_to_send['rgb'] = rgb_tensor[0, :, :, :3].cpu().numpy().astype(np.uint8)
             if depth_tensor is not None:
-                # data_to_send['depth'] = depth_tensor[0].cpu().numpy().astype(np.float32)
-                # Convert depth to uint16. If original depth is in meters and millimeter precision is needed:
                 depth_data = (depth_tensor[0] * 1000).cpu().numpy()
-                depth_data[depth_data > 65535] = 0  # 超过上限的值置为0
+                depth_data[depth_data > 65535] = 0
                 data_to_send['depth'] = depth_data.astype(np.uint16)
             if pose_tuple is not None:
-                # Send as a tuple of numpy arrays (pos, quat_wxyz)
                 data_to_send['pose'] = (pose_tuple[0][0].cpu().numpy(), pose_tuple[1][0].cpu().numpy())
 
             if data_to_send:
                 zmq_publisher.publish_data(data_to_send)
-            # [DEBUG]
             camera_viewer.process_frame(data_to_send)
 
             # Time delay for real-time evaluation
@@ -180,6 +200,7 @@ def main():
     # --- 6. Cleanup ---
     print("Simulation finished.")
     zmq_publisher.close()
+    zmq_subscriber.close()
     simulation_app.close()
 
 

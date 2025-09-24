@@ -6,8 +6,9 @@ import zmq
 import pickle
 
 from sensor_msgs.msg import Image, CameraInfo
-from geometry_msgs.msg import PoseStamped, TransformStamped
+from geometry_msgs.msg import PoseStamped, TransformStamped, Twist
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Int32
 from cv_bridge import CvBridge
 from tf2_ros import TransformBroadcaster
 
@@ -15,15 +16,20 @@ class ROSBridge(Node):
     """
     Receives sensor data via ZMQ and publishes it to ROS2 topics.
     """
-    def __init__(self, camera_params, zmq_port=5555):
+    def __init__(self, camera_params, zmq_port=5555, command_port=5556):
         super().__init__('ros_bridge_node')
         
-        # --- ZMQ Subscriber Setup ---
+        # --- ZMQ Subscriber Setup (for incoming sensor data) ---
         context = zmq.Context()
         self.socket = context.socket(zmq.SUB)
         self.socket.connect(f"tcp://localhost:{zmq_port}")
         self.socket.setsockopt(zmq.SUBSCRIBE, b'')  # Subscribe to all messages
         self.get_logger().info(f"Connecting to ZMQ publisher on port {zmq_port}...")
+
+        # --- ZMQ Publisher Setup (to send commands to simulation) ---
+        self.cmd_pub_socket = context.socket(zmq.PUB)
+        self.cmd_pub_socket.bind(f"tcp://*:{command_port}")
+        self.get_logger().info(f"Command PUB bound on port {command_port} (publishes ROS -> Simulation commands)")
 
         # --- ROS2 Publisher and Broadcaster Setup ---
         self.bridge = CvBridge()
@@ -37,6 +43,11 @@ class ROSBridge(Node):
         # --- Prepare CameraInfo message (sent once) ---
         self.camera_info_msg = self._prepare_camera_info(camera_params)
         
+        # --- ROS2 Subscribers for commands ---
+        self.create_subscription(Twist, "/cmd_vel", self._cmd_vel_callback, 10)
+        self.create_subscription(PoseStamped, "/nav_pose", self._nav_pose_callback, 10)
+        self.create_subscription(Int32, "/enum_command", self._enum_command_callback, 10)
+
         self.get_logger().info("ROS2 Bridge initialized. Waiting for data...")
 
     def _prepare_camera_info(self, params):
@@ -74,19 +85,6 @@ class ROSBridge(Node):
         if pose_tuple is not None:
             pos_np, quat_np_wxyz = pose_tuple
             quat_np_xyzw = np.roll(quat_np_wxyz, -1)
-
-            # Publish PoseStamped
-            # pose_msg = PoseStamped()
-            # pose_msg.header.stamp = ros_time
-            # pose_msg.header.frame_id = "odom"
-            # pose_msg.pose.position.x = float(pos_np[0])
-            # pose_msg.pose.position.y = float(pos_np[1])
-            # pose_msg.pose.position.z = float(pos_np[2])
-            # pose_msg.pose.orientation.x = float(quat_np_xyzw[0])
-            # pose_msg.pose.orientation.y = float(quat_np_xyzw[1])
-            # pose_msg.pose.orientation.z = float(quat_np_xyzw[2])
-            # pose_msg.pose.orientation.w = float(quat_np_xyzw[3])
-            # self.pose_pub.publish(pose_msg)
 
             # Publish Odometry
             odom_msg = Odometry()
@@ -136,6 +134,35 @@ class ROSBridge(Node):
         self.camera_info_msg.header.stamp = ros_time
         self.camera_info_msg.header.frame_id = "camera_link"
         self.camera_info_pub.publish(self.camera_info_msg)
+
+    # --- New callbacks to forward ROS messages into ZMQ for simulation ---
+    def _cmd_vel_callback(self, msg: Twist):
+        try:
+            data = {"cmd_vel": np.array([msg.linear.x, msg.linear.y, msg.linear.z, msg.angular.x, msg.angular.y, msg.angular.z], dtype=np.float32)}
+            self.cmd_pub_socket.send(pickle.dumps(data))
+            self.get_logger().debug(f"Forwarded cmd_vel via ZMQ: {data['cmd_vel']}")
+        except Exception as e:
+            self.get_logger().error(f"Error forwarding cmd_vel: {e}")
+
+    def _nav_pose_callback(self, msg: PoseStamped):
+        try:
+            pos = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z], dtype=np.float32)
+            quat_xyzw = np.array([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w], dtype=np.float32)
+            quat_wxyz = np.roll(quat_xyzw, 1)
+            data = {"nav_pose": (pos, quat_wxyz)}
+            self.cmd_pub_socket.send(pickle.dumps(data))
+            self.get_logger().debug(f"Forwarded nav_pose via ZMQ: pos={pos}, quat={quat_wxyz}")
+        except Exception as e:
+            self.get_logger().error(f"Error forwarding nav_pose: {e}")
+
+    def _enum_command_callback(self, msg: Int32):
+        try:
+            cmd = int(msg.data)
+            data = {"enum": cmd}
+            self.cmd_pub_socket.send(pickle.dumps(data))
+            self.get_logger().info(f"Forwarded enum command via ZMQ: {cmd}")
+        except Exception as e:
+            self.get_logger().error(f"Error forwarding enum command: {e}")
 
 def main():
     rclpy.init()
