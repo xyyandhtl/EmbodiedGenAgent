@@ -6,24 +6,20 @@
 <TARGETS>={TARGETS}
 
 [Examples]
-指令: "请前往控制室。"
+- 指令: "请前往控制室。"
 Goal: RobotNear_ControlRoom
-
-指令: "请在仓库标记异常。"
+- 指令: "请在仓库标记异常。"
 Goal: IsMarked_Warehouse
-
-指令: "拍摄并报告楼梯口的烟雾源。"
+- 指令: "拍摄并报告楼梯口的烟雾源。"
 Goal: IsCaptured_Gas & IsReported_Gas
-
-指令: "请在出口处救援受困人员。"
+- 指令: "请在出口处救援受困人员。"
 Goal: RobotNear_Doorway & IsReported_Victim
-
-指令: "请报告房间A的着火情况。"
+- 指令: "请报告房间A的着火情况。"
 Goal: RobotNear_Room & IsCaptured_Fire & IsReported_Fire
 
-[提示]
+[Note]
 - 用户的语言指令为中文，生成的 Goal 必须为英文格式。
-- [Condition] 列出所有表示环境状态的谓词及其参数。
+- [Condition] 列出所有表示环境状态的谓词及其参数宾语。
 - [Object] 列出所有可用的地点和目标对象。
 - [Examples] 展示中文指令到英文 Goal 的映射。
 - 请根据指令准确生成可执行的英文逻辑 Goal，不要添加多余解释。
