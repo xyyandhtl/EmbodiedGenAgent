@@ -9,18 +9,12 @@ from geometry_msgs.msg import Twist, PoseStamped
 from std_msgs.msg import Int32
 import numpy as _np
 
-class IsaacsimEnv(BaseEnv):
+class RealEnv(BaseEnv):
     agent_num = 1
-
-    # launch simulator
-    # simulator_path = f'{ROOT_PATH}/../simulators/virtualhome/windows/VirtualHome.exe'
-    # simulator_path = f'{ROOT_PATH}/../simulators/virtualhome/linux_exec/linux_exec.v2.3.0.x86_64'
 
     behavior_lib_path = f"{AGENT_ENV_PATH}/embodied"
 
     def __init__(self):
-        if not self.headless:
-            self.launch_simulator()
         super().__init__()
         self.action_callbacks_dict = {}
 
@@ -31,22 +25,11 @@ class IsaacsimEnv(BaseEnv):
         self.nav_pose_pub = self.ros_node.create_publisher(PoseStamped, "/nav_pose", 10)
         self.enum_pub = self.ros_node.create_publisher(Int32, "/enum_command", 10)
 
-    def register_action_callbacks(self, type: str, fn: Callable):
-        self.action_callbacks_dict[type] = fn
-
     def reset(self):
         raise NotImplementedError
 
     def task_finished(self):
         raise NotImplementedError
-
-    def launch_simulator(self):
-        # todo: maybe set ros2 topic names or register callbacks
-        pass
-
-    def load_scenario(self,scenario_id):
-        # todo: maybe do nothing
-        pass
 
     def run_action(self, action_type: str, action: tuple, verbose=False):
         """

@@ -1,4 +1,5 @@
 import re
+import json
 
 from EG_agent.reasoning.llms.internvl3 import VLMInference
 from EG_agent.reasoning.tools.data_process_check import format_check, goal_transfer_ls_set
@@ -9,19 +10,33 @@ class LogicGoalGenerator:
     def __init__(
         self,
         prompt_folder='zh',
-        prompt_file1="scene.txt",
-        prompt_file2="logic_expression.txt",
+        prompt_scene="scene.txt",
+        prompt_goal="logic_expression.txt",
         test_data_set_file="data100.txt",
     ):
         # 加载数据集与 system prompt（仅注入一次，由 VLMInference 管理）
         with open(f'{AGENT_PROMPT_PATH}/{prompt_folder}/{test_data_set_file}', 'r', encoding="utf-8") as f:
             self.data_set = f.read()
-        with open(f'{AGENT_PROMPT_PATH}/{prompt_folder}/{prompt_file1}', 'r', encoding="utf-8") as f:
-            self.prompt1 = f.read()
-        with open(f'{AGENT_PROMPT_PATH}/{prompt_folder}/{prompt_file2}', 'r', encoding="utf-8") as f:
-            self.prompt2 = f.read()
+        # read prompt_scene as a template and format with module-level object sets
+        with open(f'{AGENT_PROMPT_PATH}/{prompt_folder}/{prompt_scene}', 'r', encoding="utf-8") as f:
+            prompt_scene_template = f.read()
+        # import object sets and prepare string representations for formatting
+        from EG_agent.prompts import object_sets
+        nav_list = sorted(list(object_sets.NAV_POINTS))
+        targ_list = sorted(list(object_sets.TARGETS))
+        nav_str = json.dumps(nav_list, ensure_ascii=False)
+        targ_str = json.dumps(targ_list, ensure_ascii=False)
+        all_cond_str = object_sets.AllCondition
+        # format template (placeholders: {NAV_POINTS}, {TARGETS}, {AllCondition})
+        self.prompt_scene = prompt_scene_template.format(
+            NAV_POINTS=nav_str,
+            TARGETS=targ_str,
+            AllCondition=all_cond_str
+        )
+        with open(f'{AGENT_PROMPT_PATH}/{prompt_folder}/{prompt_goal}', 'r', encoding="utf-8") as f:
+            self.prompt_goal = f.read()
 
-        self.prompt = self.prompt1 + self.prompt2
+        self.prompt = self.prompt_scene + self.prompt_goal
         # 以空行分段
         self.sections = re.split(r'\n\s*\n', self.data_set)
 
@@ -195,7 +210,8 @@ class LogicGoalGenerator:
             ) if last_error_list is not None else ""
 
             prompt_text = f"{question}\n{feedback}" if feedback else question
-            answer = self.llm.infer(prompt_text).replace("Goal:", "").strip()
+            # 仅在第一次请求时记录记忆，供后续对话理解总体意图，后续重试不记录
+            answer = self.llm.infer(prompt_text, record_memory=attempt==1).replace("Goal:", "").strip()
             print(f"[Info] Attempt {attempt} Answer: {answer}")
             latest_answer = answer
 

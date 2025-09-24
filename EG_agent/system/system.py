@@ -2,8 +2,6 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from enum import Enum
-from typing import Union
 import numpy as np
 
 from EG_agent.prompts.object_sets import AllObject
@@ -21,8 +19,8 @@ class EGAgentSystem:
 
         # 构建 '行为树规划器'
         self.bt_generator = BTGenerator(env_name="embodied", 
-                                   cur_cond_set=set(), 
-                                   key_objects=list(AllObject))
+                                        cur_cond_set=set(), 
+                                        key_objects=list(AllObject))
         
         # 行为树执行的 'Agent载体’，通过bint_bt动态绑定行为树，被绑定到 '部署环境执行器' 和环境交互
         self.bt_agent = Agent()
@@ -31,7 +29,7 @@ class EGAgentSystem:
         self.env = IsaacsimEnv()
         self.env.place_agent(self.bt_agent)
 
-        # 载入 'VLM地图导航模块'
+        # 初始化 'VLM地图导航模块'
         self.vlmap_backend = VLMapNavROS2()
 
         # todo
