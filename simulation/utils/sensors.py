@@ -35,59 +35,65 @@ class IsaacLabSensorHandler:
         self.env = env
         self.camera_name = camera_name
         self.camera: Camera = self.env.unwrapped.scene[self.camera_name]
-        self.new_frame_event = threading.Event()
+        # self.new_frame_event = threading.Event()  # remove event usage, kept for backward compatibility
         self.data_lock = threading.Lock()
 
-    def update(self):
-        """Called by the simulation loop to signal a new frame is ready."""
-        self.new_frame_event.set()
+        # Internal storage for an atomic snapshot of a frame (protected by data_lock)
+        self._rgb: torch.Tensor | None = None
+        self._depth: torch.Tensor | None = None
+        self._pose: tuple[torch.Tensor, torch.Tensor] | None = None
+        self._intrinsics: torch.Tensor | None = None
 
-    def get_rgb_frame(self) -> torch.Tensor | None:
-        """Returns a thread-safe clone of the latest RGB frame."""
+    def capture_frame(self):
+        """
+        Atomically snapshot camera outputs and pose and return them immediately as
+        (rgb, depth, pose, intrinsics). Each returned tensor is a clone and safe
+        to use outside the handler.
+        """
         with self.data_lock:
-            if "rgb" in self.camera.data.output:
-                return self.camera.data.output["rgb"].clone()
-        return None
+            # Snapshot camera outputs if available
+            output = self.camera.data.output
+            rgb = output["rgb"].clone() if "rgb" in output else None
+            depth = output["distance_to_image_plane"].clone() if "distance_to_image_plane" in output else None
+            # intrinsics = self.camera.data.intrinsic_matrices.clone() if self.camera.data.intrinsic_matrices is not None else None
 
-    def get_depth_frame(self) -> torch.Tensor | None:
-        """Returns a thread-safe clone of the latest depth frame."""
-        with self.data_lock:
-            if "distance_to_image_plane" in self.camera.data.output:
-                return self.camera.data.output["distance_to_image_plane"].clone()
-        return None
-
-    def get_camera_pose(self) -> tuple[torch.Tensor, torch.Tensor] | None:
-        """Computes and returns a clone of the camera's world pose as (position, quaternion)."""
-        with self.data_lock:
-            # Get the robot articulation object from the environment
+            # Snapshot camera pose based on the robot base, using same device as the asset
             asset = self.env.unwrapped.scene["robot"]
-
-            # Get the world pose of the robot's root body, which is guaranteed to be up-to-date
             base_pos_w = asset.data.root_pos_w
             base_quat_w = asset.data.root_quat_w
 
-            # Get the camera's static offset from its configuration
             offset_pos = torch.tensor(self.camera.cfg.offset.pos, device=asset.device).unsqueeze(0)
             offset_quat = torch.tensor(self.camera.cfg.offset.rot, device=asset.device).unsqueeze(0)
 
-            # Manually compute the camera's world pose
-            # 1. Rotate the position offset by the base orientation and add to the base position
             cam_pos_w = base_pos_w + quat_apply(base_quat_w, offset_pos)
-            # 2. Multiply the quaternions to get the final orientation
             cam_quat_w_world = quat_mul(base_quat_w, offset_quat)
-
-            # Convert the world-frame quaternion to ROS convention for compatibility
             cam_quat_w_ros = convert_camera_frame_orientation_convention(cam_quat_w_world, origin="world", target="ros")
 
-            return cam_pos_w.clone(), cam_quat_w_ros.clone()
+            pose = (cam_pos_w.clone(), cam_quat_w_ros.clone())
+
+        return rgb, depth, pose
+
+    def get_rgb_frame(self) -> torch.Tensor | None:
+        """Returns the latest snapshot RGB frame (non-blocking)."""
+        with self.data_lock:
+            return self._rgb.clone() if self._rgb is not None else None
+
+    def get_depth_frame(self) -> torch.Tensor | None:
+        """Returns the latest snapshot depth frame (non-blocking)."""
+        with self.data_lock:
+            return self._depth.clone() if self._depth is not None else None
+
+    def get_camera_pose(self) -> tuple[torch.Tensor, torch.Tensor] | None:
+        """Returns the latest snapshot camera pose (non-blocking)."""
+        with self.data_lock:
+            if self._pose is not None:
+                return self._pose[0].clone(), self._pose[1].clone()
         return None
 
     def get_intrinsics(self) -> torch.Tensor | None:
-        """Returns a thread-safe clone of the camera's intrinsic matrix."""
+        """Returns the latest snapshot intrinsics (non-blocking)."""
         with self.data_lock:
-            if self.camera.data.intrinsic_matrices is not None:
-                return self.camera.data.intrinsic_matrices.clone()
-        return None
+            return self._intrinsics.clone() if self._intrinsics is not None else None
 
     def __str__(self) -> str:
         """Provides a descriptive string of the current sensor data."""

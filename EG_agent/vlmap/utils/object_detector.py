@@ -15,7 +15,7 @@ import open3d as o3d
 from scipy.spatial.transform import Rotation as R, Slerp
 from ultralytics import YOLO, SAM, FastSAM
 from PIL import Image
-from omegaconf import DictConfig
+from dynaconf import Dynaconf
 from sklearn.metrics.pairwise import cosine_similarity
 
 from EG_agent.vlmap.utils.types import DataInput, ObjectClasses, LocalObservation
@@ -75,13 +75,13 @@ class Detector:
 
     def __init__(
         self,
-        cfg: DictConfig,
+        cfg: Dynaconf,
     ) -> None:
         """
         Initialize the Detector class.
 
         Parameters:
-        cfg (DictConfig): A configuration object containing paths, parameters, and settings for the detector.
+        cfg (Dynaconf): A configuration object containing paths, parameters, and settings for the detector.
 
         Returns:
         None

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial import Voronoi, KDTree
 from scipy.ndimage import binary_erosion
 from scipy.spatial import KDTree
-from omegaconf import DictConfig
+from dynaconf import Dynaconf
 
 class LayoutMap:
     def __init__(self, cfg, resolution=0.1, percentile=90, min_area=5, kernel_size=3):
@@ -423,7 +423,7 @@ class RRT:
         plt.show()
 
 class NavigationGraph:
-    def __init__(self, cfg: DictConfig, pcd: o3d.geometry.PointCloud, cell_size: int):
+    def __init__(self, cfg: Dynaconf, pcd: o3d.geometry.PointCloud, cell_size: int):
         """Initialization of the NavigationGraph class.
 
         Args:

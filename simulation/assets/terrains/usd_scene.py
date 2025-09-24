@@ -57,9 +57,8 @@ ASSET_DICT = {
         prim_path=f"/World/Terrain",
         spawn=UsdFileCfg(
             visible=True,
-            usd_path=f"{SIMULATION_DATA_DIR}/terrains/IsaacWarehouse/IsaacWarehouse.usd",
-            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/Conference/Roland.usd",
-            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/Ragnarok/Koenigsegg_Ragnarok.usd",
+            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/IsaacWarehouse/IsaacWarehouse.usd",
+            usd_path=f"{SIMULATION_DATA_DIR}/terrains/lobby/World_Lobby.usd",
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, -0.5)),
     ),

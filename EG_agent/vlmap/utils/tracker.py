@@ -7,7 +7,7 @@ import faiss
 import torch
 import torch.nn.functional as F
 import open3d as o3d
-from omegaconf import DictConfig
+from dynaconf import Dynaconf
 from scipy.sparse.csgraph import connected_components
 
 from EG_agent.vlmap.utils.types import Observation
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class Tracker:
     def __init__(
         self,
-        cfg: DictConfig,
+        cfg: Dynaconf,
     ) -> None:    
         # Construct different tracker types based on cfg.tracker classification
         # config

@@ -12,7 +12,7 @@ import logging
 # Third-party imports
 import numpy as np
 import open3d as o3d
-from omegaconf import DictConfig
+from dynaconf import Dynaconf
 
 # Local module imports
 from EG_agent.vlmap.utils.types import Observation
@@ -91,7 +91,7 @@ class BaseObject:
         self.save_path = self._initialize_save_path()
     
     @classmethod
-    def initialize_config(cls, config: DictConfig):
+    def initialize_config(cls, config: Dynaconf):
         cls._cfg = config
 
         classes_path = config.yolo.classes_path

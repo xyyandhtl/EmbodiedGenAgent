@@ -7,7 +7,7 @@ from typing import List
 
 import numpy as np
 import networkx as nx
-from omegaconf import DictConfig
+from dynaconf import Dynaconf
 
 from EG_agent.vlmap.utils.types import Observation, GlobalObservation, GoalMode
 from EG_agent.vlmap.utils.object import LocalObject, LocalObjStatus
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class LocalMapManager(BaseMapManager):
     def __init__(
         self,
-        cfg: DictConfig,
+        cfg: Dynaconf,
         ) -> None:
         # Construct function
         super().__init__(cfg)
