@@ -29,11 +29,16 @@ def add_collision_and_material(prim, static_friction=0.7, dynamic_friction=0.5, 
 
 
 ASSET_DICT = {
+    # some assets links: 
+    #   https://github.com/usd-wg/assets
+    #   https://developer.nvidia.com/usd?utm_source=chatgpt.com
+    #   https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html
     "carla": AssetBaseCfg(
         prim_path=f"/World/Terrain",
         spawn=UsdFileCfg(
             visible=True,
             usd_path=f"{SIMULATION_DATA_DIR}/terrains/carla/carla.usd",
+            # https://drive.google.com/drive/folders/1SiGH3LGDxikIS0cmn6WFqujwO8liKcSE?usp=drive_link
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(-200.0, -75.0, 0.0)),
     ),
@@ -42,6 +47,7 @@ ASSET_DICT = {
         spawn=UsdFileCfg(
             visible=True,
             usd_path=f"{SIMULATION_DATA_DIR}/terrains/warehouse/IsaacWarehouse.usd",
+            # https://d4i3qtqj3r0z5.cloudfront.net/Warehouse_NVD%4010013.zip
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
     ),
@@ -50,16 +56,25 @@ ASSET_DICT = {
         spawn=UsdFileCfg(
             visible=True,
             usd_path=f"{SIMULATION_DATA_DIR}/terrains/lobby/World_Lobby.usd",
+            # https://developer.nvidia.com/downloads/usd/siggraph/dataset
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(-20, -18, -1.0)),
-    ),  # 
+    ),
+    "davinci": AssetBaseCfg(
+        prim_path=f"/World/Terrain",
+        spawn=UsdFileCfg(
+            visible=True,
+            usd_path=f"{SIMULATION_DATA_DIR}/terrains/davinci/xx.usd",
+            # https://developer.nvidia.com/downloads/usd/dataset/davinci_workshop/distributable_2023_davinci_v2.zip
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(-20, -18, -1.0)),
+    ),
     "test": AssetBaseCfg(
         prim_path=f"/World/Terrain",
         spawn=UsdFileCfg(
             visible=True,
-            usd_path=f"{SIMULATION_DATA_DIR}/terrains/IsaacWarehouse/IsaacWarehouse.usd",
-            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/Conference/Roland.usd",
-            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/Ragnarok/Koenigsegg_Ragnarok.usd",
+            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/IsaacWarehouse/IsaacWarehouse.usd",
+            usd_path=f"{SIMULATION_DATA_DIR}/terrains/island/island.usda",
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, -0.5)),
     ),

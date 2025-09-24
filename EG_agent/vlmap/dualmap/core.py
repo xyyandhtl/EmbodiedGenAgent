@@ -10,7 +10,6 @@ import psutil
 import yaml
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-# from omegaconf import OmegaConf, DictConfig
 from dynaconf import Dynaconf, LazySettings
 
 from EG_agent.vlmap.utils.types import DataInput, GoalMode

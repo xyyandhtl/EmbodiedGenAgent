@@ -12,7 +12,7 @@ import torch
 import yaml
 from kornia.geometry.linalg import compose_transformations, inverse_transformation
 from natsort import natsorted
-from omegaconf import DictConfig, OmegaConf
+from dynaconf import Dynaconf, OmegaConf
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)
@@ -750,7 +750,7 @@ def get_dataset(dataconfig, basedir, scene_id, **kwargs):
         raise ValueError(f"Unknown dataset name {config_dict['dataset_name']}")
 
 def dataset_initialization(
-    cfg: DictConfig
+    cfg: Dynaconf
 ) -> torch.utils.data.Dataset:
     
     cfg.dataset_path = Path(cfg.dataset_path)

@@ -8,8 +8,9 @@ import numpy as np
 
 from EG_agent.prompts.object_sets import AllObject
 from EG_agent.reasoning.logic_goal import LogicGoalGenerator
-from EG_agent.planning.bt_planner import BTGenerator, BTAgent
+from EG_agent.planning.bt_planner import BTGenerator
 from EG_agent.vlmap.vlmap_nav_ros2 import VLMapNavROS2
+from EG_agent.system.agent.agent import Agent
 from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
 
 
@@ -18,17 +19,22 @@ class EGAgentSystem:
         # 初始化 '逻辑Goal生成器'
         self.goal_generator = LogicGoalGenerator()
 
-        # 构建 'BT规划器' 及其 'Agent载体'（Agent实现和环境交互）
-        bt_generator = BTGenerator(env_name="embodied", 
+        # 构建 '行为树规划器'
+        self.bt_generator = BTGenerator(env_name="embodied", 
                                    cur_cond_set=set(), 
                                    key_objects=list(AllObject))
-        self.bt_agent = BTAgent(bt_generator)
+        
+        # 行为树执行的 'Agent载体’，通过bint_bt动态绑定行为树，被绑定到 '部署环境执行器' 和环境交互
+        self.bt_agent = Agent()
+
+        # '部署环境执行器'，定义如何和部署环境交互，和 'Agent载体’ 绑定
+        self.env = IsaacsimEnv()
+        self.env.place_agent(self.bt_agent)
 
         # 载入 'VLM地图导航模块'
         self.vlmap_backend = VLMapNavROS2()
 
-        # 由外部设置具体环境实例
-        self.env = IsaacsimEnv()
+        # todo
 
     def set_env(self, env):
         self.env = env
@@ -53,10 +59,14 @@ class EGAgentSystem:
                          intrinsics: np.ndarray, 
                          image: np.ndarray, 
                          depth: np.ndarray):
+        # todo: camrera observation -> vlmap -> update condition 
+        #                                  └ -> low-level action generation
         pass
 
     def feed_instruction(self, text: str):
+        # todo: goal_generator->bt_generator->bt_agent.bind_bt
         pass
+
 
 if __name__ == "__main__":
     agent_system = EGAgentSystem()

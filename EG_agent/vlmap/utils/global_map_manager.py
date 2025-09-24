@@ -8,7 +8,7 @@ from typing import List
 
 import numpy as np
 import open3d as o3d
-from omegaconf import DictConfig
+from dynaconf import Dynaconf
 
 from EG_agent.vlmap.utils.object import GlobalObject
 from EG_agent.vlmap.utils.types import Observation, GoalMode
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class GlobalMapManager(BaseMapManager):
     def __init__(
         self,
-        cfg: DictConfig,
+        cfg: Dynaconf,
     ) -> None:
         super().__init__(cfg)
 

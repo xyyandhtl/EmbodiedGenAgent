@@ -3,11 +3,9 @@ import os
 import sys
 import time
 import numpy as np
-
 from pathlib import Path
 from omegaconf import OmegaConf
 
-# Add the project root to the python path to allow for absolute imports
 PROJECT_PATH = str(Path(__file__).resolve().parent.parent)
 sys.path.append(PROJECT_PATH)
 
@@ -133,10 +131,8 @@ def main():
         start_time = time.time()
 
         with torch.inference_mode():
-            # 1) 先获取观测（sensor frames + pose)
-            rgb_tensor = sensor_handler.get_rgb_frame()
-            depth_tensor = sensor_handler.get_depth_frame()
-            pose_tuple = sensor_handler.get_camera_pose()
+            # 1) Capture a fresh snapshot and use it immediately to minimize desync.
+            rgb_tensor, depth_tensor, pose_tuple = sensor_handler.capture_frame()
 
             # 2) 再处理接收 topic 并响应：poll + 更新状态/执行 enum action
             zmq_subscriber.poll()
@@ -167,7 +163,7 @@ def main():
   
             actions = policy(obs)
             obs, _, _, _ = env.step(actions)
-            camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
+            # camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
 
             # --- 发布 sensor 数据（保持原逻辑） ---
             data_to_send = {}
@@ -191,11 +187,11 @@ def main():
                 time.sleep(sleep_time)
 
         # Print policy step time info periodically to avoid spamming
-        frame_count += 1
-        if frame_count % 50 == 1:
-            actual_loop_time = time.time() - start_time
-            rtf = min(1.0, policy_step_dt / elapsed_time)
-            print(f"[INFO] Policy Step time: {actual_loop_time * 1000:.2f}ms, Real Time Factor: {rtf:.2f}", flush=True)
+        # frame_count += 1
+        # if frame_count % 50 == 1:
+        #     actual_loop_time = time.time() - start_time
+        #     rtf = min(1.0, policy_step_dt / elapsed_time)
+        #     print(f"[INFO] Policy Step time: {actual_loop_time * 1000:.2f}ms, Real Time Factor: {rtf:.2f}", flush=True)
 
     # --- 6. Cleanup ---
     print("Simulation finished.")

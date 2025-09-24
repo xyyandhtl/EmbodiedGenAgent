@@ -10,13 +10,14 @@ class BaseEnv(object):
     behavior_lib_path = None
     print_ticks = False
     headless = False
+    agents = []
 
     def __init__(self):
         self.time = 0
         self.start_time = time.time()
 
         self.create_behavior_lib()
-        self.create_agents()
+        # self.create_agents()
 
     def step(self):
         self.time = time.time() - self.start_time
@@ -36,20 +37,20 @@ class BaseEnv(object):
         else:
             return False
 
-
     def create_agents(self):
         agent = Agent()
         agent.env = self
-        self.agents = [agent]
+        self.agents.append(agent)
 
+    def place_agent(self, agent: Agent):
+        agent.env = self
+        self.agents.append(agent)
 
     def create_behavior_lib(self):
         self.behavior_lib = ExecBehaviorLibrary(self.behavior_lib_path)
 
-
     def env_step(self):
         pass
-
 
     def reset(self):
         raise NotImplementedError
