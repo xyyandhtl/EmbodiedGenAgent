@@ -1,19 +1,11 @@
 [Condition]
-RobotNear_<place/target>, IsCaptured_<target>, IsMarked_<target>, IsReported_<target>
+{AllCondition}
 
 [Object]
-<place>=["StagingArea", "Corridor", "Intersection", "Stairwell",
-        "Office", "Warehouse", "ControlRoom", "LoadingBay", 
-        "Lobby", "ChargingStation", "Outdoor", "Indoor", "Wall",
-        "Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
-        "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit"]
-<target>=["Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
-        "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",
-        "Blood", "Fire", "Gas", "Debris",
-        "Victim", "Rescuer", "Visitor", "Staff"]
+<NAV_POINTS>={NAV_POINTS}
+<TARGETS>={TARGETS}
 
 [Examples]
-
 指令: "请前往控制室。"
 Goal: RobotNear_ControlRoom
 

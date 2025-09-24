@@ -1,4 +1,4 @@
-## dualmap
+## VLMap
 
 This module provides open vocabulary mapping and generates navigation paths for robot navigation.
 

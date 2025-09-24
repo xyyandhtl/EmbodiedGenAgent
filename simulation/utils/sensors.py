@@ -44,7 +44,7 @@ class IsaacLabSensorHandler:
         self._pose: tuple[torch.Tensor, torch.Tensor] | None = None
         self._intrinsics: torch.Tensor | None = None
 
-    def capture_frame(self):
+    def capture_frame(self) -> tuple:
         """
         Atomically snapshot camera outputs and pose and return them immediately as
         (rgb, depth, pose, intrinsics). Each returned tensor is a clone and safe
