@@ -163,7 +163,7 @@ def main():
   
             actions = policy(obs)
             obs, _, _, _ = env.step(actions)
-            # camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
+            camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
 
             # --- 发布 sensor 数据（保持原逻辑） ---
             data_to_send = {}

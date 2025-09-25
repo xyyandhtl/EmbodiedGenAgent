@@ -59,11 +59,11 @@ class Dualmap:
         # print config into console
         self.print_cfg()
 
-        # Initialization
-        self.visualizer = ReRunVisualizer(cfg)
-        self.detector = Detector(cfg)
-        self.local_map_manager = LocalMapManager(cfg)
-        self.global_map_manager = GlobalMapManager(cfg)
+        # --- 1. Initialization ---
+        self.visualizer = ReRunVisualizer(cfg)  # 用于通过Rerun库进行实时可视化
+        self.detector = Detector(cfg)  # 负责图像中的物体检测（YOLO）和分割（SAM/FastSAM）
+        self.local_map_manager = LocalMapManager(cfg)  # 管理机器人周围的局部地图，用于精细的环境感知和避障
+        self.global_map_manager = GlobalMapManager(cfg)  # 管理全局地图，存储长期的、大范围的环境和物体信息
 
         # Additional initialization for visualization
         self.visualizer.set_use_rerun(cfg.use_rerun)
@@ -93,8 +93,9 @@ class Dualmap:
             self.detector.load_layout()
             self.global_map_manager.load_wall()
 
-        # Start the file monitoring thread
+        # --- 2. Start the file monitoring thread ---
         self.stop_thread = False  # Signal to stop the thread
+        # 创建一个线程持续监视YAML配置文件，外部程序（如vlmap_nav_ros2.py）可以通过修改这个文件来向 Dualmap 核心下达指令，例如设置导航目标、触发路径计算等。
         self.monitor_thread = threading.Thread(
             target=self.monitor_config_file, args=(cfg.config_file_path,)
         )
@@ -189,7 +190,7 @@ class Dualmap:
             translation_diff = np.linalg.norm(
                 curr_pose[:3, 3] - self.last_keyframe_pose[:3, 3]
             )  # Translation difference
-            if translation_diff >= self.pose_threshold:
+            if translation_diff >= self.pose_threshold:  # 0.1 m
                 self.last_keyframe_time = time_stamp
                 self.last_keyframe_pose = curr_pose
                 logger.info(
@@ -203,7 +204,7 @@ class Dualmap:
             rotation_diff = curr_rotation.inv() * last_rotation
             angle_diff = rotation_diff.magnitude() * (180 / np.pi)
 
-            if angle_diff >= self.rotation_threshold:
+            if angle_diff >= self.rotation_threshold:  # > 3 degrees
                 self.last_keyframe_time = time_stamp
                 self.last_keyframe_pose = curr_pose
                 logger.info("[Core][CheckKeyframe] New keyframe detected by rotation")
@@ -213,7 +214,7 @@ class Dualmap:
         if (
             self.last_keyframe_time is None
             or abs(time_stamp - self.last_keyframe_time) >= self.time_threshold
-        ):
+        ):  # > 0.5 s
             self.last_keyframe_time = time_stamp
             self.last_keyframe_pose = curr_pose
             logger.info("[Core][CheckKeyframe] New keyframe detected by time")
@@ -296,7 +297,10 @@ class Dualmap:
 
     def parallel_process(self, data_input: DataInput):
         """
-        Process input data in parallel.
+        Process input data in parallel. 数据流入的主要入口
+            1. 接收一帧数据 (DataInput，包含RGB、depth、pose等）
+            2. 调用 Detector 对图像进行处理，生成物体观测结果
+            3. 为不阻塞主线程（数据接收线程），将检测和观测结果放入 (`detection_results_queue`) 队列
         """
         # Get current frame id
         self.curr_frame_id = data_input.idx
@@ -320,12 +324,14 @@ class Dualmap:
                     self.detector.load_detection_results()
 
             with timing_context("Observation Formatting", self):
+                # 计算观测结果
                 self.detector.calculate_observations()
 
             curr_obs_list = self.detector.get_curr_observations()
 
             self.detector.update_state()
 
+            # 将结果放入 detection_results_queue 队列，供 建图线程 处理
             try:
                 self.detection_results_queue.put(
                     (curr_obs_list, self.curr_frame_id), timeout=1
@@ -351,7 +357,7 @@ class Dualmap:
             # TODO: psutil seems not that correct
             # mem_usage = self.get_total_memory_by_keyword()
             # self.detector.visualize_memory(mem_usage)
-
+        logger.warning(f"[Core] calculate_path: {self.calculate_path}")
         if self.calculate_path and self.global_map_manager.has_global_map():
             logger.info("[Core] Global Navigation enabled! Triggering functionality...")
 
@@ -369,6 +375,7 @@ class Dualmap:
 
             # calculate the path based on current global map
             # Get 3D path point in world coordinate
+            # 计算 全局路径
             self.curr_global_path = self.global_map_manager.calculate_global_path(
                 self.curr_pose, goal_mode=self.get_goal_mode
             )
@@ -472,6 +479,7 @@ class Dualmap:
                 self.local_map_manager.set_global_map(global_map)
 
             # calculate the path based on current global map
+            # 计算 局部路径
             self.curr_local_path = self.local_map_manager.calculate_local_path(
                 start_pose, goal_mode=self.get_goal_mode
             )
@@ -514,6 +522,9 @@ class Dualmap:
     def run_mapping_thread(self):
         """
         Independent thread: Monitor detection results and process local mapping and global mapping.
+        建图线程（独立的后台线程）：
+            1. 不断地从 detection_results_queue 队列中取出观测结果
+            2. 将观测结果分别送入 LocalMapManager 和 GlobalMapManager，来更新局部和全局地图
         """
         while not self.stop_thread:
             try:
@@ -679,7 +690,12 @@ class Dualmap:
     def monitor_config_file(self, config_file_path: str):
         """
         Monitor the configuration file at a given path and act based on its content.
-
+        路径规划
+            1. 当监控线程检测到配置文件（actions.yaml）中的 calculate_path 标志位变为 True 时，触发 路径规划流程
+            2. 读取配置文件（actions.yaml）中的 inquiry_sentence (例如 "a chair")，并将其转换为 CLIP 特征向量
+            3. GlobalMapManager 使用这个特征向量在全局地图中寻找最匹配的目标物体，并计算出一条全局路径 (`curr_global_path`)
+            4. 在全局路径的终点附近，激活 LocalMapManager，计算出一条更精细的局部路径 (`curr_local_path`)，以实现精准对接或避开全局路径上未发现的障碍
+            5. 通过 get_action_path 函数将全局和局部路径拼接成最终的行动路径 (`action_path`)
         Parameters:
         - config_file_path: Path to the configuration file.
         """

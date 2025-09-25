@@ -31,7 +31,7 @@ class SimpleCameraViewer:
                 f"\n[Camera] Frame: {self.frame_count:<5} | "
                 f"RGB: {tuple(rgb_np.shape)} | "
                 f"Depth: {tuple(depth_np.shape)} | "
-                f"Depth 90%: {depth_90p:.2f}m | "
+                f"Depth 90%: {depth_90p:.2f}mm == {depth_90p * 0.001:.2f}m| "
                 f"Pos: [x={pos_np[0]:.3f}, y={pos_np[1]:.3f}, z={pos_np[2]:.3f}] | "
                 f"Quat: [w={quat_np[0]:.3f}, x={quat_np[1]:.3f}, y={quat_np[2]:.3f}, z={quat_np[3]:.3f}]"
             )
