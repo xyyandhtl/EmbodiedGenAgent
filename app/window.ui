@@ -48,20 +48,10 @@ QLabel#titleLabel {
    </string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QGridLayout" name="gridMain" rowstretch="0,1,1,1" columnstretch="0,1,1,1,0">
-    <item row="0" column="0" colspan="5">
-     <widget class="QLabel" name="titleLabel">
-      <property name="text">
-       <string>生成式行为树具身智能体交互界面</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
-    </item>
+   <layout class="QGridLayout" name="gridMain" rowstretch="0,2,2,2" columnstretch="2,1,1,1,0">
 
     <!-- 左侧指令交互界面 -->
-    <item row="1" column="0" rowspan="3">
+    <item row="1" column="0" rowspan="2">
      <widget class="QGroupBox" name="groupInteraction">
       <property name="title">
        <string>指令交互界面</string>
@@ -259,7 +249,13 @@ QLabel#titleLabel {
        <item>
         <widget class="QLabel" name="behaviorTreeLabel">
          <property name="minimumSize">
-          <size><width>220</width><height>200</height></size>
+          <size><width>300</width><height>200</height></size>
+         </property>
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>1</verstretch>
+          </sizepolicy>
          </property>
          <property name="alignment">
           <set>Qt::AlignCenter</set>

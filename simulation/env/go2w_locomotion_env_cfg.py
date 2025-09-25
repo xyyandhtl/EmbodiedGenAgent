@@ -46,11 +46,11 @@ class VelocitySceneCfg(InteractiveSceneCfg):
     # Lights
     light = AssetBaseCfg(
         prim_path="/World/light",
-        spawn=sim_utils.DistantLightCfg(color=(0.75, 0.75, 0.75), intensity=3000.0),
+        spawn=sim_utils.DistantLightCfg(color=(0.75, 0.75, 0.75), intensity=10000.0),
     )
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
-        spawn=sim_utils.DomeLightCfg(color=(0.2, 0.2, 0.3), intensity=2000.0),
+        spawn=sim_utils.DomeLightCfg(color=(0.2, 0.2, 0.3), intensity=10000.0),
     )
     cylinder_light = AssetBaseCfg(
         prim_path="/World/cylinderLight",

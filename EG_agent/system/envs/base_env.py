@@ -2,49 +2,69 @@ import time
 from typing import List
 
 from EG_agent.planning.btpg.behavior_tree.behavior_libs import ExecBehaviorLibrary
-from EG_agent.system.agent.agent import Agent
 
-
-class BaseEnv(object):
+class BaseAgentEnv(object):
     agent_num = 1
     behavior_lib_path = None
     print_ticks = False
     headless = False
-    agents: List[Agent] = []
+    response_frequency = 1  # moved from Agent
+    scene = None  # moved from Agent
 
     def __init__(self):
         self.time = 0
         self.start_time = time.time()
+        self.env = self  # so code expecting agent.env keeps working
+        self.condition_set = set()  # moved from Agent
+        self.bt = None  # behavior tree binding
+
+        self.init_statistics()  # moved from Agent
 
         self.create_behavior_lib()
-        # self.create_agents()
+
+    # moved from Agent
+    def bind_bt(self, bt):
+        self.bt = bt
+        bt.bind_agent(self)
+
+    # moved from Agent
+    def init_statistics(self):
+        self.step_num = 1
+        self.next_response_time = self.response_frequency
+        self.last_tick_output = None
 
     def step(self):
         self.time = time.time() - self.start_time
 
-        for agent in self.agents:
-            agent.step()
+        # Integrated Agent.step logic
+        if self.bt is not None and self.time > self.next_response_time:
+            self.next_response_time += self.response_frequency
+            self.step_num += 1
+
+            self.bt.tick()
+            bt_output = self.bt.visitor.output_str
+
+            if bt_output != self.last_tick_output:
+                if self.print_ticks:
+                    print(f"==== time:{self.time:f}s ======")
+                    parts = bt_output.split("Action", 1)
+                    if len(parts) > 1:
+                        bt_output = parts[1].strip()
+                    else:
+                        bt_output = ""
+                    print("Action ", bt_output)
+                    print("\n")
+                    self.last_tick_output = bt_output
 
         self.env_step()
-
         self.last_step_time = self.time
-
         return self.task_finished()
 
     def task_finished(self):
-        if {"IsIn(milk,fridge)","IsClosed(fridge)"} <= self.agents[0].condition_set:
+        if {"IsIn(milk,fridge)", "IsClosed(fridge)"} <= self.condition_set:
             return True
         else:
             return False
-
-    def create_agents(self):
-        agent = Agent()
-        agent.env = self
-        self.agents.append(agent)
-
-    def place_agent(self, agent: Agent):
-        agent.env = self
-        self.agents.append(agent)
 
     def create_behavior_lib(self):
         self.behavior_lib = ExecBehaviorLibrary(self.behavior_lib_path)

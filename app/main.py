@@ -4,10 +4,10 @@ import numpy as np
 from PyQt5 import QtWidgets, QtCore, QtGui, uic
 
 # 正式运行
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-# from EG_agent.system.system import EGAgentSystem
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from EG_agent.system.system import EGAgentSystem
 # 仅测试界面
-from system_example import EGAgentSystem
+# from system_example import EGAgentSystem
 
 UI_PATH = os.path.join(os.path.dirname(__file__), "window.ui")
 
