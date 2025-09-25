@@ -3,7 +3,7 @@
 This module provides open vocabulary mapping and generates navigation paths for robot navigation.
 
 migrated and modified from DualMap:
-![alt text](docs/dualmap.png)
+![!\[alt text\](docs/dualmap.png)](../../docs/assets/dualmap.png)
 
 - This module is the heaviest process of the agent, using ROS2 to obtain RGB-D and pose topics from the deployment env.
 - This module should be upgradable with the advances of VLM cross-modal encoders

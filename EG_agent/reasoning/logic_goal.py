@@ -189,7 +189,7 @@ class LogicGoalGenerator:
 
         # return results
 
-    def generate_single(self, question, max_retry=6):
+    def generate_single(self, question, max_retry=6) -> str:
         """
         Retry-based single-question inference:
         - perform up to max_retry LLM calls,
@@ -221,7 +221,7 @@ class LogicGoalGenerator:
             last_error_list = error_list
 
         # all retries exhausted, no valid format
-        return None
+        return ""
 
 
 if __name__ == "__main__":

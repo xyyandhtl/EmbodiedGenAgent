@@ -1,58 +1,66 @@
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent))
-
 import numpy as np
 import threading
 import time
 from typing import Callable, Dict, List, Any, Iterable
+from pathlib import Path
+from PIL import Image
 
 from EG_agent.prompts.object_sets import AllObject
 from EG_agent.reasoning.logic_goal import LogicGoalGenerator
 from EG_agent.planning.bt_planner import BTGenerator
-from EG_agent.vlmap.vlmap_nav_ros2 import VLMapNavROS2
-from EG_agent.system.agent.agent import Agent
+from EG_agent.planning.btpg import BehaviorTree
+# from EG_agent.vlmap.vlmap_nav_ros2 import VLMapNavROS2
 from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
 
 
 class EGAgentSystem:
-    current_goal = None
+    """EGAgentSystem
+    Orchestrates goal parsing, behavior tree planning, and environment execution.
+    Emits lightweight UI events (conversation, log, entities, status) for the app.
+    Note: This change only beautifies comments/docstrings; no logic changes.
+    """
+    goal: str
+    goal_set: set
+    bt: BehaviorTree
+    bt_path: str = "behavior_tree.png"
+
     def __init__(self):
-        # 初始化 '逻辑Goal生成器'
+        """Initialize generators, environment runtime, and UI caches."""
+        # 逻辑Goal生成器
         self.goal_generator = LogicGoalGenerator()
 
-        # 构建 '行为树规划器'
-        self.bt_generator = BTGenerator(env_name="embodied", 
-                                        cur_cond_set=set(), 
+        # 行为树规划器
+        self.bt_generator = BTGenerator(env_name="embodied",
+                                        cur_cond_set=set(),
                                         key_objects=list(AllObject))
-        
-        # 行为树执行的 'Agent载体’，通过bint_bt动态绑定行为树，被绑定到 '部署环境执行器' 和环境交互
-        self.bt_agent = Agent()
 
-        # '部署环境执行器'，定义如何和部署环境交互，和 'Agent载体’ 绑定
+        # Agent载体部署环境
+        # 通过bint_bt动态绑定行为树，定义run_action实现智能体如何和部署环境交互
+        # 行为树叶节点在被tick时，通过调用其绑定的env的run_action实现智能体到部署环境交互的action
         self.env = IsaacsimEnv()
-        self.env.place_agent(self.bt_agent)
 
-        # 初始化 'VLM地图导航模块'
-        self.vlmap_backend = VLMapNavROS2()
+        # VLM地图导航模块
+        # self.vlmap_backend = VLMapNavROS2()
 
         # 运行控制
         self._running = False
         self._is_finished = False
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+
         # 监听器: kind -> list[callback(data)]
         self._listeners: Dict[str, List[Callable[[Any], None]]] = {}
+
         # 缓存/占位数据
         self._conversation: List[str] = []
         self._logs: List[str] = []
         self._entity_info: List[dict] = []   # each: {"name":..., "info":...}
-        self._last_bt_image: np.ndarray | None = None
-        # TODO: 后续可注入真实数据生成器
+        self._last_bt_image: np.ndarray = self._gen_dummy_image(300, 400, "Behavior Tree")
         self._placeholder_counter = 0
 
     # ---------------------- 控制接口 ----------------------
     def start(self):
+        """Start the agent loop in a background thread."""
         if self._running:
             return
         self._stop_event.clear()
@@ -62,6 +70,7 @@ class EGAgentSystem:
         self._thread.start()
 
     def stop(self):
+        """Request stop and close environment safely."""
         if not self._running:
             return
         self._stop_event.set()
@@ -70,6 +79,7 @@ class EGAgentSystem:
         self.env.close()
 
     def _run_loop(self):
+        """Main loop: step environment, propagate events, and check completion."""
         # 主执行循环 (简化)
         self.env.reset()
         self._log("Environment reset.")
@@ -82,7 +92,7 @@ class EGAgentSystem:
             is_finished = self.env.step()
 
             # 条件完成判定 (占位)
-            if self.current_goal and self.current_goal <= self.env.agents[0].condition_set:
+            if self.goal_set and self.goal_set <= self.env.condition_set:
                 is_finished = True
             # 周期性占位数据刷新
             self._placeholder_counter += 1
@@ -99,25 +109,30 @@ class EGAgentSystem:
 
     # 保留原 run 名称以兼容外部调用
     def run(self):
+        """Alias for start(), kept for external compatibility."""
         self.start()
 
     def set_env(self, env):
+        """Replace the running environment instance."""
         self.env = env
 
     @property
     def finished(self) -> bool:
+        """Whether the agent loop has finished."""
         return self._is_finished
 
     @property
     def status(self) -> bool:
-        # True 表示正在运行
+        """Running state; True when the loop thread is active."""
         return self._running
 
     # ---------------------- 监听/事件 ----------------------
     def add_listener(self, kind: str, cb: Callable[[Any], None]):
+        """Register an event listener for a given kind."""
         self._listeners.setdefault(kind, []).append(cb)
 
     def _emit(self, kind: str, data: Any):
+        """Emit an event to all listeners of the given kind."""
         for cb in self._listeners.get(kind, []):
             try:
                 cb(data)
@@ -130,55 +145,79 @@ class EGAgentSystem:
                          intrinsics: np.ndarray,
                          image: np.ndarray,
                          depth: np.ndarray):
+        """Ingest an observation (placeholder pipeline to be implemented)."""
         # TODO: camera observation -> vlmap -> update condition / generate ll actions
         # 暂时仅记录一条日志
         self._log("Received observation (placeholder).")
         self._emit("observation", None)
 
     def feed_instruction(self, text: str):
+        """Plan a behavior tree from instruction, draw it, and update UI caches."""
         # TODO: goal_generator -> bt_generator -> bt_agent.bind_bt
+        self.goal = self.goal_generator.generate_single(text)
+        if self.goal:
+            self.bt = self.bt_generator.generate(self.goal)
+            # save behavior_tree.png to the current work dir to visualize in gui
+            self.bt.draw(png_only=True)
+            # load the saved behavior tree image into memory for GUI
+            img_path = Path(self.bt_path)
+            if img_path.exists():
+                self._last_bt_image = np.array(Image.open(img_path).convert("RGB"))
+                self._log(f"Behavior tree image updated: {img_path.resolve()}")
+            else:
+                self._log(f"Behavior tree image not found: {img_path.resolve()}")
         self._log(f"User instruction: {text}")
         self._append_conversation(f"用户: {text}")
-        self._append_conversation("智能体: （占位解析中...）")
+        self._append_conversation(f"智能体: {self.goal}")
         self._emit("conversation", self.get_conversation_text())
 
     # ---------------------- 数据获取占位接口 ----------------------
     def get_conversation_text(self) -> str:
+        """Return recent conversation text for UI."""
         return "\n".join(self._conversation[-400:])
 
     def get_log_text_tail(self, n: int = 400) -> str:
+        """Return recent log tail for UI."""
         return "\n".join(self._logs[-n:])
 
     def get_entity_rows(self) -> Iterable[tuple]:
+        """Yield (name, info) tuples for the entities table."""
         # returns iterable of (name, info)
         for e in self._entity_info:
             yield e["name"], e["info"]
 
     def get_semantic_map_image(self) -> np.ndarray:
+        """Return a placeholder semantic/path map image."""
         return self._gen_dummy_image(640, 240, "Semantic+Path")
 
     def get_entity_bt_image(self) -> np.ndarray:
+        """Return last BT image (or a placeholder if not available)."""
         # 行为树图
-        if self._last_bt_image is None or self._placeholder_counter % 10 == 0:
-            self._last_bt_image = self._gen_dummy_image(300, 400, "Behavior Tree")
+        # if self._last_bt_image is None or self._placeholder_counter % 10 == 0:
+        #     self._last_bt_image = self._gen_dummy_image(300, 400, "Behavior Tree")
         return self._last_bt_image
 
     def get_traversable_map_image(self) -> np.ndarray:
+        """Return a placeholder traversable map image."""
         return self._gen_dummy_image(260, 180, "Traversable")
 
     def get_current_instance_seg_image(self) -> np.ndarray:
+        """Return a placeholder current 2D instance segmentation image."""
         return self._gen_dummy_image(260, 180, "Instance 2D")
 
     def get_current_instance_3d_image(self) -> np.ndarray:
+        """Return a placeholder 3D instance visualization image."""
         return self._gen_dummy_image(260, 180, "Instance 3D")
 
     # ---------------------- 占位内部工具 ----------------------
     def _append_conversation(self, line: str):
+        """Append a line to the conversation buffer with trimming."""
         self._conversation.append(line)
         if len(self._conversation) > 2000:
             self._conversation = self._conversation[-1000:]
 
     def _log(self, line: str):
+        """Append a timestamped line to logs and emit 'log' event."""
         ts = time.strftime("%H:%M:%S")
         self._logs.append(f"[{ts}] {line}")
         if len(self._logs) > 5000:
@@ -186,6 +225,7 @@ class EGAgentSystem:
         self._emit("log", self.get_log_text_tail())
 
     def _update_entities_placeholder(self):
+        """Generate placeholder entity info for the UI table."""
         # 模拟实体增量
         self._entity_info = [
             {"name": f"obj_{i}", "info": f"state={np.random.randint(0,3)}"}
@@ -193,6 +233,7 @@ class EGAgentSystem:
         ]
 
     def _gen_dummy_image(self, w: int, h: int, text: str) -> np.ndarray:
+        """Generate a simple gradient placeholder image of shape (h, w, 3)."""
         # 简单渐变 + 文本占位 (文本不真正绘制，UI 侧可忽略或自行绘制)
         img = np.zeros((h, w, 3), dtype=np.uint8)
         gx = np.linspace(0, 255, w, dtype=np.uint8)

@@ -1,6 +1,6 @@
 from typing import Callable
 
-from EG_agent.system.envs.base_env import BaseEnv
+from EG_agent.system.envs.base_env import BaseAgentEnv
 from EG_agent.system.module_path import AGENT_ENV_PATH
 
 # --- ROS2 相关导入 ---
@@ -9,7 +9,7 @@ from geometry_msgs.msg import Twist, PoseStamped
 from std_msgs.msg import Int32
 import numpy as _np
 
-class RealEnv(BaseEnv):
+class RealEnv(BaseAgentEnv):
     agent_num = 1
 
     behavior_lib_path = f"{AGENT_ENV_PATH}/embodied"

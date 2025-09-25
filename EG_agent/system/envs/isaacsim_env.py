@@ -1,20 +1,17 @@
 from typing import Callable
+import numpy as _np
 
-from EG_agent.system.envs.base_env import BaseEnv
+from EG_agent.system.envs.base_env import BaseAgentEnv
 from EG_agent.system.module_path import AGENT_ENV_PATH
 
 # --- ROS2 相关导入 ---
+import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, PoseStamped
 from std_msgs.msg import Int32
-import numpy as _np
 
-class IsaacsimEnv(BaseEnv):
+class IsaacsimEnv(BaseAgentEnv):
     agent_num = 1
-
-    # launch simulator
-    # simulator_path = f'{ROOT_PATH}/../simulators/virtualhome/windows/VirtualHome.exe'
-    # simulator_path = f'{ROOT_PATH}/../simulators/virtualhome/linux_exec/linux_exec.v2.3.0.x86_64'
 
     behavior_lib_path = f"{AGENT_ENV_PATH}/embodied"
 
@@ -24,7 +21,10 @@ class IsaacsimEnv(BaseEnv):
         super().__init__()
         self.action_callbacks_dict = {}
 
-        # Assume rclpy.init() was called elsewhere in the process.
+        # Ensure rclpy is initialized
+        if not rclpy.ok():
+            rclpy.init()
+
         # Create node and publishers directly; let exceptions propagate if rclpy not initialized.
         self.ros_node = Node("isaacsim_env_node")
         self.cmd_vel_pub = self.ros_node.create_publisher(Twist, "/cmd_vel", 10)

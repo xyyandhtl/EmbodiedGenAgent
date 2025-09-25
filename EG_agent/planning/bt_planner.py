@@ -51,7 +51,7 @@ class BTGenerator:
 
         self.goal_set = None
 
-    def generate(self, goal: Union[str, List[set]], btml_name: str = "tree") -> Any:
+    def generate(self, goal: Union[str, List[set]], btml_name: str = "tree") -> BehaviorTree:
         """
         goal: either a goal string (e.g. 'A & B') or a pre-parsed goal_set (list/iterable of condition sets)
         Returns a BehaviorTree instance (and stores ptml/cost/expanded_num in self.last_*).
@@ -92,10 +92,10 @@ class BTGenerator:
               f'\x1b[32mticks:\x1b[0m {ticks}')
         
         # If requested, write PTML to the specified file
-        bt.draw(file_name=btml_name, png_only=True)
-            
+        # bt.draw(file_name=btml_name, png_only=True)
         return bt
 
+    # Would not be used, when bt no need to be connected to env
     def execute(self, goal: set, state: set, verbose: bool = True):
         if not self.planner:
             raise RuntimeError("Planner not initialized. Call generate() first.")
