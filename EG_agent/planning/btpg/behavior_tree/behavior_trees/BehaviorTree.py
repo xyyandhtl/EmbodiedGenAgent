@@ -75,9 +75,9 @@ if __name__ == '__main__':
     root_path = get_root_path()
     btml_path = os.path.join(root_path, 'btpg/behavior_tree/utils/draw_bt/Default.btml')
     behavior_lib_path = os.path.join(root_path, 'btpg/behavior_tree/exec_lib')
+
+    from EG_agent.planning.btpg.behavior_tree.utils.load import load_bt_from_btml
     bt = load_bt_from_btml(None, btml_path, behavior_lib_path)
-
-
 
     render_dot_tree(bt.root,name="llm_test",png_only = False)
     # build and tick

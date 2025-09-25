@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="windowTitle">
+   <string>生成式行为树具身智能体交互界面</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+QMainWindow {
+    background:#2b2f38;
+}
+QGroupBox {
+    font:12px "Microsoft YaHei";
+    color:#e0e0e0;
+    border:1px solid #4a4f57;
+    border-radius:4px;
+    margin-top:16px;
+    background:#323843;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left:8px; top:2px;
+    padding:0 4px;
+}
+QTextEdit, QTableWidget {
+    background:#1f242c;
+    color:#d8d8d8;
+    border:1px solid #555;
+}
+QPushButton {
+    background:#3d7cff;
+    color:white;
+    border-radius:6px;
+    padding:6px 12px;
+}
+QPushButton:hover { background:#5b93ff; }
+QPushButton:pressed { background:#2d68dd; }
+QLabel#titleLabel {
+    font:16px "Microsoft YaHei";
+    font-weight:600;
+    color:#ffffff;
+    background:#1d2229;
+    border:1px solid #444;
+    border-radius:4px;
+    padding:6px;
+}
+   </string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QGridLayout" name="gridMain" rowstretch="0,1,1,1" columnstretch="0,1,1,1,0">
+    <item row="0" column="0" colspan="5">
+     <widget class="QLabel" name="titleLabel">
+      <property name="text">
+       <string>生成式行为树具身智能体交互界面</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+     </widget>
+    </item>
+
+    <!-- 左侧指令交互界面 -->
+    <item row="1" column="0" rowspan="3">
+     <widget class="QGroupBox" name="groupInteraction">
+      <property name="title">
+       <string>指令交互界面</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxInteraction">
+       <item>
+        <widget class="QSplitter" name="splitConvLog">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <widget class="QGroupBox" name="groupConversation">
+          <property name="title">
+           <string>对话窗口</string>
+          </property>
+          <layout class="QVBoxLayout" name="vboxConv">
+           <item>
+            <widget class="QTextEdit" name="conversationText">
+             <property name="readOnly"><bool>true</bool></property>
+             <property name="placeholderText">
+              <string>智能体对话内容...</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QGroupBox" name="groupLog">
+          <property name="title">
+           <string>日志窗口</string>
+          </property>
+          <layout class="QVBoxLayout" name="vboxLog">
+           <item>
+            <widget class="QTextEdit" name="logText">
+             <property name="readOnly"><bool>true</bool></property>
+             <property name="placeholderText">
+              <string>系统日志...</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="hboxInput">
+         <item>
+          <widget class="QLineEdit" name="instructionEdit">
+           <property name="placeholderText">
+            <string>输入指令...</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="sendInstructionBtn">
+           <property name="text">
+            <string>发送</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+    <!-- 右上 语义实体地图 -->
+    <item row="1" column="1" colspan="3">
+     <widget class="QGroupBox" name="groupSemantic">
+      <property name="title">
+       <string>语义实体地图和导航路径可视化</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxSemantic">
+       <item>
+        <widget class="QLabel" name="semanticMapLabel">
+         <property name="minimumSize">
+          <size><width>400</width><height>200</height></size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="text">
+          <string>Semantic / Path Map</string>
+         </property>
+         <property name="scaledContents"><bool>true</bool></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+    <!-- 实体信息列表 -->
+    <item row="2" column="1" colspan="3">
+     <widget class="QGroupBox" name="groupEntities">
+      <property name="title">
+       <string>实体信息列表（可上下拖动）</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxEntities">
+       <item>
+        <widget class="QTableWidget" name="entityTable">
+         <column>
+          <property name="text">
+           <string>实体</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>信息</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+    <!-- 中部三幅图 -->
+    <item row="3" column="1">
+     <widget class="QGroupBox" name="groupTraversable">
+      <property name="title">
+       <string>可通行地图</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxTrav">
+       <item>
+        <widget class="QLabel" name="traversableMapLabel">
+         <property name="minimumSize">
+          <size><width>200</width><height>160</height></size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="text">
+          <string>Traversable Map</string>
+         </property>
+         <property name="scaledContents"><bool>true</bool></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+    <item row="3" column="2">
+     <widget class="QGroupBox" name="groupInstance2d">
+      <property name="title">
+       <string>当前视野实例分割</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxIns2d">
+       <item>
+        <widget class="QLabel" name="instanceSegLabel">
+         <property name="minimumSize">
+          <size><width>200</width><height>160</height></size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="text">
+          <string>Instance 2D</string>
+         </property>
+         <property name="scaledContents"><bool>true</bool></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+    <item row="3" column="3">
+     <widget class="QGroupBox" name="groupInstance3d">
+      <property name="title">
+       <string>3D实例分割可视化</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxIns3d">
+       <item>
+        <widget class="QLabel" name="instance3DLabel">
+         <property name="minimumSize">
+          <size><width>200</width><height>160</height></size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="text">
+          <string>Instance 3D</string>
+         </property>
+         <property name="scaledContents"><bool>true</bool></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+    <!-- 左下 行为树 (占位：放在第4行与左列合并已在 rowspan=3) -->
+    <item row="3" column="0">
+     <widget class="QGroupBox" name="groupBT">
+      <property name="title">
+       <string>当前执行行为树</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxBT">
+       <item>
+        <widget class="QLabel" name="behaviorTreeLabel">
+         <property name="minimumSize">
+          <size><width>220</width><height>200</height></size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="text">
+          <string>Behavior Tree</string>
+         </property>
+         <property name="scaledContents"><bool>true</bool></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+    <!-- 右侧按钮 -->
+    <item row="1" column="4" rowspan="3">
+     <widget class="QGroupBox" name="groupControl">
+      <property name="title">
+       <string>控制</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxCtrl">
+       <item>
+        <widget class="QPushButton" name="startBtn">
+         <property name="text">
+          <string>启动智能体</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="stopBtn">
+         <property name="text">
+          <string>关闭智能体</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size><width>20</width><height>200</height></size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

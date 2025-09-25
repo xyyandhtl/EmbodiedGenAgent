@@ -1,8 +1,8 @@
 import time
+from typing import List
+
 from EG_agent.planning.btpg.behavior_tree.behavior_libs import ExecBehaviorLibrary
 from EG_agent.system.agent.agent import Agent
-
-
 
 
 class BaseEnv(object):
@@ -10,7 +10,7 @@ class BaseEnv(object):
     behavior_lib_path = None
     print_ticks = False
     headless = False
-    agents = []
+    agents: List[Agent] = []
 
     def __init__(self):
         self.time = 0
