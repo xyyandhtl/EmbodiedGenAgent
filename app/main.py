@@ -7,7 +7,7 @@ from PyQt5 import QtWidgets, QtCore, QtGui, uic
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # from EG_agent.system.system import EGAgentSystem
 # 仅测试界面
-from system_test import EGAgentSystem
+from system_example import EGAgentSystem
 
 UI_PATH = os.path.join(os.path.dirname(__file__), "window.ui")
 

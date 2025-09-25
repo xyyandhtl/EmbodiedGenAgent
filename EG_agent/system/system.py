@@ -67,11 +67,7 @@ class EGAgentSystem:
         self._stop_event.set()
         self._running = False
         # 允许环境安全停止
-        try:
-            if hasattr(self.env, "close"):
-                self.env.close()
-        except Exception:
-            pass
+        self.env.close()
 
     def _run_loop(self):
         # 主执行循环 (简化)
@@ -81,11 +77,10 @@ class EGAgentSystem:
         while not self._stop_event.is_set() and not is_finished:
             # TODO: 替换为真实 step
             time.sleep(0.1)
-            # 模拟 env.step
-            try:
-                is_finished = self.env.step()
-            except Exception:
-                is_finished = True
+
+            # 环境 step，行为树 agent 执行动作，和部署环境通信
+            is_finished = self.env.step()
+
             # 条件完成判定 (占位)
             if self.current_goal and self.current_goal <= self.env.agents[0].condition_set:
                 is_finished = True
