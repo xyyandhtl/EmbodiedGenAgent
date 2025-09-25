@@ -27,9 +27,13 @@ A Generative Embodied Agent that transforms open-ended instructions into behavio
 
 
 ## Usage
-- agent module unit test: [examples](examples/EXAMPLES.md)
+- the GUI demo: [APP.md](docs/APP.md)
 
-- agent system test in simulation: 
+- agent introduction: [EG_agent.md](docs/EG_agent.md)
+
+- agent module unit test: [EXAMPLES.md](docs/EXAMPLES.md)
+
+- agent system test in simulation: [SIMULATION.md](docs/SIMULATION.md)
 
 
 ## Acknowledgments
