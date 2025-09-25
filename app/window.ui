@@ -2,556 +2,313 @@
 <ui version="4.0">
  <class>MainWindow</class>
  <widget class="QMainWindow" name="MainWindow">
-  <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>895</width>
-    <height>980</height>
-   </rect>
-  </property>
   <property name="windowTitle">
-   <string>RoboWatier</string>
+   <string>生成式行为树具身智能体交互界面</string>
   </property>
-  <property name="autoFillBackground">
-   <bool>false</bool>
+  <property name="styleSheet">
+   <string notr="true">
+QMainWindow {
+    background:#2b2f38;
+}
+QGroupBox {
+    font:12px "Microsoft YaHei";
+    color:#e0e0e0;
+    border:1px solid #4a4f57;
+    border-radius:4px;
+    margin-top:16px;
+    background:#323843;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left:8px; top:2px;
+    padding:0 4px;
+}
+QTextEdit, QTableWidget {
+    background:#1f242c;
+    color:#d8d8d8;
+    border:1px solid #555;
+}
+QPushButton {
+    background:#3d7cff;
+    color:white;
+    border-radius:6px;
+    padding:6px 12px;
+}
+QPushButton:hover { background:#5b93ff; }
+QPushButton:pressed { background:#2d68dd; }
+QLabel#titleLabel {
+    font:16px "Microsoft YaHei";
+    font-weight:600;
+    color:#ffffff;
+    background:#1d2229;
+    border:1px solid #444;
+    border-radius:4px;
+    padding:6px;
+}
+   </string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QGridLayout" name="gridLayout">
-    <item row="1" column="1" rowspan="5" colspan="2">
-     <layout class="QVBoxLayout" name="verticalLayout_4">
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_2">
-        <property name="spacing">
-         <number>100</number>
-        </property>
-        <item>
-         <widget class="QLabel" name="label_10">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
+   <layout class="QGridLayout" name="gridMain" rowstretch="0,1,1,1" columnstretch="0,1,1,1,0">
+    <item row="0" column="0" colspan="5">
+     <widget class="QLabel" name="titleLabel">
+      <property name="text">
+       <string>生成式行为树具身智能体交互界面</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+     </widget>
+    </item>
+
+    <!-- 左侧指令交互界面 -->
+    <item row="1" column="0" rowspan="3">
+     <widget class="QGroupBox" name="groupInteraction">
+      <property name="title">
+       <string>指令交互界面</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxInteraction">
+       <item>
+        <widget class="QSplitter" name="splitConvLog">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <widget class="QGroupBox" name="groupConversation">
+          <property name="title">
+           <string>对话窗口</string>
           </property>
-          <property name="font">
-           <font>
-            <family>黑体</family>
-            <pointsize>14</pointsize>
-           </font>
-          </property>
-          <property name="text">
-           <string>Customer List</string>
-          </property>
+          <layout class="QVBoxLayout" name="vboxConv">
+           <item>
+            <widget class="QTextEdit" name="conversationText">
+             <property name="readOnly"><bool>true</bool></property>
+             <property name="placeholderText">
+              <string>智能体对话内容...</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="label_11">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
+         <widget class="QGroupBox" name="groupLog">
+          <property name="title">
+           <string>日志窗口</string>
           </property>
-          <property name="font">
-           <font>
-            <family>黑体</family>
-            <pointsize>14</pointsize>
-           </font>
-          </property>
-          <property name="text">
-           <string>History of Conversations</string>
-          </property>
+          <layout class="QVBoxLayout" name="vboxLog">
+           <item>
+            <widget class="QTextEdit" name="logText">
+             <property name="readOnly"><bool>true</bool></property>
+             <property name="placeholderText">
+              <string>系统日志...</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout">
-        <item>
-         <widget class="QListWidget" name="list_customer">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>50</width>
-            <height>250</height>
-           </size>
-          </property>
-          <property name="font">
-           <font>
-            <pointsize>11</pointsize>
-           </font>
-          </property>
-          <item>
-           <property name="text">
-            <string>Global</string>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="hboxInput">
+         <item>
+          <widget class="QLineEdit" name="instructionEdit">
+           <property name="placeholderText">
+            <string>输入指令...</string>
            </property>
-          </item>
-          <item>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="sendInstructionBtn">
            <property name="text">
-            <string>System</string>
+            <string>发送</string>
            </property>
-          </item>
-         </widget>
-        </item>
-        <item>
-         <widget class="QTextEdit" name="edit_local_history">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>340</width>
-            <height>0</height>
-           </size>
-          </property>
-          <property name="font">
-           <font>
-            <pointsize>11</pointsize>
-           </font>
-          </property>
-          <property name="readOnly">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-     </layout>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
     </item>
-    <item row="6" column="0" colspan="3">
-     <layout class="QGridLayout" name="gridLayout_3">
-      <item row="1" column="0">
-       <layout class="QVBoxLayout" name="verticalLayout_2">
-        <item>
-         <widget class="QLabel" name="label_5">
-          <property name="font">
-           <font>
-            <family>黑体</family>
-            <pointsize>14</pointsize>
-           </font>
-          </property>
+
+    <!-- 右上 语义实体地图 -->
+    <item row="1" column="1" colspan="3">
+     <widget class="QGroupBox" name="groupSemantic">
+      <property name="title">
+       <string>语义实体地图和导航路径可视化</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxSemantic">
+       <item>
+        <widget class="QLabel" name="semanticMapLabel">
+         <property name="minimumSize">
+          <size><width>400</width><height>200</height></size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="text">
+          <string>Semantic / Path Map</string>
+         </property>
+         <property name="scaledContents"><bool>true</bool></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+    <!-- 实体信息列表 -->
+    <item row="2" column="1" colspan="3">
+     <widget class="QGroupBox" name="groupEntities">
+      <property name="title">
+       <string>实体信息列表（可上下拖动）</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxEntities">
+       <item>
+        <widget class="QTableWidget" name="entityTable">
+         <column>
           <property name="text">
-           <string>Current Behavior Tree</string>
+           <string>实体</string>
           </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QGraphicsView" name="img_view_bt">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
+         </column>
+         <column>
+          <property name="text">
+           <string>信息</string>
           </property>
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>240</height>
-           </size>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item row="0" column="0">
-       <layout class="QGridLayout" name="gridLayout_2">
-        <item row="0" column="0">
-         <layout class="QHBoxLayout" name="horizontalLayout_4">
-          <property name="spacing">
-           <number>0</number>
-          </property>
-          <property name="leftMargin">
-           <number>0</number>
-          </property>
-          <item>
-           <widget class="QLabel" name="label_6">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>355</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="font">
-             <font>
-              <family>黑体</family>
-              <pointsize>14</pointsize>
-             </font>
-            </property>
-            <property name="text">
-             <string>Accessibility Map</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLabel" name="label_7">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="font">
-             <font>
-              <family>黑体</family>
-              <pointsize>14</pointsize>
-             </font>
-            </property>
-            <property name="text">
-             <string>Instance Segmentation</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLabel" name="label_8">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>0</height>
-             </size>
-            </property>
-            <property name="font">
-             <font>
-              <family>黑体</family>
-              <pointsize>14</pointsize>
-             </font>
-            </property>
-            <property name="text">
-             <string>Object Detection</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item row="1" column="0">
-         <layout class="QHBoxLayout" name="horizontalLayout_5">
-          <item>
-           <widget class="QLabel" name="img_label_map">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>345</width>
-              <height>200</height>
-             </size>
-            </property>
-            <property name="styleSheet">
-             <string notr="true">border: 2px solid black;</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLabel" name="img_label_seg">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>250</width>
-              <height>200</height>
-             </size>
-            </property>
-            <property name="styleSheet">
-             <string notr="true">border: 2px solid black;</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLabel" name="img_label_obj">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>250</width>
-              <height>200</height>
-             </size>
-            </property>
-            <property name="styleSheet">
-             <string notr="true">border: 2px solid black;</string>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-       </layout>
-      </item>
-     </layout>
-    </item>
-    <item row="5" column="0">
-     <layout class="QVBoxLayout" name="verticalLayout_3">
-      <item>
-       <widget class="QTextBrowser" name="textBrowser_5">
-        <property name="font">
-         <font>
-          <family>黑体</family>
-          <pointsize>13</pointsize>
-          <weight>50</weight>
-          <bold>false</bold>
-         </font>
-        </property>
-        <property name="layoutDirection">
-         <enum>Qt::LeftToRight</enum>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">text-align:center;</string>
-        </property>
-        <property name="markdown">
-         <string/>
-        </property>
-        <property name="html">
-         <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
-&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
-p, li { white-space: pre-wrap; }
-&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'黑体'; font-size:13pt; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p style=&quot;-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-size:11pt;&quot;&gt;&lt;br /&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item row="0" column="0">
-     <widget class="QLabel" name="label_9">
-      <property name="font">
-       <font>
-        <family>等线</family>
-        <pointsize>10</pointsize>
-        <weight>75</weight>
-        <bold>true</bold>
-       </font>
-      </property>
-      <property name="text">
-       <string>Task Demo: (Wait for animation to finish before resetting scene.)</string>
-      </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
      </widget>
     </item>
-    <item row="0" column="2">
-     <widget class="QPushButton" name="btn_say">
-      <property name="font">
-       <font>
-        <family>黑体</family>
-        <pointsize>14</pointsize>
-       </font>
+
+    <!-- 中部三幅图 -->
+    <item row="3" column="1">
+     <widget class="QGroupBox" name="groupTraversable">
+      <property name="title">
+       <string>可通行地图</string>
       </property>
-      <property name="text">
-       <string>Speak</string>
-      </property>
+      <layout class="QVBoxLayout" name="vboxTrav">
+       <item>
+        <widget class="QLabel" name="traversableMapLabel">
+         <property name="minimumSize">
+          <size><width>200</width><height>160</height></size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="text">
+          <string>Traversable Map</string>
+         </property>
+         <property name="scaledContents"><bool>true</bool></property>
+        </widget>
+       </item>
+      </layout>
      </widget>
     </item>
-    <item row="0" column="1">
-     <widget class="QLineEdit" name="edit_say">
-      <property name="font">
-       <font>
-        <family>Times New Roman</family>
-        <pointsize>14</pointsize>
-       </font>
+
+    <item row="3" column="2">
+     <widget class="QGroupBox" name="groupInstance2d">
+      <property name="title">
+       <string>当前视野实例分割</string>
       </property>
-      <property name="text">
-       <string>Is(AC,On)</string>
-      </property>
+      <layout class="QVBoxLayout" name="vboxIns2d">
+       <item>
+        <widget class="QLabel" name="instanceSegLabel">
+         <property name="minimumSize">
+          <size><width>200</width><height>160</height></size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="text">
+          <string>Instance 2D</string>
+         </property>
+         <property name="scaledContents"><bool>true</bool></property>
+        </widget>
+       </item>
+      </layout>
      </widget>
     </item>
-    <item row="4" column="0">
-     <widget class="QLabel" name="label">
-      <property name="font">
-       <font>
-        <family>黑体</family>
-        <pointsize>14</pointsize>
-       </font>
+
+    <item row="3" column="3">
+     <widget class="QGroupBox" name="groupInstance3d">
+      <property name="title">
+       <string>3D实例分割可视化</string>
       </property>
-      <property name="text">
-       <string>Semantic Information</string>
-      </property>
+      <layout class="QVBoxLayout" name="vboxIns3d">
+       <item>
+        <widget class="QLabel" name="instance3DLabel">
+         <property name="minimumSize">
+          <size><width>200</width><height>160</height></size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="text">
+          <string>Instance 3D</string>
+         </property>
+         <property name="scaledContents"><bool>true</bool></property>
+        </widget>
+       </item>
+      </layout>
      </widget>
     </item>
-    <item row="1" column="0">
-     <layout class="QVBoxLayout" name="verticalLayout">
-      <item>
-       <widget class="QPushButton" name="btn_reset">
-        <property name="font">
-         <font>
-          <family>黑体</family>
-          <pointsize>14</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>Reset Scene</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="btn_AEM">
-        <property name="font">
-         <font>
-          <family>黑体</family>
-          <pointsize>14</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>Environment Exploration</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="btn_VLN">
-        <property name="font">
-         <font>
-          <family>黑体</family>
-          <pointsize>14</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>Visual Language Navigation</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="btn_VLM">
-        <property name="font">
-         <font>
-          <family>黑体</family>
-          <pointsize>14</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>Visual Language Manipulation</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="btn_GQA">
-        <property name="font">
-         <font>
-          <family>黑体</family>
-          <pointsize>14</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>Embodied Multi-turn Dialogue</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="btn_OT">
-        <property name="font">
-         <font>
-          <family>黑体</family>
-          <pointsize>14</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>Complex Embodied Tasks</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="btn_AT">
-        <property name="font">
-         <font>
-          <family>黑体</family>
-          <pointsize>14</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>Autonomous Embodied Tasks</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QComboBox" name="cb_task">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>0</width>
-          <height>25</height>
-         </size>
-        </property>
-        <property name="font">
-         <font>
-          <family>黑体</family>
-          <pointsize>14</pointsize>
-         </font>
-        </property>
-        <property name="editable">
-         <bool>false</bool>
-        </property>
-        <property name="currentText">
-         <string/>
-        </property>
-        <property name="currentIndex">
-         <number>-1</number>
-        </property>
-        <property name="insertPolicy">
-         <enum>QComboBox::InsertAtBottom</enum>
-        </property>
-        <property name="placeholderText" stdset="0">
-         <string extracomment="其他任务">其他任务</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
+
+    <!-- 左下 行为树 (占位：放在第4行与左列合并已在 rowspan=3) -->
+    <item row="3" column="0">
+     <widget class="QGroupBox" name="groupBT">
+      <property name="title">
+       <string>当前执行行为树</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxBT">
+       <item>
+        <widget class="QLabel" name="behaviorTreeLabel">
+         <property name="minimumSize">
+          <size><width>220</width><height>200</height></size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="text">
+          <string>Behavior Tree</string>
+         </property>
+         <property name="scaledContents"><bool>true</bool></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </item>
+
+    <!-- 右侧按钮 -->
+    <item row="1" column="4" rowspan="3">
+     <widget class="QGroupBox" name="groupControl">
+      <property name="title">
+       <string>控制</string>
+      </property>
+      <layout class="QVBoxLayout" name="vboxCtrl">
+       <item>
+        <widget class="QPushButton" name="startBtn">
+         <property name="text">
+          <string>启动智能体</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="stopBtn">
+         <property name="text">
+          <string>关闭智能体</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size><width>20</width><height>200</height></size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
    </layout>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
