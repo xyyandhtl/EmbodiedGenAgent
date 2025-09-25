@@ -13,6 +13,7 @@ from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
 
 
 class EGAgentSystem:
+    current_goal = None
     def __init__(self):
         # 初始化 '逻辑Goal生成器'
         self.goal_generator = LogicGoalGenerator()
@@ -34,13 +35,17 @@ class EGAgentSystem:
 
         # todo
 
+    def run(self):
+        self.env.reset()
+        is_finished = False
+        while not is_finished:
+            is_finished = self.env.step()
+            if self.current_goal <= self.env.agents[0].condition_set:
+                is_finished=True
+        self.env.close()
+
     def set_env(self, env):
         self.env = env
-
-    def update(self, env_ret: dict):
-        # todo: update the agent system based on environment feedback
-        # self.bt_agent.update(env_ret)
-        pass
 
     @property
     def finished(self) -> bool:
@@ -57,11 +62,13 @@ class EGAgentSystem:
                          intrinsics: np.ndarray, 
                          image: np.ndarray, 
                          depth: np.ndarray):
+        # 从环境实时获取相机观测给到 Agent
         # todo: camrera observation -> vlmap -> update condition 
         #                                  └ -> low-level action generation
         pass
 
     def feed_instruction(self, text: str):
+        # 接收用户指令
         # todo: goal_generator->bt_generator->bt_agent.bind_bt
         pass
 
