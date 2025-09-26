@@ -1,7 +1,6 @@
 import rclpy
 from rclpy.node import Node
 import numpy as np
-import torch
 import zmq
 import pickle
 
@@ -15,19 +14,35 @@ from tf2_ros import TransformBroadcaster
 class ROSBridge(Node):
     """
     Receives sensor data via ZMQ and publishes it to ROS2 topics.
+    ZMQ schema aligned with ZMQBridge:
+      - SUB (tcp://localhost:5555) receives dicts with optional keys:
+          "pose": (pos_np(3,), quat_wxyz_np(4,))
+          "rgb": np.uint8[H,W,3]
+          "depth": np.uint16[H,W] or np.float32[H,W]
+      - PUB (tcp://*:5556) sends dicts with keys used by the simulation:
+          "cmd_vel": np.float32[6]
+          "nav_pose": (pos_np(3,), quat_wxyz_np(4,))
+          "enum": int
+    Ports must be different: one for sensor stream (SUB), one for commands (PUB).
     """
-    def __init__(self, camera_params, zmq_port=5555, command_port=5556):
+    def __init__(self, camera_params, zmq_port: int = 5555, command_port: int = 5556):
         super().__init__('ros_bridge_node')
         
-        # --- ZMQ Subscriber Setup (for incoming sensor data) ---
-        context = zmq.Context()
-        self.socket = context.socket(zmq.SUB)
+        if zmq_port == command_port:
+            raise ValueError("zmq_port (sensor SUB) and command_port (command PUB) must be different.")
+
+        # --- ZMQ Context and Sockets ---
+        self._zmq_ctx = zmq.Context()
+        # Subscriber: Simulation -> ROS (sensor data)
+        self.socket = self._zmq_ctx.socket(zmq.SUB)
         self.socket.connect(f"tcp://localhost:{zmq_port}")
         self.socket.setsockopt(zmq.SUBSCRIBE, b'')  # Subscribe to all messages
+        # Keep only the most recent message to minimize latency
+        self.socket.setsockopt(zmq.CONFLATE, 1)
         self.get_logger().info(f"Connecting to ZMQ publisher on port {zmq_port}...")
 
-        # --- ZMQ Publisher Setup (to send commands to simulation) ---
-        self.cmd_pub_socket = context.socket(zmq.PUB)
+        # Publisher: ROS -> Simulation (commands)
+        self.cmd_pub_socket = self._zmq_ctx.socket(zmq.PUB)
         self.cmd_pub_socket.bind(f"tcp://*:{command_port}")
         self.get_logger().info(f"Command PUB bound on port {command_port} (publishes ROS -> Simulation commands)")
 
@@ -40,13 +55,17 @@ class ROSBridge(Node):
         self.pose_pub = self.create_publisher(Odometry, "/camera/pose", 10)
         self.camera_info_pub = self.create_publisher(CameraInfo, "/camera_info", 10)
 
-        # --- Prepare CameraInfo message (sent once) ---
+        # --- Prepare CameraInfo message (sent every tick with fresh header) ---
         self.camera_info_msg = self._prepare_camera_info(camera_params)
         
-        # --- ROS2 Subscribers for commands ---
+        # --- ROS2 Subscribers for commands (forwarded to ZMQ) ---
         self.create_subscription(Twist, "/cmd_vel", self._cmd_vel_callback, 10)
         self.create_subscription(PoseStamped, "/nav_pose", self._nav_pose_callback, 10)
-        self.create_subscription(Int32, "/enum_command", self._enum_command_callback, 10)
+        self.create_subscription(Int32, "/enum_cmd", self._enum_command_callback, 10)
+
+        # --- Timer to poll ZMQ and publish to ROS ---
+        # Use a small period for low latency without busy-wait
+        self.create_timer(0.01, self._poll_and_publish)
 
         self.get_logger().info("ROS2 Bridge initialized. Waiting for data...")
 
@@ -60,22 +79,18 @@ class ROSBridge(Node):
         msg.p = [params['fx'], 0.0, params['cx'], 0.0, 0.0, params['fy'], params['cy'], 0.0, 0.0, 0.0, 1.0, 0.0]  # Projection matrix
         return msg
 
-    def run(self):
-        """Main loop to receive data and publish to ROS."""
-        while rclpy.ok():
-            try:
-                # Receive data from ZMQ
+    def _poll_and_publish(self):
+        """Timer callback to receive ZMQ data (non-blocking) and publish to ROS."""
+        try:
+            while True:
                 message = self.socket.recv(flags=zmq.NOBLOCK)
                 sensor_data = pickle.loads(message)
-                
-                # Process and publish
                 self.publish_ros_data(sensor_data)
-
-            except zmq.Again:
-                # No message received, continue
-                pass
-            except Exception as e:
-                self.get_logger().error(f"An error occurred: {e}")
+        except zmq.Again:
+            # No more messages this tick
+            pass
+        except Exception as e:
+            self.get_logger().error(f"An error occurred while polling ZMQ: {e}")
 
     def publish_ros_data(self, sensor_data):
         ros_time = self.get_clock().now().to_msg()
@@ -86,7 +101,6 @@ class ROSBridge(Node):
             pos_np, quat_np_wxyz = pose_tuple
             quat_np_xyzw = np.roll(quat_np_wxyz, -1)
 
-            # Publish Odometry
             odom_msg = Odometry()
             odom_msg.header.stamp = ros_time
             odom_msg.header.frame_id = "map"
@@ -100,7 +114,6 @@ class ROSBridge(Node):
             odom_msg.pose.pose.orientation.w = float(quat_np_xyzw[3])
             self.pose_pub.publish(odom_msg)
 
-            # Broadcast TF
             t = TransformStamped()
             t.header.stamp = ros_time
             t.header.frame_id = 'map'
@@ -122,10 +135,18 @@ class ROSBridge(Node):
             rgb_msg.header.frame_id = "camera_link"
             self.rgb_pub.publish(rgb_msg)
 
-        # --- Depth Image ---
+        # --- Depth Image (support uint16 or float32) ---
         depth_np = sensor_data.get("depth")
         if depth_np is not None:
-            depth_msg = self.bridge.cv2_to_imgmsg(depth_np, "16UC1")
+            if depth_np.dtype == np.uint16:
+                encoding = "16UC1"
+            elif depth_np.dtype == np.float32:
+                encoding = "32FC1"
+            else:
+                # Fallback: try to cast to float32
+                depth_np = depth_np.astype(np.float32, copy=False)
+                encoding = "32FC1"
+            depth_msg = self.bridge.cv2_to_imgmsg(depth_np, encoding)
             depth_msg.header.stamp = ros_time
             depth_msg.header.frame_id = "camera_link"
             self.depth_pub.publish(depth_msg)
@@ -135,23 +156,30 @@ class ROSBridge(Node):
         self.camera_info_msg.header.frame_id = "camera_link"
         self.camera_info_pub.publish(self.camera_info_msg)
 
-    # --- New callbacks to forward ROS messages into ZMQ for simulation ---
+    # --- Callbacks: forward ROS messages into ZMQ for simulation ---
     def _cmd_vel_callback(self, msg: Twist):
         try:
-            data = {"cmd_vel": np.array([msg.linear.x, msg.linear.y, msg.linear.z, msg.angular.x, msg.angular.y, msg.angular.z], dtype=np.float32)}
+            data = {
+                "cmd_vel": np.array(
+                    [msg.linear.x, msg.linear.y, msg.linear.z,
+                     msg.angular.x, msg.angular.y, msg.angular.z],
+                    dtype=np.float32
+                )
+            }
             self.cmd_pub_socket.send(pickle.dumps(data))
-            self.get_logger().debug(f"Forwarded cmd_vel via ZMQ: {data['cmd_vel']}")
         except Exception as e:
             self.get_logger().error(f"Error forwarding cmd_vel: {e}")
 
     def _nav_pose_callback(self, msg: PoseStamped):
         try:
             pos = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z], dtype=np.float32)
-            quat_xyzw = np.array([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w], dtype=np.float32)
+            quat_xyzw = np.array(
+                [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w],
+                dtype=np.float32
+            )
             quat_wxyz = np.roll(quat_xyzw, 1)
             data = {"nav_pose": (pos, quat_wxyz)}
             self.cmd_pub_socket.send(pickle.dumps(data))
-            self.get_logger().debug(f"Forwarded nav_pose via ZMQ: pos={pos}, quat={quat_wxyz}")
         except Exception as e:
             self.get_logger().error(f"Error forwarding nav_pose: {e}")
 
@@ -160,9 +188,24 @@ class ROSBridge(Node):
             cmd = int(msg.data)
             data = {"enum": cmd}
             self.cmd_pub_socket.send(pickle.dumps(data))
-            self.get_logger().info(f"Forwarded enum command via ZMQ: {cmd}")
         except Exception as e:
             self.get_logger().error(f"Error forwarding enum command: {e}")
+
+    def destroy_node(self):
+        # Clean shutdown of ZMQ sockets
+        try:
+            self.cmd_pub_socket.close(0)
+        except Exception:
+            pass
+        try:
+            self.socket.close(0)
+        except Exception:
+            pass
+        try:
+            self._zmq_ctx.term()
+        except Exception:
+            pass
+        return super().destroy_node()
 
 def main():
     rclpy.init()
@@ -179,7 +222,8 @@ def main():
 
     ros_bridge = ROSBridge(camera_params)
     try:
-        ros_bridge.run()
+        # Use ROS2 executor so subscriber callbacks and timers are processed
+        rclpy.spin(ros_bridge)
     finally:
         ros_bridge.destroy_node()
         rclpy.shutdown()

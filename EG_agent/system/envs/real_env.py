@@ -23,7 +23,7 @@ class RealEnv(BaseAgentEnv):
         self.ros_node = Node("isaacsim_env_node")
         self.cmd_vel_pub = self.ros_node.create_publisher(Twist, "/cmd_vel", 10)
         self.nav_pose_pub = self.ros_node.create_publisher(PoseStamped, "/nav_pose", 10)
-        self.enum_pub = self.ros_node.create_publisher(Int32, "/enum_command", 10)
+        self.enum_pub = self.ros_node.create_publisher(Int32, "/enum_cmd", 10)
 
     def reset(self):
         raise NotImplementedError

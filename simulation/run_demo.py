@@ -13,9 +13,11 @@ from simulation.assets import SIMULATION_DIR, SIMULATION_DATA_DIR
 
 CONFIG_PATH = os.path.join(SIMULATION_DIR, "settings.yaml")
 CFG = OmegaConf.load(CONFIG_PATH)
+# prepare output directories (capture/report)
+CAPTURED_DIR = os.path.join(SIMULATION_DIR, "..", "app/captured")
+REPORTS_DIR = os.path.join(SIMULATION_DIR, "..", "app/reports")
 
 from isaaclab.app import AppLauncher
-import carb
 
 # --- Launch Omniverse App ---
 simulation_app = AppLauncher(
@@ -26,10 +28,12 @@ simulation_app = AppLauncher(
     height=CFG.sim_app.height,
     hide_ui=CFG.sim_app.hide_ui,
 ).app
+
+import carb
+import omni.usd
 # Use SimulaitonApp directly should set carb_settings
 # carb_settings_iface = carb.settings.get_settings()
 # carb_settings_iface.set("/persistent/isaac/asset_root/cloud", "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0")
-
 
 from isaaclab.devices import Se2Keyboard, Se2KeyboardCfg
 from isaaclab.envs import ManagerBasedRLEnv
@@ -42,11 +46,11 @@ import simulation.mdp as mdp
 from simulation.env.go2w_locomotion_env_cfg import LocomotionVelocityEnvCfg
 from simulation.utils import (
     camera_follow,
+    handle_enum_action,
     LabGo2WEnvHistoryWrapper,
     IsaacLabSensorHandler,
-    ZMQDataPublisher,
-    ZMQDataSubscriber,
-    SimpleCameraViewer
+    SimpleCameraViewer,
+    ZMQBridge,
 )
 
 def main():
@@ -88,31 +92,20 @@ def main():
     else:
         raise NotImplementedError(f"Policy '{CFG.policy}' not implemented.")
 
+    stage = omni.usd.get_context().get_stage()
     if CFG.add_physics:
-        import omni.usd
-        stage = omni.usd.get_context().get_stage()
         terrain_prim = stage.GetPrimAtPath("/World/Terrain")
         add_collision_and_material(terrain_prim, static_friction=0.8, dynamic_friction=0.6)
 
-    # --- 3. Initialize Sensor Handlers and ZMQ Publisher ---
+    # --- 3. Initialize Sensor Handlers and ZMQ Bridge ---
     sensor_handler = IsaacLabSensorHandler(env, camera_name="rgbd_camera")
     print(f"[INFO] SensorHandler: {sensor_handler}")
 
-    # 信息发布器 的封装
-    zmq_publisher = ZMQDataPublisher()
-    # 底层指令接收器 的封装 ---
-    zmq_subscriber = ZMQDataSubscriber("tcp://localhost:5556")
+    # One bridge for pub/sub
+    zmq = ZMQBridge(pub_port=5555, sub_port=5556)
 
-    # --- Control State ---
-    # Default to "cmd_vel" mode with zero velocity. Mode is switched by incoming ROS commands.
-    control_mode = "cmd_vel"  # cmd_vel / goal_point
-    # latest_cmd_vel = (0.0, 0.0)  # tuple (lin_x, ang_z)
-    # goal_position = torch.tensor([0.0, 0.0, 0.0], device=CFG.policy_device) # Initialized to origin, will be updated by nav_pose
-    latest_cmd_vel = None
-    goal_position = None
-
+    latest_cmd_vel = (0.0, 0.0)  # tuple (lin_x, ang_z)
     marks = []
-    report_file = os.path.join(SIMULATION_DATA_DIR, "../app/reports/xx.txt")
 
     # [DEBUG] Use a simple class to test camera data
     camera_viewer = SimpleCameraViewer()
@@ -138,29 +131,25 @@ def main():
             # 1) Capture a fresh snapshot and use it immediately to minimize desync.
             rgb_tensor, depth_tensor, pose_tuple = sensor_handler.capture_frame()
 
-            # 2) Poll for new commands and update control state.
-            zmq_subscriber.poll()
-            
-            # If a nav_pose command is received, switch to goal_point mode.
-            if zmq_subscriber.nav_pose is not None:
-                if control_mode != "goal_point":
-                    print("[CMD] Received nav_pose. Switching to 'goal_point' mode.")
-                    control_mode = "goal_point"
-                pos_np, quat_np = zmq_subscriber.nav_pose
+            # Poll commands
+            zmq.poll()
+            if zmq.latest_cmd_vel is not None:
+                latest_cmd_vel = zmq.latest_cmd_vel
+                print(f"[CMD] Received cmd_vel -> lin_x={latest_cmd_vel[0]}, ang_z={latest_cmd_vel[1]}")
+            if zmq.nav_pose is not None:
+                pos_np, quat_np = zmq.nav_pose
                 goal_position = torch.tensor([float(pos_np[0]), float(pos_np[1]), float(pos_np[2])], device=CFG.policy_device)
-                print(f"[CMD] New goal position: {goal_position.cpu().numpy()}")
-
-            # If a cmd_vel command is received, switch to cmd_vel mode.
-            if zmq_subscriber.latest_cmd_vel is not None:
-                if control_mode != "cmd_vel":
-                    print("[CMD] Received cmd_vel. Switching to 'cmd_vel' mode.")
-                    control_mode = "cmd_vel"
-                latest_cmd_vel = zmq_subscriber.latest_cmd_vel
-                print(f"[CMD] New velocity command: lin_x={latest_cmd_vel[0]}, ang_z={latest_cmd_vel[1]}")
-
-            # Handle enum command immediately using available frames/pose.
-            if zmq_subscriber.enum_cmd is not None:
-                zmq_subscriber.handle_enum_action(zmq_subscriber.enum_cmd, rgb_tensor, depth_tensor, pose_tuple, SIMULATION_DATA_DIR, marks, report_file)
+                print(f"[CMD] Received nav_pose -> new goal_position={goal_position.cpu().numpy()}")
+            if zmq.enum_cmd is not None:
+                handle_enum_action(
+                    enum_cmd=zmq.enum_cmd,
+                    rgb_tensor=rgb_tensor,
+                    pose_tuple=pose_tuple,
+                    stage=stage,
+                    captured_dir=CAPTURED_DIR,
+                    reports_dir=REPORTS_DIR,
+                    marks=marks,
+                )
 
             # 3) Execute control logic based on the current mode.
             #    The keyboard controller is always running in the background, but its output
@@ -192,7 +181,7 @@ def main():
                 data_to_send['pose'] = (pose_tuple[0][0].cpu().numpy(), pose_tuple[1][0].cpu().numpy())
 
             if data_to_send:
-                zmq_publisher.publish_data(data_to_send)
+                zmq.publish_data(data_to_send)
             camera_viewer.process_frame(data_to_send)
 
             # Time delay for real-time evaluation
@@ -210,8 +199,7 @@ def main():
 
     # --- 6. Cleanup ---
     print("Simulation finished.")
-    zmq_publisher.close()
-    zmq_subscriber.close()
+    zmq.close()
     simulation_app.close()
 
 
