@@ -41,7 +41,8 @@ class IsaacLabSensorHandler:
         # Internal storage for an atomic snapshot of a frame (protected by data_lock)
         self._rgb: torch.Tensor | None = None
         self._depth: torch.Tensor | None = None
-        self._pose: tuple[torch.Tensor, torch.Tensor] | None = None
+        self._pose_camera: tuple[torch.Tensor, torch.Tensor] | None = None
+        self._pose_agent: tuple[torch.Tensor, torch.Tensor] | None = None
         self._intrinsics: torch.Tensor | None = None
 
     def capture_frame(self) -> tuple:
@@ -61,17 +62,20 @@ class IsaacLabSensorHandler:
             asset = self.env.unwrapped.scene["robot"]
             base_pos_w = asset.data.root_pos_w
             base_quat_w = asset.data.root_quat_w
+            base_quat_ros = convert_camera_frame_orientation_convention(base_quat_w, origin="world", target="ros")
+
+            pose_agent = (base_pos_w.clone(), base_quat_ros.clone())
 
             offset_pos = torch.tensor(self.camera.cfg.offset.pos, device=asset.device).unsqueeze(0)
             offset_quat = torch.tensor(self.camera.cfg.offset.rot, device=asset.device).unsqueeze(0)
 
             cam_pos_w = base_pos_w + quat_apply(base_quat_w, offset_pos)
-            cam_quat_w_world = quat_mul(base_quat_w, offset_quat)
-            cam_quat_w_ros = convert_camera_frame_orientation_convention(cam_quat_w_world, origin="world", target="ros")
+            cam_quat_w = quat_mul(base_quat_w, offset_quat)
+            cam_quat_ros = convert_camera_frame_orientation_convention(cam_quat_w, origin="world", target="ros")
 
-            pose = (cam_pos_w.clone(), cam_quat_w_ros.clone())
+            pose_camera = (cam_pos_w.clone(), cam_quat_ros.clone())
 
-        return rgb, depth, pose
+        return rgb, depth, pose_camera, pose_agent
 
     def get_rgb_frame(self) -> torch.Tensor | None:
         """Returns the latest snapshot RGB frame (non-blocking)."""
@@ -86,8 +90,15 @@ class IsaacLabSensorHandler:
     def get_camera_pose(self) -> tuple[torch.Tensor, torch.Tensor] | None:
         """Returns the latest snapshot camera pose (non-blocking)."""
         with self.data_lock:
-            if self._pose is not None:
-                return self._pose[0].clone(), self._pose[1].clone()
+            if self._pose_camera is not None:
+                return self._pose_camera[0].clone(), self._pose_camera[1].clone()
+        return None
+
+    def get_agent_pose(self) -> tuple[torch.Tensor, torch.Tensor] | None:
+        """Returns the latest snapshot camera pose (non-blocking)."""
+        with self.data_lock:
+            if self._pose_agent is not None:
+                return self._pose_agent[0].clone(), self._pose_agent[1].clone()
         return None
 
     def get_intrinsics(self) -> torch.Tensor | None:

@@ -16,6 +16,8 @@ from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo, CompressedImage
 
+from scipy.spatial.transform import Rotation as R
+
 from EG_agent.system.module_path import AGENT_VLMAP_PATH
 from EG_agent.vlmap.dualmap.core import Dualmap
 from EG_agent.vlmap.ros_runner.ros_publisher import ROSPublisher
@@ -219,7 +221,7 @@ class VLMapNavROS2(Node, RunnerROSBase):
             - A velocity command tuple (vx, vy, wz).
             - A boolean `is_reached` flag.
         """
-        current_pose = np.copy(self.dualmap.curr_pose)  # 4x4 pose matrix.
+        current_pose = np.copy(self.dualmap.curr_pose)  # 4x4 pose matrix (camera pose)
         if isinstance(current_pose, np.ndarray) and current_pose.ndim == 3:
             current_pose = current_pose[-1, :, :]
         if waypoint is None or current_pose is None:
@@ -229,6 +231,9 @@ class VLMapNavROS2(Node, RunnerROSBase):
         # Get current position and yaw from the 4x4 pose matrix
         current_pos = current_pose[:3, 3]
         rotation_matrix = current_pose[:3, :3]
+        # current_quat = R.from_matrix(rotation_matrix).as_quat()
+        # current_quat_ = np.roll(current_quat, 1, -1)  # x,y,z,w ==> w,x,y,z
+        # self.logger.warning(f"[VLMapNavROS2][get_cmd_vel] current_pos: {current_pos}, current_quat: {current_quat_}")
 
         current_yaw = np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
 
