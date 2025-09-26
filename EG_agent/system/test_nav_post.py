@@ -40,51 +40,51 @@ def main():
 
     rclpy.init()
     
-    # --- Publisher Node Setup ---
-    # This node is responsible for sending commands to the simulation.
-    publisher_node = Node('agent_system_publisher')
-    cmd_vel_pub = publisher_node.create_publisher(Twist, '/cmd_vel', 10)
-    nav_pose_pub = publisher_node.create_publisher(PoseStamped, '/nav_pose', 10)
-    enum_pub = publisher_node.create_publisher(Int32, '/enum_command', 10)
-    publisher_node.get_logger().warning(f"Publisher node created. Selected mode: {args.mode}")
+    # The VLMap node will also serve as our publisher node
+    vlmap_node = VLMapNavROS2()
 
-    # --- Mode 1: Enum Command ---
-    # This mode is simple and doesn't require the VLMap system.
+    # Create publishers
+    cmd_vel_pub = vlmap_node.create_publisher(Twist, '/cmd_vel', 10)
+    nav_pose_pub = vlmap_node.create_publisher(PoseStamped, '/nav_pose', 10)
+    enum_pub = vlmap_node.create_publisher(Int32, '/enum_command', 10)
+    
+    vlmap_node.get_logger().warning(f"VLMap node created and will also publish commands. Selected mode: {args.mode}")
+
+    # --- Mode 1: Enum Command (Simple, no executor needed) ---
     if args.mode == 'enum':
         if args.cmd is None:
-            publisher_node.get_logger().error("Error: --cmd <integer> is required for 'enum' mode.")
+            vlmap_node.get_logger().error("Error: --cmd <integer> is required for 'enum' mode.")
         else:
+            # Give publisher a moment to connect
+            time.sleep(1.0)
             msg = Int32()
             msg.data = args.cmd
             enum_pub.publish(msg)
-            publisher_node.get_logger().warning(f"Published enum command: {args.cmd} to /enum_command")
-            time.sleep(1) # Allow time for publish
+            vlmap_node.get_logger().warning(f"Published enum command: {args.cmd} to /enum_command")
+            time.sleep(1.0) # Allow time for message to be sent
+        
+        vlmap_node.destroy_node()
         rclpy.shutdown()
         return
 
     # --- Modes 2 & 3: Navigation (cmd_vel or nav_pose) ---
-    # These modes require the full VLMap system.
-    vlmap_node = None
-    executor = None
+    executor = MultiThreadedExecutor()
+    executor.add_node(vlmap_node)
+    spin_thread = threading.Thread(target=executor.spin, daemon=True)
+    
     try:
-        # 1. Initialize VLMap node and run it in the background
-        vlmap_node = VLMapNavROS2()
-
-        executor = MultiThreadedExecutor()
-        executor.add_node(vlmap_node)
-        executor.add_node(publisher_node)
-        spin_thread = threading.Thread(target=executor.spin, daemon=True)
+        # 1. Spin the VLMap node in the background. It handles both mapping and publishing.
         spin_thread.start()
-        vlmap_node.get_logger().warning("VLMap and Publisher nodes are spinning in a background thread.")
+        vlmap_node.get_logger().warning("VLMap node is spinning in a background thread.")
 
         # 2. Wait for VLMap to initialize and build a map
-        initial_wait_time = 20
+        initial_wait_time = 60
         vlmap_node.get_logger().warning(f"Waiting {initial_wait_time}s for map initialization...")
         time.sleep(initial_wait_time)
 
         # 3. Get navigation path
         vlmap_node.get_logger().warning(f"Requesting navigation path for goal: '{args.goal}'")
-        nav_path = vlmap_node.get_nav_path(args.goal)
+        nav_path = vlmap_node.get_nav_path(args.goal, timeout_seconds=60)
 
         if not nav_path:
             vlmap_node.get_logger().error("Failed to get navigation path. Shutting down.")
@@ -94,40 +94,65 @@ def main():
 
         # 4. Execute action based on selected mode
         if args.mode == 'cmd_vel':
-            publisher_node.get_logger().warning("Executing in 'cmd_vel' mode.")
-            cmd_vel_sequence = vlmap_node.get_cmd_vel(nav_path)
-            if not cmd_vel_sequence:
-                publisher_node.get_logger().error("Failed to generate velocity commands.")
-                return
+            # High-frequency closed-loop control performed by this script
+            vlmap_node.get_logger().warning("Executing in 'cmd_vel' mode (high-frequency control).")
             
-            publisher_node.get_logger().warning(f"Sending {len(cmd_vel_sequence)} velocity commands...")
-            for vx, vy, wz in cmd_vel_sequence:
-                twist = Twist()
-                twist.linear.x = float(vx)
-                twist.linear.y = float(vy)
-                twist.linear.z = 0.0
-                twist.angular.x = 0.0
-                twist.angular.y = 0.0
-                twist.angular.z = float(wz)
-                cmd_vel_pub.publish(twist)
-                time.sleep(0.02) # Send at 50Hz
-            publisher_node.get_logger().warning("Velocity sequence execution finished.")
+            control_frequency = 5 # Hz
+            control_period = 1.0 / control_frequency
+
+            for i, waypoint in enumerate(nav_path):
+                vlmap_node.get_logger().warning(f"Moving to waypoint {i+1}/{len(nav_path)}: {waypoint}")
+                count = 0
+                while rclpy.ok():
+                    # Calculate command and check if waypoint is reached
+                    (vx, vy, wz), is_reached = vlmap_node.get_cmd_vel(waypoint)
+                    count += 1
+                    if count % 100 == 0:
+                        vlmap_node.get_logger().warning(f"Moving to waypoint {i}, vx={vx}, vy={vy}, vz={wz}")
+
+                    if is_reached:
+                        vlmap_node.get_logger().warning(f"Waypoint {i+1} reached.")
+                        break # Exit inner loop and move to next waypoint
+
+                    # Publish the velocity command
+                    twist = Twist()
+                    twist.linear.x = float(vx)
+                    twist.linear.y = float(vy)
+                    twist.linear.z = 0.0
+                    twist.angular.x = 0.0
+                    twist.angular.y = 0.0
+                    twist.angular.z = float(wz)
+                    cmd_vel_pub.publish(twist)
+                    
+                    time.sleep(control_period)
+
+            # Stop the robot after the last waypoint
+            cmd_vel_pub.publish(Twist())
+            vlmap_node.get_logger().warning("Final waypoint reached. Navigation finished.")
 
         elif args.mode == 'nav_pose':
-            publisher_node.get_logger().warning("Executing in 'nav_pose' mode.")
-            publisher_node.get_logger().warning(f"Sending {len(nav_path)} waypoints...")
+            # Low-frequency goal posting; simulation handles the control loop
+            vlmap_node.get_logger().warning("Executing in 'nav_pose' mode (low-frequency goal posting).")
+            vlmap_node.get_logger().warning(f"Sending {len(nav_path)} waypoints one by one...")
+
             for i, waypoint in enumerate(nav_path):
+                # Just publish the goal pose
                 ps = PoseStamped()
-                ps.header.stamp = publisher_node.get_clock().now().to_msg()
+                ps.header.stamp = vlmap_node.get_clock().now().to_msg()
                 ps.header.frame_id = "map"
                 ps.pose.position.x = float(waypoint[0])
                 ps.pose.position.y = float(waypoint[1])
                 ps.pose.position.z = float(waypoint[2])
-                ps.pose.orientation.w = 1.0 # Default orientation
+                # Assuming a default orientation is acceptable for navigation goals
+                ps.pose.orientation.w = 1.0 
                 nav_pose_pub.publish(ps)
-                publisher_node.get_logger().warning(f"Sent waypoint {i+1}/{len(nav_path)}: {waypoint}")
-                time.sleep(3.0) # Wait 3 seconds for the robot to approach the waypoint
-            publisher_node.get_logger().warning("Waypoint sequence execution finished.")
+                vlmap_node.get_logger().warning(f"Sent waypoint {i+1}/{len(nav_path)}: {waypoint}. Handing over control to simulation.")
+                
+                # Wait for a significant time, assuming the simulation is now responsible for reaching the goal.
+                # This is a simple way to sequence goals. A more robust implementation would use feedback.
+                time.sleep(10.0) 
+            
+            vlmap_node.get_logger().warning("All waypoints have been sent.")
 
     except KeyboardInterrupt:
         print("\nKeyboard interrupt received.")
@@ -138,6 +163,8 @@ def main():
         print("Shutting down system.")
         if executor:
             executor.shutdown()
+        # The node is part of the executor, which is already shut down.
+        # No need to destroy node explicitly if it was added to an executor.
         rclpy.shutdown()
 
 if __name__ == '__main__':
