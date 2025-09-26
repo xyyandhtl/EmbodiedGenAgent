@@ -16,6 +16,8 @@ from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo, CompressedImage
 
+from scipy.spatial.transform import Rotation as R
+
 from EG_agent.system.module_path import AGENT_VLMAP_PATH
 from EG_agent.vlmap.dualmap.core import Dualmap
 from EG_agent.vlmap.ros_runner.ros_publisher import ROSPublisher
@@ -150,7 +152,7 @@ class VLMapNavROS2(Node, RunnerROSBase):
     # ===============================================
     # High-level API for navigation and querying
     # ===============================================
-    def get_nav_path(self, goal_query: str, goal_mode: GoalMode = None) -> list | None:
+    def get_nav_path(self, goal_query: str, goal_mode: GoalMode = None, timeout_seconds: int = 30) -> list | None:
         # todo: wrap the path planning from dualmap navigation_helper
         """
         Calculates and returns a navigation path based on a goal query.
@@ -190,7 +192,6 @@ class VLMapNavROS2(Node, RunnerROSBase):
             return None
 
         # 2. Wait for the path to be calculated by the dualmap thread
-        timeout_seconds = 30  # Maximum wait time
         start_time = time.time()
         while time.time() - start_time < timeout_seconds:
             if self.dualmap.global_map_manager.has_action_path:
@@ -202,14 +203,13 @@ class VLMapNavROS2(Node, RunnerROSBase):
         return None
 
 
-    def get_cmd_vel(self, path: list, kp: float = 0.5, max_lin_vel: float = 0.5, max_ang_vel: float = 0.8,
-                    yaw_error_threshold: float = 0.5, goal_reached_threshold: float = 0.2) -> list:
-        # todo: impl a simple velocity command generator based on the planned path
+    def get_cmd_vel(self, waypoint: list, kp: float = 0.5, max_lin_vel: float = 2.0, max_ang_vel: float = 1.0,
+                    yaw_error_threshold: float = 1.0, goal_reached_threshold: float = 0.3) -> tuple[tuple, bool]:
         """
-        Generates a sequence of velocity commands to follow a given path using a P-controller logic.
+        Generates a single velocity command and checks if the goal is reached.
 
         Args:
-            path: A list of 3D waypoints [(x, y, z), ...].
+            waypoint: The target 3D waypoint [x, y, z].
             kp: Proportional gain for the angular velocity controller.
             max_lin_vel: Maximum linear velocity (m/s).
             max_ang_vel: Maximum angular velocity (rad/s).
@@ -217,80 +217,53 @@ class VLMapNavROS2(Node, RunnerROSBase):
             goal_reached_threshold: The distance (in meters) to a waypoint to consider it reached.
 
         Returns:
-            A list of velocity commands [(vx, vy, vz), ...], where vy is always 0.
+            A tuple containing:
+            - A velocity command tuple (vx, vy, wz).
+            - A boolean `is_reached` flag.
         """
-        if not path:
-            self.logger.warning("[VLMapNavROS2][get_cmd_vel] received an empty path.")
-            return []
+        current_pose = np.copy(self.dualmap.curr_pose)  # 4x4 pose matrix (camera pose)
+        if isinstance(current_pose, np.ndarray) and current_pose.ndim == 3:
+            current_pose = current_pose[-1, :, :]
+        if waypoint is None or current_pose is None:
+            self.logger.warning("[VLMapNavROS2][get_cmd_vel] Waypoint or current_pose is None.")
+            return ((0.0, 0.0, 0.0), False)
 
-        cmd_vel_sequence = []
-        current_pose = self.dualmap.curr_pose
-        if current_pose is None:
-            self.logger.error(
-                "[VLMapNavROS2][get_cmd_vel] Cannot get current pose from dualmap. Cannot generate velocity commands.")
-            return []
+        # Get current position and yaw from the 4x4 pose matrix
+        current_pos = current_pose[:3, 3]
+        rotation_matrix = current_pose[:3, :3]
+        # current_quat = R.from_matrix(rotation_matrix).as_quat()
+        # current_quat_ = np.roll(current_quat, 1, -1)  # x,y,z,w ==> w,x,y,z
+        # self.logger.warning(f"[VLMapNavROS2][get_cmd_vel] current_pos: {current_pos}, current_quat: {current_quat_}")
 
-        # This function generates an open-loop sequence by simulating the robot's movement.
-        simulated_pose = np.copy(current_pose)
-        dt = 0.1  # Assume 10Hz command rate for simulation
+        current_yaw = np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
 
-        for waypoint in path:
-            # Simulate movement towards each waypoint for a maximum number of steps
-            max_steps_per_waypoint = 200
-            for _ in range(max_steps_per_waypoint):
-                # Get current simulated position and yaw from the 4x4 pose matrix
-                current_pos = simulated_pose[:3, 3]
-                rotation_matrix = simulated_pose[:3, :3]
-                current_yaw = np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
+        # Check if the goal is reached (using 2D distance)
+        dist_to_waypoint = np.linalg.norm(np.array(waypoint)[:2] - current_pos[:2])
+        if dist_to_waypoint < goal_reached_threshold:
+            self.logger.info(f"[VLMapNavROS2][get_cmd_vel] Waypoint reached (distance: {dist_to_waypoint:.2f}m).")
+            return ((0.0, 0.0, 0.0), True)
 
-                # --- P-Controller Logic based on user's reference ---
-                # Calculate distance and angle to the goal (using 2D for navigation)
-                dist_to_goal = np.linalg.norm(np.array(waypoint)[:2] - current_pos[:2])
-                
-                if dist_to_goal <= goal_reached_threshold:
-                    break  # Waypoint reached, move to the next one
+        # --- P-Controller Logic ---
+        # Calculate heading error, wrapped to the range [-pi, pi]
+        goal_yaw = np.arctan2(waypoint[1] - current_pos[1], waypoint[0] - current_pos[0])
+        yaw_error = goal_yaw - current_yaw
+        yaw_error = np.arctan2(np.sin(yaw_error), np.cos(yaw_error))
 
-                goal_yaw = np.arctan2(waypoint[1] - current_pos[1], waypoint[0] - current_pos[0])
+        # Calculate angular velocity
+        ang_vel_z = kp * yaw_error
+        ang_vel_z = np.clip(ang_vel_z, -max_ang_vel, max_ang_vel)
 
-                # Calculate heading error, wrapped to the range [-pi, pi]
-                yaw_error = goal_yaw - current_yaw
-                yaw_error = np.arctan2(np.sin(yaw_error), np.cos(yaw_error))
+        # Calculate linear velocity
+        lin_vel_x = 0.0
+        if abs(yaw_error) > yaw_error_threshold:
+            # Robot needs to turn, reduce linear velocity
+            lin_vel_x = max_lin_vel * (1.0 - (abs(yaw_error) - yaw_error_threshold) / (math.pi - yaw_error_threshold))
+            lin_vel_x = np.clip(lin_vel_x, 0.0, max_lin_vel)
+        else:
+            # Robot is facing the goal, move forward
+            lin_vel_x = max_lin_vel
 
-                # Decide velocity based on distance and heading error
-                lin_vel_x = 0.0
-                ang_vel_z = 0.0
-
-                # Calculate angular velocity
-                ang_vel_z = kp * yaw_error
-                ang_vel_z = np.clip(ang_vel_z, -max_ang_vel, max_ang_vel)
-
-                # Calculate linear velocity (decoupling)
-                if abs(yaw_error) > yaw_error_threshold:
-                    # Robot needs to turn, reduce linear velocity
-                    lin_vel_x = max_lin_vel * (1.0 - (abs(yaw_error) - yaw_error_threshold) / (math.pi - yaw_error_threshold))
-                    lin_vel_x = np.clip(lin_vel_x, 0.0, max_lin_vel)
-                else:
-                    # Robot is facing the goal, move forward
-                    lin_vel_x = max_lin_vel
-                # --- End of P-Controller Logic ---
-
-                # Append the command in (vx, vy, vz) format as requested
-                cmd_vel_sequence.append((lin_vel_x, 0.0, ang_vel_z))
-
-                # --- Simulation of pose update for the next step ---
-                current_yaw += ang_vel_z * dt
-                simulated_pose[0, 0] = np.cos(current_yaw)
-                simulated_pose[0, 1] = -np.sin(current_yaw)
-                simulated_pose[1, 0] = np.sin(current_yaw)
-                simulated_pose[1, 1] = np.cos(current_yaw)
-                simulated_pose[0, 3] += lin_vel_x * np.cos(current_yaw) * dt
-                simulated_pose[1, 3] += lin_vel_x * np.sin(current_yaw) * dt
-                # --- End of simulation ---
-
-        # Add a final stop command
-        cmd_vel_sequence.append((0.0, 0.0, 0.0))
-        self.logger.info(f"[VLMapNavROS2][get_cmd_vel] Generated {len(cmd_vel_sequence)} velocity commands.")
-        return cmd_vel_sequence
+        return ((lin_vel_x, 0.0, ang_vel_z), False)
 
     def query_object(self, query: str):
         # todo: query the object from bt, return the candidates infos 

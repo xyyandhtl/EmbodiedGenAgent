@@ -133,7 +133,7 @@ def main():
 
         with torch.inference_mode():
             # 1) Capture a fresh snapshot and use it immediately to minimize desync.
-            rgb_tensor, depth_tensor, pose_tuple = sensor_handler.capture_frame()
+            rgb_tensor, depth_tensor, pose_camera_tuple, pose_agent_tuple = sensor_handler.capture_frame()
 
             # Poll commands
             zmq.poll()
@@ -160,7 +160,7 @@ def main():
                 handle_enum_action(
                     enum_cmd=zmq.enum_cmd,
                     rgb_tensor=rgb_tensor,
-                    pose_tuple=pose_tuple,
+                    pose_tuple=pose_camera_tuple,
                     stage=stage,
                     captured_dir=CAPTURED_DIR,
                     reports_dir=REPORTS_DIR,
@@ -179,11 +179,15 @@ def main():
                 depth_data = (depth_tensor[0] * 1000).cpu().numpy()
                 depth_data[depth_data > 65535] = 0
                 data_to_send['depth'] = depth_data.astype(np.uint16)
-            if pose_tuple is not None:
-                data_to_send['pose'] = (pose_tuple[0][0].cpu().numpy(), pose_tuple[1][0].cpu().numpy())
+            if pose_camera_tuple is not None:
+                data_to_send['pose'] = (pose_camera_tuple[0][0].cpu().numpy(), pose_camera_tuple[1][0].cpu().numpy())
 
             if data_to_send:
                 zmq.publish_data(data_to_send)
+
+            # [DEBUG]
+            if pose_agent_tuple is not None:
+                data_to_send['pose_agent'] = (pose_agent_tuple[0][0].cpu().numpy(), pose_agent_tuple[1][0].cpu().numpy())
             camera_viewer.process_frame(data_to_send)
 
             # Time delay for real-time evaluation
