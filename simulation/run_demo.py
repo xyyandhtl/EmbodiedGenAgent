@@ -104,7 +104,11 @@ def main():
     # One bridge for pub/sub
     zmq = ZMQBridge(pub_port=5555, sub_port=5556)
 
+    # --- Control State ---
+    # Default to "cmd_vel" mode with zero velocity. Mode is switched by incoming ROS commands.
+    # control_mode = "cmd_vel"  # cmd_vel / goal_point
     latest_cmd_vel = (0.0, 0.0)  # tuple (lin_x, ang_z)
+    goal_position = None
     marks = []
 
     # [DEBUG] Use a simple class to test camera data
@@ -133,13 +137,25 @@ def main():
 
             # Poll commands
             zmq.poll()
+            # 2) Execute control logic based on the current mode.
+            #    The keyboard controller is always running in the background, but its output
+            #    will be overwritten by the logic below if ROS commands are being received,
+            #    cmd_vel has higher priority than nav_pose if both are received.
             if zmq.latest_cmd_vel is not None:
                 latest_cmd_vel = zmq.latest_cmd_vel
                 print(f"[CMD] Received cmd_vel -> lin_x={latest_cmd_vel[0]}, ang_z={latest_cmd_vel[1]}")
-            if zmq.nav_pose is not None:
+                lin_vel_x, ang_vel_z = latest_cmd_vel[0], latest_cmd_vel[1]
+                velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
+                obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
+            elif zmq.nav_pose is not None:
                 pos_np, quat_np = zmq.nav_pose
                 goal_position = torch.tensor([float(pos_np[0]), float(pos_np[1]), float(pos_np[2])], device=CFG.policy_device)
                 print(f"[CMD] Received nav_pose -> new goal_position={goal_position.cpu().numpy()}")
+                lin_vel_x, ang_vel_z = mdp.compute_velocity_with_goalPoint(env, goal_position)
+                velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
+                # Update observation with the new velocity command
+                obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
+            # 3) Handle enum actions (capture/mark/report)
             if zmq.enum_cmd is not None:
                 handle_enum_action(
                     enum_cmd=zmq.enum_cmd,
@@ -149,21 +165,7 @@ def main():
                     captured_dir=CAPTURED_DIR,
                     reports_dir=REPORTS_DIR,
                     marks=marks,
-                )
-
-            # 3) Execute control logic based on the current mode.
-            #    The keyboard controller is always running in the background, but its output
-            #    will be overwritten by the logic below if ROS commands are being received.
-            if control_mode == "goal_point" and goal_position is not None:
-                lin_vel_x, ang_vel_z = mdp.compute_velocity_with_goalPoint(env, goal_position)
-                velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
-                # Update observation with the new velocity command
-                obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
-
-            elif control_mode == "cmd_vel" and latest_cmd_vel is not None:
-                lin_vel_x, ang_vel_z = latest_cmd_vel[0], latest_cmd_vel[1]
-                velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
-                obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
+                )            
   
             actions = policy(obs)
             obs, _, _, _ = env.step(actions)
