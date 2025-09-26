@@ -6,9 +6,6 @@ defaults:
 terrain: "davinci"   # see assets/terrains/usd_scene.py
 add_physics: True # if the terrain usd dont have collision
 
-# agent controll config
-controller: "keyboard"  # keyboard / goal_point
-
 # locomotion config
 policy: eilab  # (reconstructed from legged-loco)
 observation_len: 5

@@ -131,7 +131,7 @@ You will need to open **at least three terminals**.
 conda activate <your-ros-py3.10-env>
 
 # Run the vlmap node
-python EG_agent/vlmap/ros_runner/runner_ros.py
+python EG_agent/vlmap/vlmap_nav_ros2.py
 ```
 
 **Terminal 2: Start the ROS Bridge**
