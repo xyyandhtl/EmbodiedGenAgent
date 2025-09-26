@@ -599,10 +599,13 @@ class GlobalMapManager(BaseMapManager):
             logger.info("[GlobalMap][Path] Goal mode: INQUIRY")
 
             # Step 1, from gloabl map find the best candidate
-
-            global_goal_candidate = None
-
             global_goal_candidate, score = self.find_best_candidate_with_inquiry()
+
+            # --- FIX: Check if a candidate was actually found ---
+            if global_goal_candidate is None:
+                logger.error("[GlobalMap][Path] Could not find a suitable goal candidate for the inquiry.")
+                return None
+            # --- END FIX ---
 
             # Get center of the best candidate
             goal_3d = global_goal_candidate.bbox_2d.get_center()
@@ -683,6 +686,12 @@ class GlobalMapManager(BaseMapManager):
         # Now we have a list of tuples [(obj, max_sim), (obj, max_sim), ...]
         # Sort the objects by similarity, from highest to lowest
         sorted_candidates = sorted(cos_sim, key=lambda x: x[1], reverse=True)
+
+        # --- FIX: Check if any candidates were found before accessing the list ---
+        if not sorted_candidates:
+            logger.warning("[GlobalMap][Inquiry] No matching object candidates found for the query.")
+            return None, 0.0
+        # --- END FIX ---
 
         # Get the best candidate (highest cosine similarity)
         best_candidate, best_similarity = sorted_candidates[0]
