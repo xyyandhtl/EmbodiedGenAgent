@@ -93,3 +93,32 @@ INFO:EG_agent.vlmap.utils.time_utils:+-------------------------------+----------
 | Visualize Detection           |         0.0229 |                0.042  |
 +-------------------------------+----------------+-----------------------+
 ```
+
+
+
+### test simulation env receiving ROS2 command topics
+Publish cmd_vel (10 Hz), then stop:
+```shell
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 2.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: -1.0}}" -r 10
+# stop
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" --once
+```
+Publish nav_pose (PoseStamped) once
+```shell
+ros2 topic pub /nav_pose geometry_msgs/msg/PoseStamped "{
+  header: {frame_id: map},
+  pose: {
+    position: {x: 1.0, y: 2.0, z: 0.0},
+    orientation: {x: 0.0, y: 0.0, z: 0.7071, w: 0.7071}
+  }
+}" --once
+```
+Publish enum_cmd (0: Capture, 1: Mark, 2: Report):
+```shell
+# Capture
+ros2 topic pub /enum_cmd std_msgs/msg/Int32 "{data: 0}" --once
+# Mark
+ros2 topic pub /enum_cmd std_msgs/msg/Int32 "{data: 1}" --once
+# Report
+ros2 topic pub /enum_cmd std_msgs/msg/Int32 "{data: 2}" --once
+```

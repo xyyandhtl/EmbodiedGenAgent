@@ -9,7 +9,8 @@ from EG_agent.system.system import EGAgentSystem
 # 仅测试界面
 # from system_example import EGAgentSystem
 
-UI_PATH = os.path.join(os.path.dirname(__file__), "window.ui")
+APP_ROOT = os.path.abspath(os.path.dirname(__file__))
+UI_PATH = os.path.join(APP_ROOT, "window.ui")
 
 def np_to_qpix(img: np.ndarray) -> QtGui.QPixmap:
     if img is None:
@@ -78,6 +79,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.entityTable.verticalHeader().setVisible(False)
 
         self.update_statusbar()
+
+        # --- 新增：初始化图像与报告浏览器 ---
+        self._setup_image_browser()
+        self._setup_report_browser()
 
     # ----------------- UI Events -----------------
     def on_start(self):
@@ -152,6 +157,248 @@ class MainWindow(QtWidgets.QMainWindow):
     def update_statusbar(self):
         state = "运行中" if self.agent.status else "已停止"
         self.statusbar.showMessage(f"智能体状态: {state}")
+
+    # --- 新增：图像浏览器初始化与行为 ---
+    def _setup_image_browser(self):
+        # 允许 UI 里不存在时安全跳过（若未合并 .ui 修改）
+        if not hasattr(self, "imageList"):
+            return
+
+        # 配置列表视图（在 .ui 已设定，这里确保一致）
+        self.imageList.setViewMode(QtWidgets.QListView.IconMode)
+        self.imageList.setIconSize(QtCore.QSize(96, 96))
+        self.imageList.setResizeMode(QtWidgets.QListView.Adjust)
+        self.imageList.setMovement(QtWidgets.QListView.Static)
+        self.imageList.setWrapping(True)
+        self.imageList.setSpacing(8)
+        self.imageList.setDragEnabled(True)
+        self.imageList.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+
+        # 连接信号
+        if hasattr(self, "browseImageDirBtn"):
+            self.browseImageDirBtn.clicked.connect(self.on_browse_image_dir)
+        if hasattr(self, "imageDirEdit"):
+            self.imageDirEdit.returnPressed.connect(self.on_image_dir_entered)
+        self.imageList.itemDoubleClicked.connect(self.on_image_double_clicked)
+
+        # 监视文件夹变更
+        self._imageWatcher = QtCore.QFileSystemWatcher(self)
+        self._imageWatcher.directoryChanged.connect(self._on_image_dir_changed)
+
+        # 选择默认目录并加载
+        self._init_default_image_dir()
+
+    def _init_default_image_dir(self):
+        candidates = [
+            os.path.join(APP_ROOT, "captured"),
+            os.path.expanduser("~/Pictures"),
+            os.path.expanduser("~/图片"),
+        ]
+        path = next((p for p in candidates if os.path.isdir(p)), "")
+        if hasattr(self, "imageDirEdit"):
+            self.imageDirEdit.setText(path)
+        if path:
+            self.load_image_folder(path)
+
+    def on_browse_image_dir(self):
+        path = QtWidgets.QFileDialog.getExistingDirectory(
+            self, "选择图像文件夹", self.imageDirEdit.text() if hasattr(self, "imageDirEdit") else ""
+        )
+        if path:
+            if hasattr(self, "imageDirEdit"):
+                self.imageDirEdit.setText(path)
+            self.load_image_folder(path)
+
+    def on_image_dir_entered(self):
+        path = self.imageDirEdit.text().strip()
+        self.load_image_folder(path)
+
+    def _on_image_dir_changed(self, path):
+        # 目录内容变化时刷新
+        self.load_image_folder(path)
+
+    def load_image_folder(self, path: str):
+        if not hasattr(self, "imageList"):
+            return
+        self.imageList.clear()
+
+        if not path or not os.path.isdir(path):
+            return
+
+        # 更新 watcher
+        try:
+            # 清理旧监听
+            for d in self._imageWatcher.directories():
+                self._imageWatcher.removePath(d)
+            self._imageWatcher.addPath(path)
+        except Exception:
+            pass
+
+        exts = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp"}
+        try:
+            files = [
+                os.path.join(path, f)
+                for f in os.listdir(path)
+                if os.path.splitext(f.lower())[1] in exts
+            ]
+        except Exception:
+            files = []
+
+        icon_sz = self.imageList.iconSize()
+        for f in sorted(files):
+            pix = QtGui.QPixmap(f)
+            if pix.isNull():
+                continue
+            thumb = pix.scaled(icon_sz, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+            item = QtWidgets.QListWidgetItem(QtGui.QIcon(thumb), os.path.basename(f))
+            item.setToolTip(f)
+            item.setData(QtCore.Qt.UserRole, f)
+            self.imageList.addItem(item)
+
+    def on_image_double_clicked(self, item: QtWidgets.QListWidgetItem):
+        path = item.data(QtCore.Qt.UserRole)
+        if not path or not os.path.isfile(path):
+            return
+        pix = QtGui.QPixmap(path)
+        if pix.isNull():
+            return
+
+        # 简洁预览对话框
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle(os.path.basename(path))
+        dlg.setModal(True)
+        v = QtWidgets.QVBoxLayout(dlg)
+        lbl = QtWidgets.QLabel(dlg)
+        lbl.setAlignment(QtCore.Qt.AlignCenter)
+        lbl.setScaledContents(True)
+        lbl.setPixmap(pix)
+        v.addWidget(lbl)
+        # 合理的初始大小，支持用户调整
+        dlg.resize(min(max(pix.width(), 640), 1200), min(max(pix.height(), 480), 900))
+        dlg.exec_()
+
+    # --- 新增：报告浏览器初始化与行为 ---
+    def _setup_report_browser(self):
+        if not hasattr(self, "reportList"):
+            return
+
+        self.reportList.setViewMode(QtWidgets.QListView.IconMode)
+        self.reportList.setIconSize(QtCore.QSize(96, 96))
+        self.reportList.setResizeMode(QtWidgets.QListView.Adjust)
+        self.reportList.setMovement(QtWidgets.QListView.Static)
+        self.reportList.setWrapping(True)
+        self.reportList.setSpacing(8)
+        self.reportList.setDragEnabled(True)
+        self.reportList.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+
+        if hasattr(self, "browseReportDirBtn"):
+            self.browseReportDirBtn.clicked.connect(self.on_browse_report_dir)
+        if hasattr(self, "reportDirEdit"):
+            self.reportDirEdit.returnPressed.connect(self.on_report_dir_entered)
+        self.reportList.itemDoubleClicked.connect(self.on_report_double_clicked)
+
+        self._reportWatcher = QtCore.QFileSystemWatcher(self)
+        self._reportWatcher.directoryChanged.connect(self._on_report_dir_changed)
+
+        self._init_default_report_dir()
+
+    def _init_default_report_dir(self):
+        candidates = [
+            os.path.join(APP_ROOT, "reports"),
+            # os.path.join(APP_ROOT, "output", "reports"),
+            os.path.expanduser("~/Documents"),
+        ]
+        path = next((p for p in candidates if os.path.isdir(p)), "")
+        if hasattr(self, "reportDirEdit"):
+            self.reportDirEdit.setText(path)
+        if path:
+            self.load_report_folder(path)
+
+    def on_browse_report_dir(self):
+        path = QtWidgets.QFileDialog.getExistingDirectory(
+            self, "选择报告文件夹", self.reportDirEdit.text() if hasattr(self, "reportDirEdit") else ""
+        )
+        if path:
+            if hasattr(self, "reportDirEdit"):
+                self.reportDirEdit.setText(path)
+            self.load_report_folder(path)
+
+    def on_report_dir_entered(self):
+        path = self.reportDirEdit.text().strip()
+        self.load_report_folder(path)
+
+    def _on_report_dir_changed(self, path):
+        self.load_report_folder(path)
+
+    def load_report_folder(self, path: str):
+        if not hasattr(self, "reportList"):
+            return
+        self.reportList.clear()
+
+        if not path or not os.path.isdir(path):
+            return
+
+        try:
+            for d in self._reportWatcher.directories():
+                self._reportWatcher.removePath(d)
+            self._reportWatcher.addPath(path)
+        except Exception:
+            pass
+
+        # 支持常见报告类型
+        report_exts = {
+            ".pdf", ".html", ".htm", ".txt", ".md", ".log", ".json", ".csv"
+        }
+        try:
+            files = [
+                os.path.join(path, f)
+                for f in os.listdir(path)
+                if os.path.splitext(f.lower())[1] in report_exts
+            ]
+        except Exception:
+            files = []
+
+        icon_sz = self.reportList.iconSize()
+        file_icon = self.style().standardIcon(QtWidgets.QStyle.SP_FileIcon)
+        for f in sorted(files):
+            # 简单生成缩略图：文本用标准图标，HTML/PDF不解析缩略图
+            icon = file_icon
+            pix = QtGui.QPixmap(icon_sz)
+            pix.fill(QtCore.Qt.transparent)
+            icon = icon
+
+            item = QtWidgets.QListWidgetItem(icon, os.path.basename(f))
+            item.setToolTip(f)
+            item.setData(QtCore.Qt.UserRole, f)
+            self.reportList.addItem(item)
+
+    def on_report_double_clicked(self, item: QtWidgets.QListWidgetItem):
+        path = item.data(QtCore.Qt.UserRole)
+        if not path or not os.path.isfile(path):
+            return
+        self._open_report(path)
+
+    def _open_report(self, path: str):
+        ext = os.path.splitext(path.lower())[1]
+        text_exts = {".txt", ".md", ".log", ".json", ".csv"}
+        if ext in text_exts:
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+            except Exception as e:
+                content = f"无法读取文件：{e}"
+
+            dlg = QtWidgets.QDialog(self)
+            dlg.setWindowTitle(os.path.basename(path))
+            dlg.resize(800, 600)
+            layout = QtWidgets.QVBoxLayout(dlg)
+            text = QtWidgets.QTextEdit(dlg)
+            text.setReadOnly(True)
+            text.setPlainText(content)
+            layout.addWidget(text)
+            dlg.exec_()
+        else:
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(path))
 
     # ----------------- Close -----------------
     def closeEvent(self, event: QtGui.QCloseEvent):

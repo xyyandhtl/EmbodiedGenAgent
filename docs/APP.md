@@ -30,7 +30,7 @@ Attempt 5:
 
 
 
-### GUI 所需 agent_system 标准接口 (GPT生成，供参考)
+### GUI 所需 agent_system 标准接口
 
 本 GUI 通过一个名为 EGAgentSystem 的对象进行交互。任何实现均需满足以下接口与约定，以便可直接替换到 app/main.py 中使用。
 
@@ -90,10 +90,7 @@ Attempt 5:
 - get_current_instance_3d_image() -> np.ndarray  3D 实例可视化（低频 ~3s）
 - get_entity_bt_image() -> np.ndarray            行为树图（低频 ~5s）
 
-要求：
-- 尺寸可变，GUI 会自动缩放。
-- 如当前无新图，可返回上次缓存；如不可用可返回 None（GUI 会显示空图），但推荐始终返回有效图避免闪烁。
-- 方法需快速返回（建议 <10ms）。
+
 
 #### 7) 线程与性能约束
 - start/stop 内部使用线程执行主循环或订阅回调，避免在 GUI 线程中阻塞。
@@ -101,7 +98,7 @@ Attempt 5:
 - 所有 get_* 拉取方法应为非阻塞、快速返回；可返回缓存的数据。
 - stop() 应终止所有子线程/任务，确保进程可正常退出。
 
-#### 8) 最小接口清单（签名）
+#### 8) 最小接口清单
 ```python
 class EGAgentSystem:
     # lifecycle
@@ -133,8 +130,3 @@ class EGAgentSystem:
     def get_current_instance_3d_image(self): ...
     def get_entity_bt_image(self): ...
 ```
-
-#### 9) 行为建议
-- 出错时写入日志并尽量返回上次有效数据，而非抛异常到 GUI。
-- 图片、文本的缓存与更新频率可以内部自定；上层 GUI 有定时器节流。
-- 可按需扩展更多事件类型，但请保持以上最小接口稳定。
