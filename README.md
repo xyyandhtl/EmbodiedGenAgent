@@ -13,15 +13,17 @@ A Generative Embodied Agent that transforms open-ended instructions into behavio
 - [ ] Implement the path planner and cmd_vel controller
 - [ ] Enhance the prompts engineering with memory / map for better reasoning and interactive task
 - [ ] Usage examples for EG_system running in simulator
-- [ ] An interactive GUI to demo
+- [x] An interactive GUI to demo
 - [ ] The frontier exploration navigator for task-oriented exploration
 
 
 ## Dependencies
-- Python >= 3.11 (only tested on Ubuntu Python 3.11)
+EG_agent:
+- Python == 3.10 (to use the released rclpy without rebuilding ROS2’s non-py310 bindings)
 - see [requirements.txt](requirements.txt)
 
-> to deploy and test EG_agent in simulation:
+to deploy and test EG_agent in simulation:
+- Python >= 3.11 (use a ZMQ ros bridge to connect with EG_agent)
 - [IsaacSim](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/installation/install_python.html) == 5.0.0
 - [IsaacLab](https://isaac-sim.github.io/IsaacLab/v2.2.1/source/setup/installation/pip_installation.html) == 2.2.1
 

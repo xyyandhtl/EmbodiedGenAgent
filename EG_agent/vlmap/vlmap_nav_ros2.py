@@ -76,8 +76,8 @@ class VLMapNavROS2(Node, RunnerROSBase):
         )
         self.sync.registerCallback(self.synced_callback)
 
-        # CameraInfo fallback
-        self.create_subscription(CameraInfo, self.cfg.ros_topics.camera_info, self.camera_info_callback, 10)
+        # CameraInfo fallback, currently directly read from cfg
+        # self.create_subscription(CameraInfo, self.cfg.ros_topics.camera_info, self.camera_info_callback, 10)
 
         # Publisher (发布地图、路径等信息) and timer (以固定的频率 (ros_rate) 调用 run 方法)
         self.publisher = ROSPublisher(self, self.cfg)

@@ -1,11 +1,11 @@
 # basic dependencies
 numpy==1.26.4
 opencv-python==4.10.0.84
-# torch   # recommend to install with isaacsim
-# torchvision
 pillow
 plotly
 tqdm
+# torch
+# torchvision
 
 # reasoning module
 openai
@@ -34,6 +34,9 @@ git+https://github.com/apple/ml-mobileclip.git --no-deps
 # habitat-sim==0.3.2  # source install
 # habitat-lab==0.3.2  # source install
 # gym==0.23.0
+
+# app GUI
+PyQt5
 
 # isaacsim agent deployment env: see simulation/SIMULATION.md
 

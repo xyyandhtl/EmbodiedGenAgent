@@ -116,53 +116,188 @@ QLabel#titleLabel {
      </widget>
     </item>
 
-    <!-- 右上 语义实体地图 -->
-    <item row="1" column="1" colspan="3">
-     <widget class="QGroupBox" name="groupSemantic">
-      <property name="title">
-       <string>语义实体地图和导航路径可视化</string>
+    <!-- 右上 2x2 布局：左列为图像/报告，右列为地图/实体 -->
+    <item row="1" column="1" rowspan="2" colspan="3">
+     <widget class="QSplitter" name="splitUpperRight">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
       </property>
-      <layout class="QVBoxLayout" name="vboxSemantic">
-       <item>
-        <widget class="QLabel" name="semanticMapLabel">
-         <property name="minimumSize">
-          <size><width>400</width><height>200</height></size>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-         <property name="text">
-          <string>Semantic / Path Map</string>
-         </property>
-         <property name="scaledContents"><bool>true</bool></property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-    </item>
 
-    <!-- 实体信息列表 -->
-    <item row="2" column="1" colspan="3">
-     <widget class="QGroupBox" name="groupEntities">
-      <property name="title">
-       <string>实体信息列表（可上下拖动）</string>
-      </property>
-      <layout class="QVBoxLayout" name="vboxEntities">
-       <item>
-        <widget class="QTableWidget" name="entityTable">
-         <column>
-          <property name="text">
-           <string>实体</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>信息</string>
-          </property>
-         </column>
-        </widget>
-       </item>
-      </layout>
+      <!-- 左列：上 图像浏览 / 下 报告浏览 -->
+      <widget class="QSplitter" name="splitLeftCol">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+
+       <!-- 已采集图像（保持原对象名与结构） -->
+       <widget class="QGroupBox" name="groupImageBrowser">
+        <property name="title">
+         <string>已采集图像</string>
+        </property>
+        <layout class="QVBoxLayout" name="vboxImageBrowser">
+         <item>
+          <layout class="QHBoxLayout" name="hboxImageDir">
+           <item>
+            <widget class="QLineEdit" name="imageDirEdit">
+             <property name="placeholderText">
+              <string>选择图像文件夹...</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="browseImageDirBtn">
+             <property name="text">
+              <string>浏览</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QListWidget" name="imageList">
+           <property name="viewMode">
+            <enum>QListView::IconMode</enum>
+           </property>
+           <property name="movement">
+            <enum>QListView::Static</enum>
+           </property>
+           <property name="resizeMode">
+            <enum>QListView::Adjust</enum>
+           </property>
+           <property name="flow">
+            <enum>QListView::LeftToRight</enum>
+           </property>
+           <property name="wrapping">
+            <bool>true</bool>
+           </property>
+           <property name="iconSize">
+            <size><width>96</width><height>96</height></size>
+           </property>
+           <property name="spacing">
+            <number>8</number>
+           </property>
+           <property name="dragEnabled">
+            <bool>true</bool>
+           </property>
+           <property name="selectionMode">
+            <enum>QAbstractItemView::SingleSelection</enum>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+
+       <!-- 报告浏览（保持原对象名与结构） -->
+       <widget class="QGroupBox" name="groupReportBrowser">
+        <property name="title">
+         <string>报告浏览</string>
+        </property>
+        <layout class="QVBoxLayout" name="vboxReportBrowser">
+         <item>
+          <layout class="QHBoxLayout" name="hboxReportDir">
+           <item>
+            <widget class="QLineEdit" name="reportDirEdit">
+             <property name="placeholderText">
+              <string>选择报告文件夹...</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="browseReportDirBtn">
+             <property name="text">
+              <string>浏览</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QListWidget" name="reportList">
+           <property name="viewMode">
+            <enum>QListView::IconMode</enum>
+           </property>
+           <property name="movement">
+            <enum>QListView::Static</enum>
+           </property>
+           <property name="resizeMode">
+            <enum>QListView::Adjust</enum>
+           </property>
+           <property name="flow">
+            <enum>QListView::LeftToRight</enum>
+           </property>
+           <property name="wrapping">
+            <bool>true</bool>
+           </property>
+           <property name="iconSize">
+            <size><width>96</width><height>96</height></size>
+           </property>
+           <property name="spacing">
+            <number>8</number>
+           </property>
+           <property name="dragEnabled">
+            <bool>true</bool>
+           </property>
+           <property name="selectionMode">
+            <enum>QAbstractItemView::SingleSelection</enum>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </widget>
+
+      <!-- 右列：上 语义/路径地图 / 下 实体信息表 -->
+      <widget class="QSplitter" name="splitRightCol">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+
+       <!-- 语义实体地图（保持原对象名与结构） -->
+       <widget class="QGroupBox" name="groupSemantic">
+        <property name="title">
+         <string>语义实体地图和导航路径可视化</string>
+        </property>
+        <layout class="QVBoxLayout" name="vboxSemantic">
+         <item>
+          <widget class="QLabel" name="semanticMapLabel">
+           <property name="minimumSize">
+            <size><width>400</width><height>200</height></size>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+           <property name="text">
+            <string>Semantic / Path Map</string>
+           </property>
+           <property name="scaledContents"><bool>true</bool></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+
+       <!-- 实体信息列表（保持原对象名与结构） -->
+       <widget class="QGroupBox" name="groupEntitiesTop">
+        <property name="title">
+         <string>实体信息列表</string>
+        </property>
+        <layout class="QVBoxLayout" name="vboxEntitiesTop">
+         <item>
+          <widget class="QTableWidget" name="entityTable">
+           <column>
+            <property name="text">
+             <string>实体</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>信息</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </widget>
      </widget>
     </item>
 
@@ -239,7 +374,7 @@ QLabel#titleLabel {
      </widget>
     </item>
 
-    <!-- 左下 行为树 (占位：放在第4行与左列合并已在 rowspan=3) -->
+    <!-- 左下 行为树 -->
     <item row="3" column="0">
      <widget class="QGroupBox" name="groupBT">
       <property name="title">
@@ -249,7 +384,7 @@ QLabel#titleLabel {
        <item>
         <widget class="QLabel" name="behaviorTreeLabel">
          <property name="minimumSize">
-          <size><width>300</width><height>200</height></size>
+          <size><width>300</width><height>180</height></size>
          </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">

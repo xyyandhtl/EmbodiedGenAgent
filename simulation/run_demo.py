@@ -112,7 +112,7 @@ def main():
     goal_position = None
 
     marks = []
-    report_file = os.path.join(SIMULATION_DATA_DIR, "ros_command_reports.txt")
+    report_file = os.path.join(SIMULATION_DATA_DIR, "../app/reports/xx.txt")
 
     # [DEBUG] Use a simple class to test camera data
     camera_viewer = SimpleCameraViewer()
