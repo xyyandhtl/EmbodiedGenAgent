@@ -103,7 +103,14 @@ def main():
     # 底层指令接收器 的封装 ---
     zmq_subscriber = ZMQDataSubscriber("tcp://localhost:5556")
 
-    latest_cmd_vel = (0.0, 0.0)  # tuple (lin_x, ang_z)
+    # --- Control State ---
+    # Default to "cmd_vel" mode with zero velocity. Mode is switched by incoming ROS commands.
+    control_mode = "cmd_vel"  # cmd_vel / goal_point
+    # latest_cmd_vel = (0.0, 0.0)  # tuple (lin_x, ang_z)
+    # goal_position = torch.tensor([0.0, 0.0, 0.0], device=CFG.policy_device) # Initialized to origin, will be updated by nav_pose
+    latest_cmd_vel = None
+    goal_position = None
+
     marks = []
     report_file = os.path.join(SIMULATION_DATA_DIR, "ros_command_reports.txt")
 
@@ -122,9 +129,6 @@ def main():
     policy_step_dt = float(env_cfg.sim.dt * env_cfg.decimation)
     obs, _ = env.reset()
     print(f"[INFO] init-observation shape: {obs.shape}")
-
-    # --- Set goal position ---
-    goal_position = torch.tensor([-3.0, 8.0, 0.4], device=CFG.policy_device)
     
     frame_count = 0
     while simulation_app.is_running():
@@ -134,36 +138,47 @@ def main():
             # 1) Capture a fresh snapshot and use it immediately to minimize desync.
             rgb_tensor, depth_tensor, pose_tuple = sensor_handler.capture_frame()
 
-            # 2) 再处理接收 topic 并响应：poll + 更新状态/执行 enum action
+            # 2) Poll for new commands and update control state.
             zmq_subscriber.poll()
-            # update latest cmd_vel if provided
-            if zmq_subscriber.latest_cmd_vel is not None:
-                latest_cmd_vel = zmq_subscriber.latest_cmd_vel
-                print(f"[CMD] Received cmd_vel -> lin_x={latest_cmd_vel[0]}, ang_z={latest_cmd_vel[1]}")
-            # update nav goal if provided
+            
+            # If a nav_pose command is received, switch to goal_point mode.
             if zmq_subscriber.nav_pose is not None:
+                if control_mode != "goal_point":
+                    print("[CMD] Received nav_pose. Switching to 'goal_point' mode.")
+                    control_mode = "goal_point"
                 pos_np, quat_np = zmq_subscriber.nav_pose
                 goal_position = torch.tensor([float(pos_np[0]), float(pos_np[1]), float(pos_np[2])], device=CFG.policy_device)
-                print(f"[CMD] Received nav_pose -> new goal_position={goal_position.cpu().numpy()}")
-            # handle enum command immediately using available frames/pose
+                print(f"[CMD] New goal position: {goal_position.cpu().numpy()}")
+
+            # If a cmd_vel command is received, switch to cmd_vel mode.
+            if zmq_subscriber.latest_cmd_vel is not None:
+                if control_mode != "cmd_vel":
+                    print("[CMD] Received cmd_vel. Switching to 'cmd_vel' mode.")
+                    control_mode = "cmd_vel"
+                latest_cmd_vel = zmq_subscriber.latest_cmd_vel
+                print(f"[CMD] New velocity command: lin_x={latest_cmd_vel[0]}, ang_z={latest_cmd_vel[1]}")
+
+            # Handle enum command immediately using available frames/pose.
             if zmq_subscriber.enum_cmd is not None:
                 zmq_subscriber.handle_enum_action(zmq_subscriber.enum_cmd, rgb_tensor, depth_tensor, pose_tuple, SIMULATION_DATA_DIR, marks, report_file)
 
-            # 3) 最后运行 policy 并 step（使用可能被覆盖的 latest_cmd_vel / goal_position）
-            if CFG.controller == "goal":
-                lin_vel_x, ang_vel_z = mdp.compute_velocity_with_goalPoint(env, goal_position)   
+            # 3) Execute control logic based on the current mode.
+            #    The keyboard controller is always running in the background, but its output
+            #    will be overwritten by the logic below if ROS commands are being received.
+            if control_mode == "goal_point" and goal_position is not None:
+                lin_vel_x, ang_vel_z = mdp.compute_velocity_with_goalPoint(env, goal_position)
                 velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
                 # Update observation with the new velocity command
                 obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
-            elif CFG.controller == "cmd_vel":
+
+            elif control_mode == "cmd_vel" and latest_cmd_vel is not None:
                 lin_vel_x, ang_vel_z = latest_cmd_vel[0], latest_cmd_vel[1]
                 velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
-                # Update observation with the new velocity command
                 obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
   
             actions = policy(obs)
             obs, _, _, _ = env.step(actions)
-            # camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
+            camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
 
             # --- 发布 sensor 数据（保持原逻辑） ---
             data_to_send = {}
