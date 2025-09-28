@@ -76,13 +76,14 @@ def handle_enum_action(
         if pose_tuple is not None:
             try:
                 pos_np = pose_tuple[0][0].cpu().numpy()
-                quat_np = pose_tuple[1][0].cpu().numpy()
-                yaw = _yaw_from_quat_xyzw(quat_np)  # assumes [x,y,z,w]
+                quat_wxyz_np = pose_tuple[1][0].cpu().numpy()
+                quat_xyzw_np = np.roll(quat_wxyz_np, -1)
+                yaw = _yaw_from_quat_xyzw(quat_xyzw_np)  # assumes [x,y,z,w]
                 forward = np.array([np.cos(yaw), np.sin(yaw), 0.0], dtype=np.float32)
                 offset = 0.8
                 flag_pos = pos_np + forward * offset
                 _spawn_flag_at(stage, flag_pos, ts_fmt)
-                marks.append((pos_np.tolist(), quat_np.tolist(), ts_ms))
+                marks.append((pos_np.tolist(), quat_xyzw_np.tolist(), ts_ms))
                 print(f"[ACTION] Placed flag at {flag_pos.tolist()} (mark count={len(marks)})")
             except Exception as e:
                 print(f"[ACTION] Failed to place flag (TODO): {e}")
