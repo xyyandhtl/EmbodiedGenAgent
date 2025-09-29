@@ -173,7 +173,8 @@ def main():
   
             actions = policy(obs)
             obs, _, _, _ = env.step(actions)
-            camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
+
+            # camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
 
             # --- 发布 sensor 数据（按CFG间隔） ---
             now = time.time()

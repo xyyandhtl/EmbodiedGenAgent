@@ -98,8 +98,8 @@ class ROSBridge(Node):
         # --- Pose and TF ---
         pose_tuple = sensor_data.get("pose")
         if pose_tuple is not None:
-            pos_np, quat_np_wxyz = pose_tuple
-            quat_np_xyzw = np.roll(quat_np_wxyz, -1)
+            pos_np, quat_wxyz_np = pose_tuple
+            quat_xyzw_np = np.roll(quat_wxyz_np, -1)
 
             odom_msg = Odometry()
             odom_msg.header.stamp = ros_time
@@ -108,10 +108,10 @@ class ROSBridge(Node):
             odom_msg.pose.pose.position.x = float(pos_np[0])
             odom_msg.pose.pose.position.y = float(pos_np[1])
             odom_msg.pose.pose.position.z = float(pos_np[2])
-            odom_msg.pose.pose.orientation.x = float(quat_np_xyzw[0])
-            odom_msg.pose.pose.orientation.y = float(quat_np_xyzw[1])
-            odom_msg.pose.pose.orientation.z = float(quat_np_xyzw[2])
-            odom_msg.pose.pose.orientation.w = float(quat_np_xyzw[3])
+            odom_msg.pose.pose.orientation.x = float(quat_xyzw_np[0])
+            odom_msg.pose.pose.orientation.y = float(quat_xyzw_np[1])
+            odom_msg.pose.pose.orientation.z = float(quat_xyzw_np[2])
+            odom_msg.pose.pose.orientation.w = float(quat_xyzw_np[3])
             self.pose_pub.publish(odom_msg)
 
             t = TransformStamped()
@@ -121,10 +121,10 @@ class ROSBridge(Node):
             t.transform.translation.x = float(pos_np[0])
             t.transform.translation.y = float(pos_np[1])
             t.transform.translation.z = float(pos_np[2])
-            t.transform.rotation.x = float(quat_np_xyzw[0])
-            t.transform.rotation.y = float(quat_np_xyzw[1])
-            t.transform.rotation.z = float(quat_np_xyzw[2])
-            t.transform.rotation.w = float(quat_np_xyzw[3])
+            t.transform.rotation.x = float(quat_xyzw_np[0])
+            t.transform.rotation.y = float(quat_xyzw_np[1])
+            t.transform.rotation.z = float(quat_xyzw_np[2])
+            t.transform.rotation.w = float(quat_xyzw_np[3])
             self.tf_broadcaster.sendTransform(t)
 
         # --- RGB Image ---
