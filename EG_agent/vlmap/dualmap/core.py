@@ -60,10 +60,10 @@ class Dualmap:
         self.print_cfg()
 
         # --- 1. Initialization ---
-        self.visualizer = ReRunVisualizer(cfg)  # 用于通过Rerun库进行实时可视化
-        self.detector = Detector(cfg)  # 负责图像中的物体检测（YOLO）和分割（SAM/FastSAM）
-        self.local_map_manager = LocalMapManager(cfg)  # 管理机器人周围的局部地图，用于精细的环境感知和避障
-        self.global_map_manager = GlobalMapManager(cfg)  # 管理全局地图，存储长期的、大范围的环境和物体信息
+        self.visualizer = ReRunVisualizer(cfg)  # 用于通过Rerun库进行实时可视化（展示建图过程、机器人位姿、点云、检测框等信息）
+        self.detector = Detector(cfg)  # 负责图像中的物体检测（YOLO）、分割（SAM/FastSAM）以及 特征提取（CLIP）
+        self.local_map_manager = LocalMapManager(cfg)  # 局部地图管理器（短期记忆）：负责维护机器人当前位置周围一小块区域的、高精度的实时地图，用于精细环境感知与动态避障
+        self.global_map_manager = GlobalMapManager(cfg)  # 全局地图管理器（长期记忆）：负责存储和管理长期的、大范围环境地图和物体信息，用于大范围全局路径规划
 
         # Additional initialization for visualization
         self.visualizer.set_use_rerun(cfg.use_rerun)
@@ -308,14 +308,18 @@ class Dualmap:
         # Get current pose
         self.curr_pose = data_input.pose
 
-        # Detection process
+        # --- 1. Detection process ---
         start_time = time.time()
         with timing_context("Observation Generation", self):
+            # (1) 设置 当前帧数据
+            # (2) 运行 输入数据处理线程：检测当前帧是否可作为 全局点云的关键帧，如果是，则计算 当前帧的点云，并 merge 到全局点云中，更新`迁移关键帧数据`
             self.detector.set_data_input(data_input)
 
             with timing_context("Process Detection", self):
                 if self.cfg.run_detection:
-                    # Run detection
+                    # (3) 执行检测：
+                    #   YOLO + Segmentation + FastSAM，并进行过滤，merge，得到 `filtered_detections`
+                    #   Create Object Pointcloud（为每个实例分割生成 点云、颜色 + CLIP（使用 CLIP 提取 图像特征、类别文本特征），得到最终结果 `curr_results`
                     self.detector.process_detections()
                     with timing_context("Save Detection", self):
                         if self.cfg.save_detection:
@@ -324,14 +328,19 @@ class Dualmap:
                     self.detector.load_detection_results()
 
             with timing_context("Observation Formatting", self):
-                # 计算观测结果
+                # (4) 将 语义检测结果 ==> 观测对象 `LocalObservation`，并存入 `curr_observations`
+                # 每个观测对象包含：
+                #   idx:帧ID     class_id:物体类别ID     mask:物体mask     xyxy:物体2D检测框坐标      conf:物体检测置信度
+                #   clip_ft:物体CLIP加权特征      pcd:物体3D点云      bbox:物体点云BBOX   distance:物体到相机的距离
+                #   is_low_mobility:是否为固定物体   masked_image    cropped_image:物体裁剪图像
                 self.detector.calculate_observations()
 
+            # (5) 获取 观测结果 `curr_observations`
             curr_obs_list = self.detector.get_curr_observations()
 
-            self.detector.update_state()
+            self.detector.update_state()  # 检测、观测结果清空，待下一帧处理
 
-            # 将结果放入 detection_results_queue 队列，供 建图线程 处理
+            # (6) 将结果放入 `detection_results_queue` 队列，供 建图线程 处理
             try:
                 self.detection_results_queue.put(
                     (curr_obs_list, self.curr_frame_id), timeout=1
@@ -357,9 +366,12 @@ class Dualmap:
             # TODO: psutil seems not that correct
             # mem_usage = self.get_total_memory_by_keyword()
             # self.detector.visualize_memory(mem_usage)
-        logger.warning(f"[Core] calculate_path: {self.calculate_path}")
+
+        # --- 2. 计算导航路径 ---
+        # TODO：现逻辑：计算得到 全局路径 后，就重置状态，将 `calculate_path` 置 False，后续应改为 一直低频查询
+        logger.info(f"[Core] calculate_path: {self.calculate_path}")
         if self.calculate_path and self.global_map_manager.has_global_map():
-            logger.info("[Core] Global Navigation enabled! Triggering functionality...")
+            logger.warning("[Core] Global Navigation enabled! Triggering functionality...")
 
             self.global_map_manager.has_action_path = False
 
@@ -401,6 +413,7 @@ class Dualmap:
                 # Increment path counter for next save
 
             # make reset of the information in the yaml
+            # 计算出全局路径之后，将之前计算的路径信息清空
             self.reset_cal_path_flag = True
 
             # Clear the local mapping results

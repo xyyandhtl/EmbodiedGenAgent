@@ -52,13 +52,13 @@ class PoseLowPassFilter:
             self.smoothed_rotation = curr_rotation
             self.initialized = True
         else:
-            # translation filtering
+            # translation filtering（指数移动平均平滑）
             self.smoothed_translation = (
                 self.alpha * self.smoothed_translation
                 + (1 - self.alpha) * curr_translation
             )
 
-            # rotation using slerp
+            # rotation using slerp（球面线性插值平滑）
             slerp = Slerp(
                 [0, 1], R.concatenate([self.smoothed_rotation, curr_rotation])
             )
@@ -88,6 +88,7 @@ class Detector:
         """
 
         # Object classes
+        # --- 加载指定的 要识别的 全部物体的 类别text ---
         classes_path = cfg.yolo.classes_path
         if cfg.yolo.use_given_classes:
             classes_path = cfg.yolo.given_classes_path
@@ -98,6 +99,7 @@ class Detector:
             bg_classes=cfg.yolo.bg_classes,
             skip_bg=cfg.yolo.skip_bg,
         )
+        # --- END ---
 
         # get detection paths
         self.detection_path = Path(cfg.detection_path)
@@ -201,6 +203,7 @@ class Detector:
                     return
 
             logger.info("[Detector][Init] Initializing high-low mobility classifier.")
+            # --- 加载 预定义的 动、静物体 类别text，并使用 CLIP 模型将其 转换为 文本特征向量 ---
             lm_examples = cfg.lm_examples
             hm_examples = cfg.hm_examples
             lm_descriptions = cfg.lm_descriptions
@@ -217,6 +220,7 @@ class Detector:
             self.proto_feats = proto_feats
 
             # Get the text feats of all the classes
+            # --- 将要识别的全部物体的 类别text 转换为 文本特征向量 ---
             class_feats = get_text_features(
                 self.obj_classes.get_classes_arr(),
                 self.clip_model,
@@ -227,12 +231,15 @@ class Detector:
             self.class_feats = class_feats
 
             # Used for unknown class
+            # 使用 平均值作为未知类别的 文本特征向量
             if cfg.use_avg_feat_for_unknown:
                 class_feats_mean = np.mean(class_feats, axis=0)
                 self.class_feats_mean = class_feats_mean / np.linalg.norm(
                     class_feats_mean
                 )
 
+            # --- 创建 目标检测过滤器 ---
+            # 过滤掉：面积过小可能为噪声的、重叠率高或颜色相近的、背景类别的结果，并优化 mask 的 边界
             with timing_context("Detection Filter", self):
                 self.filter = Filter(
                     classes=self.obj_classes,
@@ -242,6 +249,7 @@ class Detector:
                 self.filter.set_device(self.cfg.device)
 
         # for filtering the pose of follower camera for visualization
+        # --- 创建 相机位姿 滤波器（平滑实时输入的位姿，避免 微小噪声 引起 可视化时的窗口抖动）
         self.pose_filter_follower = PoseLowPassFilter(alpha=0.95)
 
         logger.info(f"[Detector][Init] Finish Init.")
@@ -539,6 +547,7 @@ class Detector:
         self.fastsam_detections = fs_detections
 
     def process_yolo_and_sam(self, color):
+        # 1. 目标检测（YOLO）
         with timing_context("YOLO", self):
             confidence, class_id, class_labels, xyxy = self.process_yolo_results(
                 color, self.obj_classes
@@ -551,12 +560,15 @@ class Detector:
             self.curr_results = {}
             self.curr_detections = sv.Detections.empty()
             return
+
+        # 2. 实例分割（SAM）
         with timing_context("Segmentation", self):
             sam_out = self.sam.predict(color, bboxes=xyxy, verbose=False)
             masks_tensor = sam_out[0].masks.data
             masks_np = masks_tensor.cpu().numpy()
-            self.masks_np = masks_np
+            self.masks_np = masks_np  # 实例分割 masks
 
+        # 3. 创建当前帧的 检测结果
         curr_detections = sv.Detections(
             xyxy=xyxy,
             confidence=confidence,
@@ -660,16 +672,16 @@ class Detector:
     def process_detections(self):
 
         color = self.curr_data.color.astype(np.uint8)
-
+        # 1. YOLO + Segmentation + FastSAM，并进行过滤，合并
         with timing_context("YOLO+Segmentation+FastSAM", self):
-            # Run FastSAM
+            # 1.1 Run FastSAM：开启新线程，运行 process_fastsam
             if self.cfg.use_fastsam:
                 fastsam_thread = threading.Thread(
                     target=self.process_fastsam, args=(color,)
                 )
                 fastsam_thread.start()
 
-            # Run YOLO and SAM
+            # 1.2 Run YOLO and SAM：主线程运行
             self.process_yolo_and_sam(color)
 
             # Waiting for FastSAM to finish
@@ -691,20 +703,23 @@ class Detector:
             self.curr_results = {}
             return
 
-        # add extra detections from FastSAM results
+        # 1.3 add extra detections from FastSAM results
         # if no detection from fastsam, just skip
         if self.cfg.use_fastsam and self.fastsam_detections:
             filtered_detections = self.add_extra_detections_from_fastsam(
                 color, self.fastsam_detections, filtered_detections
             )
 
+        # 2. CLIP + Create Object Pointcloud
         with timing_context("CLIP+Create Object Pointcloud", self):
+            # 2.1 开启新线程，运行 process_masks()：为每个实例分割 mask 生成 点云、颜色
             cluster_thread = threading.Thread(
                 target=self.process_masks, args=(filtered_detections.mask,)
             )
             cluster_thread.start()
-
+            # 2.2 主线程中：使用 CLIP 对每个实例分割物体提取 图像、文本特征
             with timing_context("CLIP", self):
+                # 裁剪后的 物体图像、对应图像特征、对应类别文本特征
                 image_crops, image_feats, text_feats = (
                     self.compute_clip_features_batched(
                         color,
@@ -1007,22 +1022,24 @@ class Detector:
 
         # for debugging only
         # bbox_hl_mapping = []
+        # 遍历所有实例分割 mask
         for i in range(N):
 
             if self.masked_points[i] is None:
                 continue
 
-            # Create pointcloud
+            # 1. Create pointcloud
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(self.masked_points[i])
             pcd.colors = o3d.utility.Vector3dVector(self.masked_colors[i])
             pcd.transform(self.curr_data.pose)
 
-            # Get bbox
+            # 2. Get bbox of pcd
             bbox = safe_create_bbox(pcd)
             # bbox = pcd.get_axis_aligned_bounding_box()
 
             if self.cfg.filter_ceiling:
+                # 3. 检测物体 bbox 的中心高度 接近天花板高度，则跳过，以避免将天花板物体误认为 可交互物体
                 z = bbox.get_center()[2]
 
                 # check z is close to ceiling_height
@@ -1031,9 +1048,10 @@ class Detector:
 
             # Get Mobility
             # class_name = self.obj_classes.get_classes_arr()[self.curr_results['class_id'][i]]
-            # Get distance
+            # 4. Get distance between object and camera
             distance = self.get_distance(bbox, self.curr_data.pose)
 
+            # 5. 创建 观测对象（LocalObservation）
             # Init observation
             curr_obs = LocalObservation()
 
@@ -1046,6 +1064,7 @@ class Detector:
             curr_obs.conf = self.curr_results["confidence"][i]
 
             if self.cfg.use_weighted_feature:
+                # 加权特征：图像 + 类别文本
                 curr_obs.clip_ft = self.get_weighted_feature(idx=i)
             else:
                 curr_obs.clip_ft = self.curr_results["image_feats"][i]
@@ -1054,6 +1073,7 @@ class Detector:
             curr_obs.bbox = bbox
             curr_obs.distance = distance
 
+            # 6. 使用 CLIP 特征 判断 物体移动性
             # judge if low mobility according to the clip feature
             curr_obs.is_low_mobility = self.is_low_mobility(
                 curr_obs.clip_ft
@@ -1068,6 +1088,7 @@ class Detector:
             ):
                 curr_obs.is_low_mobility = True
 
+            # 7. 保存裁剪后的 物体图像
             if self.cfg.save_cropped:
                 whole_image = self.curr_data.color
 
@@ -1432,6 +1453,7 @@ class Detector:
         text_tokens = []
 
         # Prepare data for batch processing
+        # 预处理 每个实例分割对象
         for idx in range(len(detections.xyxy)):
             x_min, y_min, x_max, y_max = detections.xyxy[idx]
             image_width, image_height = image.size
@@ -1448,7 +1470,7 @@ class Detector:
             x_max += right_padding
             y_max += bottom_padding
 
-            # Crop the image
+            # Crop the image，裁剪图 物体图像
             cropped_image = image.crop((x_min, y_min, x_max, y_max))
 
             # Preprocess the cropped image
@@ -1464,7 +1486,7 @@ class Detector:
             # Append the cropped image to the image crops list
             image_crops.append(cropped_image)
 
-        # Convert lists to batches
+        # Convert lists to batches，拼接成一个 batch
         preprocessed_images_batch = torch.cat(preprocessed_images, dim=0).to(device)
         text_tokens_batch = clip_tokenizer(text_tokens).to(device)
 
