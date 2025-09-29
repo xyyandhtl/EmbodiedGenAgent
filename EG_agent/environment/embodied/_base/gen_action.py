@@ -2,10 +2,13 @@ from EG_agent.planning.btpg.behavior_tree.base_nodes import Action
 from EG_agent.planning.btpg.behavior_tree import Status
 # import shared object sets
 from EG_agent.prompts.object_sets import *
+from EG_agent.system.envs.base_env import BaseAgentEnv
 
 class EmbodiedAction(Action):
     can_be_expanded = True
     num_args = 1
+
+    env: BaseAgentEnv = None  # type: ignore
 
     # use shared sets from object_sets.py
     LOCATIONS = LOCATIONS
@@ -32,13 +35,30 @@ class EmbodiedAction(Action):
     def update(self) -> Status:
         # 在这里执行具体的动作逻辑，比如移动、拍照等
   
-        # if self.num_args==1:
-        #     script = [f'<char0> [{self.action_class_name.lower()}] <{self.args[0].lower()}> (1)']
-        # else:
-        #     script = [f'<char0> [{self.action_class_name.lower()}] <{self.args[0].lower()}> (1) <{self.args[1].lower()}> (1)']
-        # # self.env.run_script(script,verbose=True,camera_mode="PERSON_FROM_BACK") # FIRST_PERSON
-        # print("script: ",script)
-        self.env.run_action(self.action_class_name.lower(), self.agent.cur_action_args)
+        cur_action = self.action_class_name.lower()
+        print(f"Executing action: {cur_action} on target: {self.args[0].lower()}")
+        cur_action_done = False
 
-        self.change_condition_set()
+        if cur_action == "walk":
+            cur_goal_place = self.agent.cur_goal_places[self.args[0].lower()]
+            cur_cmd_vel = self.agent.cur_agent_states.get("cmd_vel", (0,0,0))
+            self.env.run_action("cmd_vel", cur_cmd_vel)
+            # If current target has entered camera FOV, consider walk complete
+            # if getattr(self.env, "goal_inview", {}).get(self.args[0].lower(), False):
+            if self.env.goal_inview[self.args[0].lower()]:
+                cur_action_done = True
+        elif cur_action == "capture":
+            self.env.run_action("enum_command", 0)
+            cur_action_done = True
+        elif cur_action == "mark":
+            self.env.run_action("enum_command", 1)
+            cur_action_done = True
+        elif cur_action == "report":
+            self.env.run_action("enum_command", 2)
+            cur_action_done = True
+        else:
+            raise ValueError(f"Unknown action type: {cur_action}")
+
+        if cur_action_done:
+            self.change_condition_set()
         return Status.RUNNING

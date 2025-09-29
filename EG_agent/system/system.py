@@ -9,7 +9,7 @@ from EG_agent.prompts.object_sets import AllObject
 from EG_agent.reasoning.logic_goal import LogicGoalGenerator
 from EG_agent.planning.bt_planner import BTGenerator
 from EG_agent.planning.btpg import BehaviorTree
-# from EG_agent.vlmap.vlmap_nav_ros2 import VLMapNavROS2
+from EG_agent.vlmap.vlmap_nav_ros2 import VLMapNavROS2
 from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
 
 
@@ -26,7 +26,7 @@ class EGAgentSystem:
 
     def __init__(self):
         """Initialize generators, environment runtime, and UI caches."""
-        # 逻辑Goal生成器
+        # 逻辑 Goal 生成器
         self.goal_generator = LogicGoalGenerator()
 
         # 行为树规划器
@@ -34,13 +34,13 @@ class EGAgentSystem:
                                         cur_cond_set=set(),
                                         key_objects=list(AllObject))
 
-        # Agent载体部署环境
-        # 通过bint_bt动态绑定行为树，定义run_action实现智能体如何和部署环境交互
-        # 行为树叶节点在被tick时，通过调用其绑定的env的run_action实现智能体到部署环境交互的action
+        # Agent 载体部署环境
+        # 组成：通过bint_bt动态绑定行为树，定义run_action实现智能体如何和部署环境交互
+        # 运行：行为树叶节点在被tick时，通过调用其绑定的env的run_action实现智能体到部署环境交互的action
         self.env = IsaacsimEnv()
 
-        # VLM地图导航模块
-        # self.vlmap_backend = VLMapNavROS2()
+        # VLM 地图导航模块
+        self.vlmap_backend = VLMapNavROS2()
 
         # 运行控制
         self._running = False
@@ -48,10 +48,10 @@ class EGAgentSystem:
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
-        # 监听器: kind -> list[callback(data)]
+        # QT监听器: kind -> list[callback(data)]
         self._listeners: Dict[str, List[Callable[[Any], None]]] = {}
 
-        # 缓存/占位数据
+        # QT 缓存/占位数据
         self._conversation: List[str] = []
         self._logs: List[str] = []
         self._entity_info: List[dict] = []   # each: {"name":..., "info":...}
@@ -89,6 +89,11 @@ class EGAgentSystem:
             time.sleep(0.1)
 
             # 环境 step，行为树 agent 执行动作，和部署环境通信
+            # self.env.env_update({
+            #     "cam_pose_w": self.vlmap_backend.get_cam_pose_w(),
+            #     "cam_fov_x_deg": self.vlmap_backend.intrinsics().fov_x_deg,
+            #     "cam_aspect": self.vlmap_backend.intrinsics().aspect,
+            # })
             is_finished = self.env.step()
 
             # 条件完成判定 (占位)
@@ -155,6 +160,7 @@ class EGAgentSystem:
         """Plan a behavior tree from instruction, draw it, and update UI caches."""
         # TODO: goal_generator -> bt_generator -> bt_agent.bind_bt
         self.goal = self.goal_generator.generate_single(text)
+        # self.goal_set = self.goal_generator.extract_conditions(self.goal)
         if self.goal:
             self.bt = self.bt_generator.generate(self.goal)
             # save behavior_tree.png to the current work dir to visualize in gui
@@ -170,6 +176,17 @@ class EGAgentSystem:
         self._append_conversation(f"用户: {text}")
         self._append_conversation(f"智能体: {self.goal}")
         self._emit("conversation", self.get_conversation_text())
+
+    # ---------------------- 模块间数据交互 -----------------------
+    def update_cur_goal_set(self):
+        """After feed_instruction, bind bt to self.env, query the target object positions"""
+        self.env.bind_bt(self.bt)
+        cur_goal_places ={}
+        for obj in self.goal_set:
+            target_position = self.vlmap_backend.query_object(obj)
+            if target_position is not None:
+                cur_goal_places[obj] = target_position
+        self.env.set_object_places(cur_goal_places)
 
     # ---------------------- 数据获取占位接口 ----------------------
     def get_conversation_text(self) -> str:

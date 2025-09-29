@@ -4,16 +4,18 @@ from typing import List
 from EG_agent.planning.btpg.behavior_tree.behavior_libs import ExecBehaviorLibrary
 from EG_agent.planning.btpg import BehaviorTree
 
+# Merged Agent and Env for simplicity
+# If hard to work or clarify the logic, separate them into two classes
 class BaseAgentEnv(object):
-    # Merged Agent and Env for simplicity
-    # If hard to work or clarify the logic, separate them into two classes
+    # Env attributes
     agent_num = 1
     behavior_lib_path = None
     print_ticks = False
     headless = False
-    response_frequency = 1  # moved from Agent
-    scene = None  # moved from Agent
-    cur_action_args = ()
+
+    # Agent attributes
+    response_frequency = 0.2  
+    scene = None
 
     def __init__(self):
         self.time = 0
@@ -65,10 +67,7 @@ class BaseAgentEnv(object):
         return self.task_finished()
 
     def task_finished(self):
-        if {"IsIn(milk,fridge)", "IsClosed(fridge)"} <= self.condition_set:
-            return True
-        else:
-            return False
+        return False
 
     def create_behavior_lib(self):
         self.behavior_lib = ExecBehaviorLibrary(self.behavior_lib_path)

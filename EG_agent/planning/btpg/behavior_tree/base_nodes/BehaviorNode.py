@@ -12,7 +12,7 @@ class BahaviorNode(ptree.behaviour.Behaviour):
     valid_params='''
         None
         '''
-    agent = None
+    # agent = None
     env = None
     print_name_prefix = ""
 
