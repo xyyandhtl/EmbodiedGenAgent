@@ -51,20 +51,16 @@ class BTGenerator:
 
         self.goal_set = None
 
-    def generate(self, goal: Union[str, List[set]], btml_name: str = "tree") -> BehaviorTree:
+    def generate(self, goal: str, btml_name: str = "tree") -> BehaviorTree:
         """
         goal: either a goal string (e.g. 'A & B') or a pre-parsed goal_set (list/iterable of condition sets)
         Returns a BehaviorTree instance (and stores ptml/cost/expanded_num in self.last_*).
         """
         start_time = time.time()
-        if isinstance(goal, str):
-            goal_set = goal_transfer_str(goal)
-        else:
-            goal_set = goal
-        self.goal_set = goal_set
+        self.goal_set = goal_transfer_str(goal)[0]
 
         # planner already created in constructor
-        self.planner.process(goal_set)
+        self.planner.process([self.goal_set])
 
         ptml_string, cost, expanded_num = self.planner.post_process()
         planning_time_total = time.time() - start_time
@@ -79,9 +75,9 @@ class BTGenerator:
         # self.last_cost = cost
         # self.last_expanded_num = expanded_num
         error, state, act_num, current_cost, record_act_ls, ticks = self.execute(
-            goal_set[0], self.cur_cond_set, verbose=False)
+            self.goal_set, self.cur_cond_set, verbose=False)
         
-        print(f'\x1b[32mGoal:{goal_set[0]}\x1b[0m, \n'
+        print(f'\x1b[32mGoal:{self.goal_set}\x1b[0m, \n'
               f'\x1b[31merror:\x1b[0m {error}, \n'
               f'\x1b[33mstate:\x1b[0m {state}, \n'
               f'\x1b[35mact_num:\x1b[0m {act_num}, \n'
@@ -94,6 +90,9 @@ class BTGenerator:
         # If requested, write PTML to the specified file
         # bt.draw(file_name=btml_name, png_only=True)
         return bt
+    
+    def goal_str2set(self, goal: str) -> set:
+        return goal_transfer_str(goal)[0]
 
     # Would not be used, when bt no need to be connected to env
     def execute(self, goal: set, state: set, verbose: bool = True):

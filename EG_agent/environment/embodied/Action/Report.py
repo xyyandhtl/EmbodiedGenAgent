@@ -30,4 +30,4 @@ class Report(EmbodiedAction):
         }
 
     def change_condition_set(self):
-        self.agent.condition_set |= self.info["add"]
+        self.agent.condition_set |= (self.info["add"])

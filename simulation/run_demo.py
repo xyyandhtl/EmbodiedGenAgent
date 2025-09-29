@@ -49,7 +49,7 @@ from simulation.utils import (
     handle_enum_action,
     LabGo2WEnvHistoryWrapper,
     IsaacLabSensorHandler,
-    SimpleCameraViewer,
+    CamDataMonitor,
     ZMQBridge,
 )
 
@@ -112,7 +112,7 @@ def main():
     marks = []
 
     # [DEBUG] Use a simple class to test camera data
-    camera_viewer = SimpleCameraViewer()
+    camera_monitor = CamDataMonitor()
 
     # --- 4. Load Policy ---
     # Path to the pre-trained low-level locomotion policy
@@ -127,17 +127,21 @@ def main():
     obs, _ = env.reset()
     print(f"[INFO] init-observation shape: {obs.shape}")
     
+    # 从CFG读取发布间隔（秒），未设置则沿用每个policy step发布
+    sensor_publish_dt = float(CFG.publish_dt)
+    print(f"[INFO] Sensor publish interval: {sensor_publish_dt:.3f}s")
+
     frame_count = 0
+    # 让第一次循环就发布一次
+    last_sensor_pub_ts = time.time() - sensor_publish_dt
+
     while simulation_app.is_running():
         start_time = time.time()
 
         with torch.inference_mode():
-            # 1) Capture a fresh snapshot and use it immediately to minimize desync.
-            rgb_tensor, depth_tensor, pose_camera_tuple, pose_agent_tuple = sensor_handler.capture_frame()
-
             # Poll commands
             zmq.poll()
-            # 2) Execute control logic based on the current mode.
+            # 1) Execute control logic based on the current mode.
             #    The keyboard controller is always running in the background, but its output
             #    will be overwritten by the logic below if ROS commands are being received,
             #    cmd_vel has higher priority than nav_pose if both are received.
@@ -155,12 +159,12 @@ def main():
                 velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
                 # Update observation with the new velocity command
                 obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
-            # 3) Handle enum actions (capture/mark/report)
+            # 2) Handle enum actions (capture/mark/report)
             if zmq.enum_cmd is not None:
                 handle_enum_action(
                     enum_cmd=zmq.enum_cmd,
-                    rgb_tensor=rgb_tensor,
-                    pose_tuple=pose_camera_tuple,
+                    rgb_tensor=sensor_handler.get_rgb_frame(),
+                    pose_tuple=sensor_handler.get_camera_pose(),
                     stage=stage,
                     captured_dir=CAPTURED_DIR,
                     reports_dir=REPORTS_DIR,
@@ -171,24 +175,30 @@ def main():
             obs, _, _, _ = env.step(actions)
             camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
 
-            # --- 发布 sensor 数据（保持原逻辑） ---
-            data_to_send = {}
-            if rgb_tensor is not None:
-                data_to_send['rgb'] = rgb_tensor[0, :, :, :3].cpu().numpy().astype(np.uint8)
-            if depth_tensor is not None:
-                depth_data = (depth_tensor[0] * 1000).cpu().numpy()
-                depth_data[depth_data > 65535] = 0
-                data_to_send['depth'] = depth_data.astype(np.uint16)
-            if pose_camera_tuple is not None:
-                data_to_send['pose'] = (pose_camera_tuple[0][0].cpu().numpy(), pose_camera_tuple[1][0].cpu().numpy())
+            # --- 发布 sensor 数据（按CFG间隔） ---
+            now = time.time()
+            if now - last_sensor_pub_ts >= sensor_publish_dt:
+                # 仅在到达发布间隔时采集并发布（一次性同步到CPU，减小不同步）
+                rgb_tensor, depth_tensor, pose_camera_tuple, pose_agent_tuple = sensor_handler.capture_frame(gpu_sync=True)
+                data_to_send = {}
+                if rgb_tensor is not None:
+                    data_to_send['rgb'] = rgb_tensor[0, :, :, :3].to("cpu", non_blocking=False).numpy().astype(np.uint8)
+                if depth_tensor is not None:
+                    depth_data = (depth_tensor[0] * 1000).to("cpu", non_blocking=False).numpy()
+                    depth_data[depth_data > 65535] = 0
+                    data_to_send['depth'] = depth_data.astype(np.uint16)
+                if pose_camera_tuple is not None:
+                    data_to_send['pose'] = (pose_camera_tuple[0][0].cpu().numpy(), pose_camera_tuple[1][0].cpu().numpy())
+                # [DEBUG]
+                if pose_agent_tuple is not None:
+                    data_to_send['pose_agent'] = (pose_agent_tuple[0][0].cpu().numpy(), pose_agent_tuple[1][0].cpu().numpy())
+                # 可按需获取时间戳用于下游对齐：sensor_handler.get_timestamp()
+                if data_to_send:
+                    zmq.publish_data(data_to_send)
 
-            if data_to_send:
-                zmq.publish_data(data_to_send)
-
-            # [DEBUG]
-            if pose_agent_tuple is not None:
-                data_to_send['pose_agent'] = (pose_agent_tuple[0][0].cpu().numpy(), pose_agent_tuple[1][0].cpu().numpy())
-            camera_viewer.process_frame(data_to_send)
+                if CFG.monitor_camera:
+                    camera_monitor.process_frame(data_to_send)
+                last_sensor_pub_ts = now
 
             # Time delay for real-time evaluation
             elapsed_time = time.time() - start_time

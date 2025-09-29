@@ -1,6 +1,6 @@
 import numpy as np
 
-class SimpleCameraViewer:
+class CamDataMonitor:
     """A simple, single-threaded class to process and display camera data."""
 
     def __init__(self):

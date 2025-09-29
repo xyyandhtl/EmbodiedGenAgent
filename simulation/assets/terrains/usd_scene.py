@@ -69,7 +69,7 @@ ASSET_DICT = {
             # usd_path=f"/media/lenovo/1/USD/distributable_2023_davinci_v2/Distributable_2023_Davinci/shot/rt/rt_010/pub/assembly/rt_010_assembly_create.usd",
             # https://developer.nvidia.com/downloads/usd/dataset/davinci_workshop/distributable_2023_davinci_v2.zip
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0), rot=(0.7071, 0.7071, 0.0, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 1.0, 0.0), rot=(0.7071, 0.7071, 0.0, 0.0)),
     ),
     "test": AssetBaseCfg(
         prim_path=f"/World/Terrain",

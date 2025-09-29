@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import torch
 import threading
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -35,6 +36,8 @@ class IsaacLabSensorHandler:
         self.env = env
         self.camera_name = camera_name
         self.camera: Camera = self.env.unwrapped.scene[self.camera_name]
+        self.cam_offset_pos = torch.tensor(self.camera.cfg.offset.pos, device=self.env.device).unsqueeze(0)
+        self.cam_offset_quat = torch.tensor(self.camera.cfg.offset.rot, device=self.env.device).unsqueeze(0)
         # self.new_frame_event = threading.Event()  # remove event usage, kept for backward compatibility
         self.data_lock = threading.Lock()
 
@@ -44,38 +47,47 @@ class IsaacLabSensorHandler:
         self._pose_camera: tuple[torch.Tensor, torch.Tensor] | None = None
         self._pose_agent: tuple[torch.Tensor, torch.Tensor] | None = None
         self._intrinsics: torch.Tensor | None = None
+        self._ts: float | None = None  # timestamp of the last atomic capture
 
-    def capture_frame(self) -> tuple:
+    def capture_frame(self, gpu_sync: bool = False) -> tuple:
         """
         Atomically snapshot camera outputs and pose and return them immediately as
-        (rgb, depth, pose, intrinsics). Each returned tensor is a clone and safe
-        to use outside the handler.
+        (rgb, depth, pose). Optionally:
+          - gpu_sync: synchronize CUDA to avoid async updates overlapping.
+          - sync_to_cpu: move all tensors to CPU together to enforce a single sync point.
         """
         with self.data_lock:
-            # Snapshot camera outputs if available
+            if gpu_sync:
+                torch.cuda.synchronize()
+
+            asset = self.env.unwrapped.scene["robot"]
+            # base_pos_w = asset.data.root_pos_w
+            # base_quat_w = asset.data.root_quat_w
+
+            # 找到 base 的索引（可能叫 "base" 或 "base_link" 或 "trunk"）
+            base_idx = asset.data.body_names.index("base")
+            base_pos_w = asset.data.body_pos_w[:, base_idx]
+            base_quat_w = asset.data.body_quat_w[:, base_idx]
+            base_quat_ros = convert_camera_frame_orientation_convention(base_quat_w, origin="world", target="ros")
+
+            # Snapshot camera outputs
             output = self.camera.data.output
             rgb = output["rgb"].clone() if "rgb" in output else None
             depth = output["distance_to_image_plane"].clone() if "distance_to_image_plane" in output else None
-            # intrinsics = self.camera.data.intrinsic_matrices.clone() if self.camera.data.intrinsic_matrices is not None else None
 
-            # Snapshot camera pose based on the robot base, using same device as the asset
-            asset = self.env.unwrapped.scene["robot"]
-            base_pos_w = asset.data.root_pos_w
-            base_quat_w = asset.data.root_quat_w
-            base_quat_ros = convert_camera_frame_orientation_convention(base_quat_w, origin="world", target="ros")
+            # Compute camera pose from base + offset
+            cam_pos_w = base_pos_w + quat_apply(base_quat_w, self.cam_offset_pos)
+            cam_quat_w_world = quat_mul(base_quat_w, self.cam_offset_quat)
+            cam_quat_w_ros = convert_camera_frame_orientation_convention(cam_quat_w_world, origin="world", target="ros")
 
-            pose_agent = (base_pos_w.clone(), base_quat_ros.clone())
+            # Store atomically
+            self._rgb = rgb
+            self._depth = depth
+            self._pose_camera = (cam_pos_w.clone(), cam_quat_w_ros.clone())
+            self._pose_agent = (base_pos_w.clone(), base_quat_ros.clone())
+            self._ts = time.time()
 
-            offset_pos = torch.tensor(self.camera.cfg.offset.pos, device=asset.device).unsqueeze(0)
-            offset_quat = torch.tensor(self.camera.cfg.offset.rot, device=asset.device).unsqueeze(0)
-
-            cam_pos_w = base_pos_w + quat_apply(base_quat_w, offset_pos)
-            cam_quat_w = quat_mul(base_quat_w, offset_quat)
-            cam_quat_ros = convert_camera_frame_orientation_convention(cam_quat_w, origin="world", target="ros")
-
-            pose_camera = (cam_pos_w.clone(), cam_quat_ros.clone())
-
-        return rgb, depth, pose_camera, pose_agent
+        return self._rgb, self._depth, self._pose_camera, self._pose_agent
 
     def get_rgb_frame(self) -> torch.Tensor | None:
         """Returns the latest snapshot RGB frame (non-blocking)."""
@@ -105,6 +117,11 @@ class IsaacLabSensorHandler:
         """Returns the latest snapshot intrinsics (non-blocking)."""
         with self.data_lock:
             return self._intrinsics.clone() if self._intrinsics is not None else None
+
+    def get_timestamp(self) -> float | None:
+        """Returns the capture timestamp of the latest snapshot."""
+        with self.data_lock:
+            return self._ts
 
     def __str__(self) -> str:
         """Provides a descriptive string of the current sensor data."""

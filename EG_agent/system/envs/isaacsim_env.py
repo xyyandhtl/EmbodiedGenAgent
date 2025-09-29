@@ -1,5 +1,6 @@
 from typing import Callable
 import numpy as _np
+import math
 
 from EG_agent.system.envs.base_env import BaseAgentEnv
 from EG_agent.system.module_path import AGENT_ENV_PATH
@@ -15,11 +16,19 @@ class IsaacsimEnv(BaseAgentEnv):
 
     behavior_lib_path = f"{AGENT_ENV_PATH}/embodied"
 
+    cur_goal_set = set()
+    cur_goal_places = {}
+    cur_agent_states = {}
+
+    # Camera model defaults and tracking
+    cam_fov_x_deg = 90.0
+    cam_aspect = 4.0 / 3.0
+    cam_forward_axis = "z"  # hardcoded: camera's +Z faces forward
+    # Real-time visibility state: {goal_name_lower: bool}
+    goal_inview = {}
+
     def __init__(self):
-        if not self.headless:
-            self.launch_simulator()
         super().__init__()
-        self.action_callbacks_dict = {}
 
         # Ensure rclpy is initialized
         if not rclpy.ok():
@@ -31,24 +40,32 @@ class IsaacsimEnv(BaseAgentEnv):
         self.nav_pose_pub = self.ros_node.create_publisher(PoseStamped, "/nav_pose", 10)
         self.enum_pub = self.ros_node.create_publisher(Int32, "/enum_cmd", 10)
 
-    def register_action_callbacks(self, type: str, fn: Callable):
-        self.action_callbacks_dict[type] = fn
+        self.action_callbacks_dict = {}  # ensure callbacks dict exists
+
+    def env_update(self, env_data: dict):
+        self.cur_agent_states = {**env_data}
+        # Read camera parameters from env_data
+        if "cam_fov_x_deg" in self.cur_agent_states:
+            self.cam_fov_x_deg = float(self.cur_agent_states["cam_fov_x_deg"])
+        if "cam_aspect" in self.cur_agent_states:
+            self.cam_aspect = float(self.cur_agent_states["cam_aspect"])
+        # Recompute real-time visibility using cam_pose_w
+        self._update_goal_inview()
+    
+    def set_object_places(self, places: dict):
+        # Normalize to lower-case keys to match action args
+        self.cur_goal_places = {str(k).lower(): v for k, v in places.items()}
+        # Recompute visibility when goal set changes
+        self._update_goal_inview()
 
     def reset(self):
         raise NotImplementedError
 
     def task_finished(self):
-        raise NotImplementedError
+        # Delegate scheduling/completion to behavior tree
+        return self.cur_goal_set <= self.condition_set
 
-    def launch_simulator(self):
-        # todo: maybe set ros2 topic names or register callbacks
-        pass
-
-    def load_scenario(self,scenario_id):
-        # todo: maybe do nothing
-        pass
-
-    def run_action(self, action_type: str, action: tuple, verbose=False):
+    def run_action(self, action_type: str, action: tuple, verbose=True):
         """
         Strict action formats:
           - 'cmd_vel': list/tuple/ndarray of 3 floats -> [vx, vy, wz]
@@ -119,6 +136,95 @@ class IsaacsimEnv(BaseAgentEnv):
 
         # unknown action
         raise ValueError(f"Action type {action_type} not registered and not a known ROS-publishable command.")
+
+    # -------------------------------
+    # Helpers: camera frustum geometry
+    # -------------------------------
+    def _quat_to_rotmat(self, qw: float, qx: float, qy: float, qz: float) -> _np.ndarray:
+        """Convert unit quaternion (w,x,y,z) to 3x3 rotation matrix."""
+        # Normalize to be safe
+        n = math.sqrt(qw*qw + qx*qx + qy*qy + qz*qz)
+        if n == 0.0:
+            return _np.eye(3, dtype=_np.float64)
+        qw, qx, qy, qz = qw/n, qx/n, qy/n, qz/n
+        xx, yy, zz = qx*qx, qy*qy, qz*qz
+        xy, xz, yz = qx*qy, qx*qz, qy*qz
+        wx, wy, wz = qw*qx, qw*qy, qw*qz
+        R = _np.array([
+            [1.0 - 2.0*(yy + zz),     2.0*(xy - wz),         2.0*(xz + wy)],
+            [    2.0*(xy + wz),   1.0 - 2.0*(xx + zz),       2.0*(yz - wx)],
+            [    2.0*(xz - wy),       2.0*(yz + wx),     1.0 - 2.0*(xx + yy)]
+        ], dtype=_np.float64)
+        return R
+
+    def _point_in_cam_fov(
+        self,
+        cam_pose: _np.ndarray | list | tuple,
+        point_world: _np.ndarray,
+        fov_x_deg: float,
+        aspect: float,
+        forward_axis: str = "z",
+    ) -> bool:
+        """
+        Check if a world-space point lies within a pinhole camera frustum defined by pose and intrinsics.
+        cam_pose: [x,y,z,qw,qx,qy,qz] (camera pose in world, ROS convention), camera +Z forward.
+        forward_axis: "z" (default) or "x" for alternate rigs.
+        """
+        cx, cy, cz, qw, qx, qy, qz = map(float, cam_pose)
+        cam_pos = _np.array([cx, cy, cz], dtype=_np.float64)
+        R_wc = self._quat_to_rotmat(qw, qx, qy, qz)  # world-from-camera
+        R_cw = R_wc.T  # camera-from-world
+        v = point_world - cam_pos
+        v_cam = R_cw @ v  # point in camera coordinates
+
+        # Choose axes according to forward
+        if forward_axis.lower().startswith("x"):
+            f_idx, h_idx, v_idx = 0, 1, 2
+        else:  # "z" default
+            f_idx, h_idx, v_idx = 2, 0, 1
+
+        depth = v_cam[f_idx]
+        # Only require point to be in front of the camera; ignore near/far planes
+        if depth <= 0.0:
+            return False
+
+        half_x = math.radians(fov_x_deg) * 0.5
+        # Derive vertical half FOV from aspect = width/height
+        half_y = math.atan(math.tan(half_x) / float(aspect))
+
+        # Projected half-width/height at current depth
+        max_h = math.tan(half_x) * depth
+        max_v = math.tan(half_y) * depth
+
+        return (abs(v_cam[h_idx]) <= max_h) and (abs(v_cam[v_idx]) <= max_v)
+
+    def _update_goal_inview(self):
+        """
+        Update self.goal_inview in real time based on current cam_pose_w and cur_goal_places.
+        """
+        # Default: no goals or no pose => all False
+        self.goal_inview = {name: False for name in self.cur_goal_places.keys()}
+        cam_pose = self.cur_agent_states.get("cam_pose_w")
+        if not cam_pose or len(cam_pose) != 7:
+            return
+
+        for name, pt in self.cur_goal_places.items():
+            # Normalize point to xyz
+            if isinstance(pt, (list, tuple, _np.ndarray)) and len(pt) >= 3:
+                point = _np.array([float(pt[0]), float(pt[1]), float(pt[2])], dtype=_np.float64)
+            elif isinstance(pt, dict) and all(k in pt for k in ("x", "y", "z")):
+                point = _np.array([float(pt["x"]), float(pt["y"]), float(pt["z"])], dtype=_np.float64)
+            else:
+                self.goal_inview[name] = False
+                continue
+
+            self.goal_inview[name] = self._point_in_cam_fov(
+                cam_pose,
+                point,
+                fov_x_deg=self.cam_fov_x_deg,
+                aspect=self.cam_aspect,
+                forward_axis=self.cam_forward_axis,
+            )
 
     def close(self):
         # Destroy only this node; do NOT shutdown rclpy (managed externally)

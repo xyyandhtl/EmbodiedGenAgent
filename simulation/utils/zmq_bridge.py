@@ -50,11 +50,11 @@ class ZMQBridge:
         self.enum_cmd = None        # int
 
     def publish_data(self, data):
-        try:
-            message = pickle.dumps(data)
-            self.pub.send(message)
-        except Exception as e:
-            print(f"[ZMQ Bridge] Error sending data: {e}")
+        # try:
+        message = pickle.dumps(data)
+        self.pub.send(message)
+        # except Exception as e:
+        #     print(f"[ZMQ Bridge] Error sending data: {e}")
 
     def poll(self):
         # reset transient state
@@ -63,34 +63,34 @@ class ZMQBridge:
         self.nav_pose = None
         events = dict(self.poller.poll(0))
         if self.sub in events:
-            try:
-                # Drain all available messages; keep only the latest values this tick
-                while True:
-                    msg = self.sub.recv(flags=zmq.NOBLOCK)
-                    cmd_data = pickle.loads(msg)
-                    if "cmd_vel" in cmd_data:
-                        arr = cmd_data["cmd_vel"]
-                        self.latest_cmd_vel = (float(arr[0]), float(arr[5]))  # lin.x, ang.z
-                    if "nav_pose" in cmd_data:
-                        pos_np, quat_np_wxyz = cmd_data["nav_pose"]
-                        self.nav_pose = (pos_np, quat_np_wxyz)
-                    if "enum" in cmd_data:
-                        self.enum_cmd = int(cmd_data["enum"])
-            except Exception:
-                # EAGAIN or deserialization errors are ignored per tick
-                pass
+            # try:
+            #     # Drain all available messages; keep only the latest values this tick
+            while True:
+                msg = self.sub.recv(flags=zmq.NOBLOCK)
+                cmd_data = pickle.loads(msg)
+                if "cmd_vel" in cmd_data:
+                    arr = cmd_data["cmd_vel"]
+                    self.latest_cmd_vel = (float(arr[0]), float(arr[5]))  # lin.x, ang.z
+                if "nav_pose" in cmd_data:
+                    pos_np, quat_np_wxyz = cmd_data["nav_pose"]
+                    self.nav_pose = (pos_np, quat_np_wxyz)
+                if "enum" in cmd_data:
+                    self.enum_cmd = int(cmd_data["enum"])
+            # except Exception:
+            #     # EAGAIN or deserialization errors are ignored per tick
+            #     pass
 
     def close(self):
-        try:
+        # try:
             self.pub.close()
-        except Exception:
-            pass
-        try:
+        # except Exception:
+        #     pass
+        # try:
             self.sub.close()
-        except Exception:
-            pass
-        try:
+        # except Exception:
+        #     pass
+        # try:
             self.context.term()
-        except Exception:
-            pass
+        # except Exception:
+        #     pass
 
