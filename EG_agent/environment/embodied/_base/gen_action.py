@@ -38,6 +38,7 @@ class EmbodiedAction(Action):
         #     script = [f'<char0> [{self.action_class_name.lower()}] <{self.args[0].lower()}> (1) <{self.args[1].lower()}> (1)']
         # # self.env.run_script(script,verbose=True,camera_mode="PERSON_FROM_BACK") # FIRST_PERSON
         # print("script: ",script)
+        self.env.run_action(self.action_class_name.lower(), self.agent.cur_action_args)
 
         self.change_condition_set()
         return Status.RUNNING

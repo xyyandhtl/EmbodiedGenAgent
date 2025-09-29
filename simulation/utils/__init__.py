@@ -4,4 +4,4 @@ from .wrappers import *
 from .zmq_bridge import *
 from .enum_actions import *
 
-from .test_camera_viewer import *
+from .camera_monitor import *

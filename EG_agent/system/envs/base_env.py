@@ -2,21 +2,25 @@ import time
 from typing import List
 
 from EG_agent.planning.btpg.behavior_tree.behavior_libs import ExecBehaviorLibrary
+from EG_agent.planning.btpg import BehaviorTree
 
 class BaseAgentEnv(object):
+    # Merged Agent and Env for simplicity
+    # If hard to work or clarify the logic, separate them into two classes
     agent_num = 1
     behavior_lib_path = None
     print_ticks = False
     headless = False
     response_frequency = 1  # moved from Agent
     scene = None  # moved from Agent
+    cur_action_args = ()
 
     def __init__(self):
         self.time = 0
         self.start_time = time.time()
         self.env = self  # so code expecting agent.env keeps working
         self.condition_set = set()  # moved from Agent
-        self.bt = None  # behavior tree binding
+        self.bt: BehaviorTree = None  # type: ignore
 
         self.init_statistics()  # moved from Agent
 
@@ -56,7 +60,7 @@ class BaseAgentEnv(object):
                     print("\n")
                     self.last_tick_output = bt_output
 
-        self.env_step()
+        # self.env_step()
         self.last_step_time = self.time
         return self.task_finished()
 

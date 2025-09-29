@@ -31,8 +31,9 @@ class IsaacsimEnv(BaseAgentEnv):
         self.nav_pose_pub = self.ros_node.create_publisher(PoseStamped, "/nav_pose", 10)
         self.enum_pub = self.ros_node.create_publisher(Int32, "/enum_cmd", 10)
 
-    def register_action_callbacks(self, type: str, fn: Callable):
-        self.action_callbacks_dict[type] = fn
+    def env_update(self, env_data: dict):
+        pass
+
 
     def reset(self):
         raise NotImplementedError
@@ -48,7 +49,7 @@ class IsaacsimEnv(BaseAgentEnv):
         # todo: maybe do nothing
         pass
 
-    def run_action(self, action_type: str, action: tuple, verbose=False):
+    def run_action(self, action_type: str, action: tuple, verbose=True):
         """
         Strict action formats:
           - 'cmd_vel': list/tuple/ndarray of 3 floats -> [vx, vy, wz]

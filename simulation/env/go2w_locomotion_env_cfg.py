@@ -75,6 +75,9 @@ class VelocitySceneCfg(InteractiveSceneCfg):
         #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=54.0, clipping_range=(0.1, 1.0e5)
         # ),
         offset=CameraCfg.OffsetCfg(pos=(0.0, 0.0, 0.2), rot=(1.0, 0.0, 0.0, 0.0), convention="world"),
+        colorize_semantic_segmentation=False,
+        colorize_instance_id_segmentation=False,
+        colorize_instance_segmentation=False,
     )
     # height_scanner = RayCasterCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base",

@@ -10,6 +10,7 @@ from scipy.spatial.transform import Rotation as R
 
 from EG_agent.vlmap.utils.time_utils import timing_context
 from EG_agent.vlmap.utils.types import DataInput
+from EG_agent.vlmap.dualmap.core import Dualmap
 
 
 class RunnerROSBase:
@@ -19,7 +20,7 @@ class RunnerROSBase:
     image decompression, pose conversion, and keyframe processing.
     """
 
-    def __init__(self, cfg, dualmap):
+    def __init__(self, cfg, dualmap: Dualmap):
         self.cfg = cfg
         self.dualmap = dualmap
         self.logger = logging.getLogger(__name__)

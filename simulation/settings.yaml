@@ -3,7 +3,7 @@ defaults:
 #  - override hydra/job_logging: stdout
 
 # scene config
-terrain: "davinci"   # see assets/terrains/usd_scene.py
+terrain: "carla"   # see assets/terrains/usd_scene.py
 add_physics: True # if the terrain usd dont have collision
 
 # locomotion config
@@ -11,6 +11,8 @@ policy: eilab  # (reconstructed from legged-loco)
 observation_len: 5
 policy_device: cuda:0
 
+# camera config
+publish_dt: 0.1
 sensors:
   camera:
     width: 640
@@ -19,6 +21,7 @@ sensors:
     fy: 320.0
     cx: 320.0
     cy: 240.0
+monitor_camera: False
 
 # ui config
 sim_app:
