@@ -4,7 +4,7 @@ import sys
 import time
 import numpy as np
 from pathlib import Path
-from omegaconf import OmegaConf
+from dynaconf import Dynaconf
 
 PROJECT_PATH = str(Path(__file__).resolve().parent.parent)
 sys.path.append(PROJECT_PATH)
@@ -12,8 +12,7 @@ sys.path.append(PROJECT_PATH)
 from simulation.assets import SIMULATION_DIR, SIMULATION_DATA_DIR
 
 CONFIG_PATH = os.path.join(SIMULATION_DIR, "settings.yaml")
-CFG = OmegaConf.load(CONFIG_PATH)
-# prepare output directories (capture/report)
+CFG = Dynaconf(settings_files=[CONFIG_PATH], lowercase_read=True)
 CAPTURED_DIR = os.path.join(SIMULATION_DIR, "..", "app/captured")
 REPORTS_DIR = os.path.join(SIMULATION_DIR, "..", "app/reports")
 
@@ -22,30 +21,24 @@ from isaaclab.app import AppLauncher
 # --- Launch Omniverse App ---
 simulation_app = AppLauncher(
     headless=CFG.sim_app.headless,
-    enable_cameras=CFG.sim_app.record_video,  # if record_video=True, should set enable_cameras=True in simulation_app
+    enable_cameras=CFG.sim_app.record_video,
     anti_aliasing=CFG.sim_app.anti_aliasing,
     width=CFG.sim_app.width,
     height=CFG.sim_app.height,
-    hide_ui=CFG.sim_app.hide_ui,
 ).app
-
-import carb
-import omni.usd
-# Use SimulaitonApp directly should set carb_settings
-# carb_settings_iface = carb.settings.get_settings()
-# carb_settings_iface.set("/persistent/isaac/asset_root/cloud", "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0")
 
 from isaaclab.devices import Se2Keyboard, Se2KeyboardCfg
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.utils.assets import check_file_path, read_file
-from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
 from simulation.assets.terrains.usd_scene import ASSET_DICT, add_collision_and_material
 import simulation.mdp as mdp
 from simulation.env.go2w_locomotion_env_cfg import LocomotionVelocityEnvCfg
 from simulation.utils import (
+    setup_isaacsim_settings,
     camera_follow,
+    get_current_stage,
     handle_enum_action,
     LabGo2WEnvHistoryWrapper,
     IsaacLabSensorHandler,
@@ -54,8 +47,12 @@ from simulation.utils import (
 )
 
 def main():
-    """Main function to run the Go2W locomotion demo and publish sensor data via ZMQ."""
+    # --- 0. Setup Isaac Sim Settings ---
+    if not CFG.sim_app.headless:
+        setup_isaacsim_settings()
+    # hide_workspace_windows()
 
+    """Main function to run the Go2W locomotion demo and publish sensor data via ZMQ."""
     # --- 1. Get Environment Configs ---
     env_cfg = LocomotionVelocityEnvCfg()
     # update configs
@@ -65,8 +62,8 @@ def main():
     # env_cfg.commands.base_velocity.debug_vis = False
     controller = Se2Keyboard(
         Se2KeyboardCfg(
-            v_x_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_x[1] * 2,
-            v_y_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_y[1] * 2,
+            v_x_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_x[1],
+            v_y_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_y[1],
             omega_z_sensitivity=env_cfg.commands.base_velocity.ranges.ang_vel_z[1],
         )
     )
@@ -92,7 +89,7 @@ def main():
     else:
         raise NotImplementedError(f"Policy '{CFG.policy}' not implemented.")
 
-    stage = omni.usd.get_context().get_stage()
+    stage = get_current_stage()
     if CFG.add_physics:
         terrain_prim = stage.GetPrimAtPath("/World/Terrain")
         add_collision_and_material(terrain_prim, static_friction=0.8, dynamic_friction=0.6)
@@ -170,11 +167,12 @@ def main():
                     reports_dir=REPORTS_DIR,
                     marks=marks,
                 )            
-  
+            
             actions = policy(obs)
             obs, _, _, _ = env.step(actions)
 
-            # camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
+            if CFG.camera_follow:
+                camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
 
             # --- 发布 sensor 数据（按CFG间隔） ---
             now = time.time()
@@ -208,11 +206,11 @@ def main():
                 time.sleep(sleep_time)
 
         # Print policy step time info periodically to avoid spamming
-        # frame_count += 1
-        # if frame_count % 50 == 1:
-        #     actual_loop_time = time.time() - start_time
-        #     rtf = min(1.0, policy_step_dt / elapsed_time)
-        #     print(f"[INFO] Policy Step time: {actual_loop_time * 1000:.2f}ms, Real Time Factor: {rtf:.2f}", flush=True)
+        frame_count += 1
+        if frame_count % 50 == 1:
+            actual_loop_time = time.time() - start_time
+            rtf = min(1.0, policy_step_dt / elapsed_time)
+            print(f"[INFO] Policy Step time: {actual_loop_time * 1000:.2f}ms, Real Time Factor: {rtf:.2f}", flush=True)
 
     # --- 6. Cleanup ---
     print("Simulation finished.")
