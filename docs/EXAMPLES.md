@@ -44,7 +44,11 @@
 
 **Note**: not intended to deploy the agent in habitat-simulator, because it is rather a high-level simulator, sim2real gap would be huge
 
-![vlmap_rerun_viewer](assets/vlmap_rerun_viewer.png)
+| <img src="assets/vlmap_rerun_habitat.png" alt="habitat" height="200"> | <img src="assets/vlmap_rerun_isaac.png" alt="isaac" height="200"> |
+|:---------------------------------------------------------------------:|:-----------------------------------------------------------------:|
+| Habitat 仿真                                                      | Isaac 仿真                                                    |
+
+
 - after end_process, the global map will be saved and the timing statistics will be printed:
 ```shell
 INFO:EG_agent.vlmap.utils.object_detector:[Detector][Layout] Saving layout to: /home/lenovo/Projects/GenAgent/EG_agent/vlmap/./outputs/map_results/carla/map/layout.pcd

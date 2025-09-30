@@ -66,7 +66,7 @@ class VelocitySceneCfg(InteractiveSceneCfg):
     # Sensors
     rgbd_camera = CameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base/rgbd_camera",
-        update_period=0.1,
+        update_period=0.06, # ~15Hz, close to realsense, > self.sim.render_interval
         height=480,
         width=640,
         data_types=["rgb", "distance_to_image_plane"],
@@ -108,7 +108,7 @@ class CommandsCfg:
         rel_heading_envs=1.0,
         heading_command=False,
         heading_control_stiffness=0.5,
-        debug_vis=True,
+        debug_vis=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(-1.0, 1.0), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-1.0, 1.0), heading=(0.0, 0.0)
         ),
@@ -148,14 +148,14 @@ class ObservationsCfg:
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
             params={"asset_cfg": SceneEntityCfg(name="robot")},
-            noise=Unoise(n_min=-0.2, n_max=0.2),
+            # noise=Unoise(n_min=-0.2, n_max=0.2),
             clip=(-100.0, 100.0),
             scale=0.25,
        )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
             params={"asset_cfg": SceneEntityCfg(name="robot")},
-            noise=Unoise(n_min=-0.05, n_max=0.05),
+            # noise=Unoise(n_min=-0.05, n_max=0.05),
             clip=(-100.0, 100.0),
             scale=1.0,
         )
@@ -171,14 +171,14 @@ class ObservationsCfg:
                 "asset_cfg": SceneEntityCfg(name="robot", joint_names=GO2W_JOINT_NAMES, preserve_order=True),
                 "wheel_asset_cfg": SceneEntityCfg(name="robot", joint_names=GO2W_WHEEL_JOINT_NAMES),
             },
-            noise=Unoise(n_min=-0.01, n_max=0.01),
+            # noise=Unoise(n_min=-0.01, n_max=0.01),
             clip=(-100.0, 100.0),
             scale=1.0,
         )
         joint_vel = ObsTerm(
             func=mdp.joint_vel_rel,
             params={"asset_cfg": SceneEntityCfg(name="robot", joint_names=GO2W_JOINT_NAMES, preserve_order=True)},
-            noise=Unoise(n_min=-1.5, n_max=1.5),
+            # noise=Unoise(n_min=-1.5, n_max=1.5),
             clip=(-100.0, 100.0),
             scale=0.05,
         )
@@ -248,7 +248,7 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
         self.episode_length_s = 20.0
 
         # simulation settings
-        self.sim.dt = 0.005
+        self.sim.dt = 0.01
         self.sim.render_interval = self.decimation
         # self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2 ** 15
