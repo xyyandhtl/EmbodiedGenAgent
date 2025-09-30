@@ -63,22 +63,24 @@ class ZMQBridge:
         self.nav_pose = None
         events = dict(self.poller.poll(0))
         if self.sub in events:
-            # try:
-            #     # Drain all available messages; keep only the latest values this tick
-            while True:
-                msg = self.sub.recv(flags=zmq.NOBLOCK)
-                cmd_data = pickle.loads(msg)
-                if "cmd_vel" in cmd_data:
-                    arr = cmd_data["cmd_vel"]
-                    self.latest_cmd_vel = (float(arr[0]), float(arr[5]))  # lin.x, ang.z
-                if "nav_pose" in cmd_data:
-                    pos_np, quat_np_wxyz = cmd_data["nav_pose"]
-                    self.nav_pose = (pos_np, quat_np_wxyz)
-                if "enum" in cmd_data:
-                    self.enum_cmd = int(cmd_data["enum"])
-            # except Exception:
-            #     # EAGAIN or deserialization errors are ignored per tick
-            #     pass
+            try:
+                # Drain all available messages; keep only the latest values this tick
+                while True:
+                    msg = self.sub.recv(flags=zmq.NOBLOCK)
+                    cmd_data = pickle.loads(msg)
+                    if "cmd_vel" in cmd_data:
+                        arr = cmd_data["cmd_vel"]
+                        self.latest_cmd_vel = (float(arr[0]), float(arr[5]))  # lin.x, ang.z
+                    if "nav_pose" in cmd_data:
+                        pos_np, quat_np_wxyz = cmd_data["nav_pose"]
+                        self.nav_pose = (pos_np, quat_np_wxyz)
+                    if "enum" in cmd_data:
+                        self.enum_cmd = int(cmd_data["enum"])
+            except zmq.Again:
+                pass
+            except Exception:
+                # EAGAIN or deserialization errors are ignored per tick
+                pass
 
     def close(self):
         # try:

@@ -90,6 +90,8 @@ class RunnerROSBase:
 
     def push_data(self, rgb_img, depth_img, pose, timestamp):
         """Push synchronized input data into queue for processing."""
+        # 用于灵活调整世界坐标系的方向
+        # 目前：capture_frame 和 extrinsics 是 单位阵，pose 是相机的世界坐标系(ROS系统，前进轴为Z，上轴为-Y)）
         transformed_pose = self.create_world_transform() @ (pose @ self.extrinsics)
 
         data_input = DataInput(

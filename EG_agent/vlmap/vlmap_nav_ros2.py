@@ -203,13 +203,13 @@ class VLMapNavROS2(Node, RunnerROSBase):
         return None
 
 
-    def get_cmd_vel(self, waypoint: list, kp: float = 0.5, max_lin_vel: float = 2.0, max_ang_vel: float = 1.0,
-                    yaw_error_threshold: float = 1.0, goal_reached_threshold: float = 0.3) -> tuple[tuple, bool]:
+    def get_cmd_vel(self, waypoint: list, kp: float = 0.25, max_lin_vel: float = 2.0, max_ang_vel: float = 1.0,
+                    yaw_error_threshold: float = 0.8, goal_reached_threshold: float = 0.3) -> tuple[tuple, bool]:
         """
-        Generates a single velocity command and checks if the goal is reached.
+        Generates a single velocity command in the World frame and checks if the goal is reached.
 
         Args:
-            waypoint: The target 3D waypoint [x, y, z].
+            waypoint: The target 3D waypoint [x, y, z] in ROS coordinate system.
             kp: Proportional gain for the angular velocity controller.
             max_lin_vel: Maximum linear velocity (m/s).
             max_ang_vel: Maximum angular velocity (rad/s).
@@ -218,51 +218,80 @@ class VLMapNavROS2(Node, RunnerROSBase):
 
         Returns:
             A tuple containing:
-            - A velocity command tuple (vx, vy, wz).
+            - A velocity command tuple (vx, vy, wz) in the robot's base frame (World system).
             - A boolean `is_reached` flag.
         """
-        current_pose = np.copy(self.dualmap.curr_pose)  # 4x4 pose matrix (camera pose)
-        if isinstance(current_pose, np.ndarray) and current_pose.ndim == 3:
-            current_pose = current_pose[-1, :, :]
-        if waypoint is None or current_pose is None:
-            self.logger.warning("[VLMapNavROS2][get_cmd_vel] Waypoint or current_pose is None.")
+        # --- 1. Check Inputs ---
+        camera_pose_ros = np.copy(self.dualmap.curr_pose)  # 4x4 pose matrix in ROS frame
+        if waypoint is None or camera_pose_ros is None:
+            self.logger.warning("[VLMapNavROS2][get_cmd_vel] Waypoint or camera_pose is None.")
             return ((0.0, 0.0, 0.0), False)
+        if isinstance(camera_pose_ros, np.ndarray) and camera_pose_ros.ndim == 3:
+            camera_pose_ros = camera_pose_ros[-1, :, :]
 
-        # Get current position and yaw from the 4x4 pose matrix
-        current_pos = current_pose[:3, 3]
-        rotation_matrix = current_pose[:3, :3]
-        # current_quat = R.from_matrix(rotation_matrix).as_quat()
-        # current_quat_ = np.roll(current_quat, 1, -1)  # x,y,z,w ==> w,x,y,z
-        # self.logger.warning(f"[VLMapNavROS2][get_cmd_vel] current_pos: {current_pos}, current_quat: {current_quat_}")
+        # --- 2. Define Coordinate Transformations ---
+        # Rotation from ROS frame (+Z fwd, -Y up) to World frame (+X fwd, +Z up)
+        # World_X = ROS_Z, World_Y = -ROS_X, World_Z = -ROS_Y
+        rot_ros_to_world = R.from_matrix([
+            [0, 0, 1],
+            [-1, 0, 0],
+            [0, -1, 0]
+        ])
+        # Camera offset from base in World frame (camera is 0.2m above the base) according to the simulation/env/xx_env_cfg
+        cam_offset_world = np.array([0.0, 0.0, 0.2])
 
-        current_yaw = np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
+        # --- 3. Transform Inputs from ROS to World Frame ---
+        # a. Extract camera position and rotation from ROS pose matrix
+        cam_pos_ros = camera_pose_ros[:3, 3]
+        cam_rot_ros_matrix = camera_pose_ros[:3, :3]
+        cam_rot_ros = R.from_matrix(cam_rot_ros_matrix)
 
-        # Check if the goal is reached (using 2D distance)
-        dist_to_waypoint = np.linalg.norm(np.array(waypoint)[:2] - current_pos[:2])
-        if dist_to_waypoint < goal_reached_threshold:
-            self.logger.info(f"[VLMapNavROS2][get_cmd_vel] Waypoint reached (distance: {dist_to_waypoint:.2f}m).")
+        # b. Transform camera pose to world frame
+        cam_pos_world = rot_ros_to_world.apply(cam_pos_ros)
+        cam_rot_world = rot_ros_to_world * cam_rot_ros
+
+        # c. Calculate robot base pose in world frame by applying the offset
+        robot_pos_world = cam_pos_world - cam_offset_world
+        robot_rot_world = cam_rot_world
+
+        # d. Transform waypoint to world frame
+        waypoint_ros = np.array(waypoint)
+        waypoint_world = rot_ros_to_world.apply(waypoint_ros)
+
+        # e. Calculate distance and angle to the goal
+        dist_to_goal = np.linalg.norm(waypoint_world[:2] - robot_pos_world[:2])  # 3D distance
+        if dist_to_goal <= goal_reached_threshold:
+            self.logger.info(f"[VLMapNavROS2][get_cmd_vel] Waypoint reached (distance: {dist_to_goal: .2f}m).")
             return ((0.0, 0.0, 0.0), True)
 
-        # --- P-Controller Logic ---
-        # Calculate heading error, wrapped to the range [-pi, pi]
-        goal_yaw = np.arctan2(waypoint[1] - current_pos[1], waypoint[0] - current_pos[0])
+        # --- 4. Calculate Velocity Command in World Frame (following simulation/mdp/commands.py) ---
+        # a. Calculate desired heading in the world XY plane
+        goal_yaw = np.arctan2(waypoint_world[1] - robot_pos_world[1], waypoint_world[0] - robot_pos_world[0])  # 2D heading
+
+        # b. Get current robot quaternion in w,x,y,z format for yaw calculation
+        robot_quat_xyzw = robot_rot_world.as_quat()
+        qw, qx, qy, qz = robot_quat_xyzw[3], robot_quat_xyzw[0], robot_quat_xyzw[1], robot_quat_xyzw[2]
+        current_yaw = np.arctan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
+
+        # c. Calculate heading error, wrapped to the range [-pi, pi]
         yaw_error = goal_yaw - current_yaw
         yaw_error = np.arctan2(np.sin(yaw_error), np.cos(yaw_error))
 
-        # Calculate angular velocity
+        # d. Decide velocity based on distance and heading error
         ang_vel_z = kp * yaw_error
         ang_vel_z = np.clip(ang_vel_z, -max_ang_vel, max_ang_vel)
 
-        # Calculate linear velocity
+        # e. Calculate linear velocity (decoupling)
         lin_vel_x = 0.0
-        if abs(yaw_error) > yaw_error_threshold:
-            # Robot needs to turn, reduce linear velocity
-            lin_vel_x = max_lin_vel * (1.0 - (abs(yaw_error) - yaw_error_threshold) / (math.pi - yaw_error_threshold))
+        if np.abs(yaw_error) > yaw_error_threshold:
+            # Reduce linear velocity significantly during sharp turns
+            lin_vel_x = max_lin_vel * (1.0 - (np.abs(yaw_error) - yaw_error_threshold) / (np.pi - yaw_error_threshold))
             lin_vel_x = np.clip(lin_vel_x, 0.0, max_lin_vel)
         else:
-            # Robot is facing the goal, move forward
             lin_vel_x = max_lin_vel
 
+        # The command is (lin_vel_x, 0.0, ang_vel_z) which corresponds to (vx, vy, wz)
+        # in the robot's base frame, aligned with the world frame for this calculation.
         return ((lin_vel_x, 0.0, ang_vel_z), False)
 
     def query_object(self, query: str):

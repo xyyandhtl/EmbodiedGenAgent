@@ -82,15 +82,45 @@ def main():
         vlmap_node.get_logger().warning(f"Waiting {initial_wait_time}s for map initialization...")
         time.sleep(initial_wait_time)
 
-        # 3. Get navigation path
-        vlmap_node.get_logger().warning(f"Requesting navigation path for goal: '{args.goal}'")
-        nav_path = vlmap_node.get_nav_path(args.goal, timeout_seconds=60)
+        # 3. Get navigation path (with exploration loop)
+        vlmap_node.get_logger().warning(f"Starting search and exploration loop for goal: '{args.goal}'")
+        nav_path = None
+        while rclpy.ok() and not nav_path:
+            vlmap_node.get_logger().info(f"Attempting to find path for '{args.goal}'...")
+            # Use a shorter timeout for each attempt inside the loop
+            path_attempt = vlmap_node.get_nav_path(args.goal, timeout_seconds=30)
+
+            if path_attempt:
+                nav_path = path_attempt
+                vlmap_node.get_logger().warning(f"Goal found! Successfully received path with {len(nav_path)} waypoints.")
+                # Stop any potential rotation before starting navigation
+                cmd_vel_pub.publish(Twist())
+                break  # Exit the while loop
+            else:
+                # If path is not found, explore by rotating
+                vlmap_node.get_logger().warning(f"Goal '{args.goal}' not found in map. Exploring by rotating one full circle...")
+                exploration_twist = Twist()
+                exploration_twist.angular.z = 1.0  # rad/s
+                
+                # Rotate for 2π radians (one full circle) at 1.0 rad/s
+                # This should take approximately 2π seconds (~6.28 seconds)
+                rotation_duration = 2 * 3.14159  # 2π seconds for a full circle
+                rotation_start_time = time.time()
+                cmd_vel_pub.publish(exploration_twist)
+                
+                # Keep publishing rotation command until one full circle is completed
+                while time.time() - rotation_start_time < rotation_duration:
+                    cmd_vel_pub.publish(exploration_twist)
+                    time.sleep(0.2)  # Small delay to prevent flooding
+
+                # Stop rotating
+                cmd_vel_pub.publish(Twist())
+                vlmap_node.get_logger().info("Exploration rotation finished. Retrying in 5 seconds...")
+                time.sleep(5) # Pause before the next attempt
 
         if not nav_path:
-            vlmap_node.get_logger().error("Failed to get navigation path. Shutting down.")
+            vlmap_node.get_logger().error("Could not find navigation path after exploration. Shutting down.")
             return
-
-        vlmap_node.get_logger().warning(f"Successfully received path with {len(nav_path)} waypoints.")
 
         # 4. Execute action based on selected mode
         if args.mode == 'cmd_vel':
