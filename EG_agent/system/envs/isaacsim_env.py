@@ -1,15 +1,23 @@
 from typing import Callable
 import numpy as _np
 import math
-
-from EG_agent.system.envs.base_env import BaseAgentEnv
-from EG_agent.system.module_path import AGENT_ENV_PATH
+from concurrent.futures import ThreadPoolExecutor
 
 # --- ROS2 相关导入 ---
 import rclpy
 from rclpy.node import Node
+from rclpy.executors import MultiThreadedExecutor
 from geometry_msgs.msg import Twist, PoseStamped
 from std_msgs.msg import Int32
+from sensor_msgs.msg import Image, CompressedImage, CameraInfo
+from nav_msgs.msg import Odometry
+from cv_bridge import CvBridge
+from message_filters import Subscriber, ApproximateTimeSynchronizer
+from scipy.spatial.transform import Rotation as _R
+
+from EG_agent.system.envs.base_env import BaseAgentEnv
+from EG_agent.system.module_path import AGENT_ENV_PATH
+from EG_agent.vlmap.ros_runner.ros_publisher import ROSPublisher
 
 class IsaacsimEnv(BaseAgentEnv):
     agent_num = 1
@@ -27,50 +35,205 @@ class IsaacsimEnv(BaseAgentEnv):
     # Real-time visibility state: {goal_name_lower: bool}
     goal_inview = {}
 
+    # =========================================================
+    # 构造与配置（初始化、ROS 话题与发布者/订阅者配置）
+    # =========================================================
     def __init__(self):
         super().__init__()
+        # Defer ROS init to configure_ros
+        self.ros_node: Node | None = None
+        self.cmd_vel_pub = None
+        self.nav_pose_pub = None
+        self.enum_pub = None
 
-        # Ensure rclpy is initialized
-        if not rclpy.ok():
-            rclpy.init()
+        # Subscribers and sync
+        self._rgb_sub = None
+        self._depth_sub = None
+        self._odom_sub = None
+        self._sync = None
+        self._bridge = CvBridge()
 
-        # Create node and publishers directly; let exceptions propagate if rclpy not initialized.
-        self.ros_node = Node("isaacsim_env_node")
-        self.cmd_vel_pub = self.ros_node.create_publisher(Twist, "/cmd_vel", 10)
-        self.nav_pose_pub = self.ros_node.create_publisher(PoseStamped, "/nav_pose", 10)
-        self.enum_pub = self.ros_node.create_publisher(Int32, "/enum_cmd", 10)
+        # ROS spinning
+        self._ros_executor: MultiThreadedExecutor | None = None
+        self._ros_thread = None
+        self._ros_spin_stop = None
+        self._ros_init_owner = False
+
+        # Config reference
+        self._cfg = None  # Dynaconf instance
+        self._obs_callback: Callable[[ _np.ndarray, _np.ndarray, _np.ndarray, float], None] | None = None
+        # Track last synced observation time
+        self._last_obs_time: float | None = None
+
+        # --- 新增: VLMap 后端引用 + 发布器资源 ---
+        self._vlmap_backend = None
+        self._ros_publisher: ROSPublisher | None = None
+        self._ros_pub_executor: ThreadPoolExecutor | None = None
+        self._ros_pub_timer = None
 
         self.action_callbacks_dict = {}  # ensure callbacks dict exists
 
+    def configure_ros(self, cfg) -> None:
+        """创建 ROS 节点、发布/订阅与同步器，并在后台线程 spin。"""
+        # 保存 Dynaconf 引用并同步相机配置
+        self._cfg = cfg
+        self.cam_fov_x_deg = float(cfg.camera.fov_x_deg)
+        self.cam_aspect = float(cfg.camera.aspect)
+        self.use_compressed_topic = bool(cfg.ros.use_compressed_topic)
+
+        # Init rclpy if needed
+        if not rclpy.ok():
+            rclpy.init()
+            self._ros_init_owner = True
+
+        # Create node and pubs
+        self.ros_node = Node("isaacsim_env_node")
+        self.cmd_vel_pub = self.ros_node.create_publisher(Twist, cfg.ros.pubs.cmd_vel, 10)
+        self.nav_pose_pub = self.ros_node.create_publisher(PoseStamped, cfg.ros.pubs.nav_pose, 10)
+        self.enum_pub = self.ros_node.create_publisher(Int32, cfg.ros.pubs.enum_cmd, 10)
+
+        # Subs + sync
+        if self.use_compressed_topic:
+            self._rgb_sub = Subscriber(self.ros_node, CompressedImage, cfg.ros.topics.rgb)
+            self._depth_sub = Subscriber(self.ros_node, CompressedImage, cfg.ros.topics.depth)
+        else:
+            self._rgb_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.rgb)
+            self._depth_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.depth)
+
+        self._odom_sub = Subscriber(self.ros_node, Odometry, cfg.ros.topics.odom)
+
+        self._sync = ApproximateTimeSynchronizer(
+            [self._rgb_sub, self._depth_sub, self._odom_sub],
+            queue_size=10,
+            slop=float(cfg.ros.sync_threshold)
+        )
+        self._sync.registerCallback(self._synced_callback)
+
+        # Start spinning
+        self._ros_executor = MultiThreadedExecutor()
+        self._ros_executor.add_node(self.ros_node)
+
+        def _spin():
+            while rclpy.ok():
+                self._ros_executor.spin_once(timeout_sec=0.1)
+
+        self._ros_thread = __import__("threading").Thread(target=_spin, daemon=True)
+        self._ros_thread.start()
+
+        # --- 新增: 可选启用 ROSPublisher，周期发布 Dualmap 可视化等 ---
+        if cfg.use_rviz:
+            self._ros_publisher = ROSPublisher(self.ros_node, cfg)
+            self._ros_pub_executor = ThreadPoolExecutor(max_workers=2)
+            period = 1.0 / float(cfg.ros.ros_rate)
+            self._ros_pub_timer = self.ros_node.create_timer(period, self._ros_pub_tick)
+
+    # ==========================================
+    # ROS 观测与回调（同步回调、观测转发）
+    # ==========================================
+    def set_observation_callback(self, cb: Callable[[ _np.ndarray, _np.ndarray, _np.ndarray, float], None]) -> None:
+        """注册单一观测回调 (rgb, depth, pose4x4, timestamp)。"""
+        self._obs_callback = cb
+
+    # 新增: 供上层注入 VLMap 后端（用于 ROSPublisher 发布 dualmap）
+    def set_vlmap_backend(self, backend) -> None:
+        """Attach VLMap backend so ROSPublisher can publish dualmap outputs."""
+        self._vlmap_backend = backend
+
+    def _synced_callback(self, rgb_msg, depth_msg, odom_msg):
+        """RGB/Depth/Odom 同步回调：解码 -> 位姿矩阵 -> 调用观测回调 -> 更新可视状态"""
+        # Timestamp
+        timestamp = rgb_msg.header.stamp.sec + rgb_msg.header.stamp.nanosec * 1e-9
+
+        # RGB/Depth conversion
+        if self.use_compressed_topic:
+            # Minimal compressed support via CvBridge; if not supported fallback to no-op
+            rgb_img = self._bridge.compressed_imgmsg_to_cv2(rgb_msg, desired_encoding='rgb8')
+            depth_cv = self._bridge.compressed_imgmsg_to_cv2(depth_msg, desired_encoding='16UC1')
+        else:
+            rgb_img = self._bridge.imgmsg_to_cv2(rgb_msg, desired_encoding='rgb8')
+            depth_cv = self._bridge.imgmsg_to_cv2(depth_msg, desired_encoding='16UC1')
+
+        depth_img = depth_cv.astype(_np.float32) / 1000.0
+        depth_img = _np.expand_dims(depth_img, axis=-1)
+
+        # Pose matrix from odom
+        t = _np.array([
+            odom_msg.pose.pose.position.x,
+            odom_msg.pose.pose.position.y,
+            odom_msg.pose.pose.position.z
+        ], dtype=_np.float32)
+        qx = odom_msg.pose.pose.orientation.x
+        qy = odom_msg.pose.pose.orientation.y
+        qz = odom_msg.pose.pose.orientation.z
+        qw = odom_msg.pose.pose.orientation.w
+        Rm = _R.from_quat([qx, qy, qz, qw]).as_matrix()
+        pose = _np.eye(4, dtype=_np.float32)
+        pose[:3, :3] = Rm
+        pose[:3, 3] = t
+
+        # Single callback
+        if self._obs_callback is not None:
+            self._obs_callback(rgb_img, depth_img, pose, timestamp)
+
+        # Record last observation time
+        self._last_obs_time = timestamp
+
+        # Optionally update env state for FOV checks
+        self.env_update({
+            "cam_pose_w": [t[0], t[1], t[2], qw, qx, qy, qz],
+            "cam_fov_x_deg": self.cam_fov_x_deg,
+            "cam_aspect": self.cam_aspect,
+        })
+
+    # 新增: 发布器定时回调
+    def _ros_pub_tick(self):
+        """Timer tick to publish all visualizations via ROSPublisher."""
+        # Guard against early timer firing before backend/publisher ready
+        self._ros_pub_executor.submit(self._ros_publisher.publish_all, self._vlmap_backend.dualmap)
+
+    # ==========================================
+    # 环境状态与目标管理（状态更新、目标位置、完成判定）
+    # ==========================================
     def env_update(self, env_data: dict):
+        """更新环境态并实时刷新目标可视性。"""
         self.cur_agent_states = {**env_data}
         # Read camera parameters from env_data
         if "cam_fov_x_deg" in self.cur_agent_states:
             self.cam_fov_x_deg = float(self.cur_agent_states["cam_fov_x_deg"])
         if "cam_aspect" in self.cur_agent_states:
             self.cam_aspect = float(self.cur_agent_states["cam_aspect"])
+
         # Recompute real-time visibility using cam_pose_w
         self._update_goal_inview()
-    
+
     def set_object_places(self, places: dict):
+        """设置/更新目标位置并刷新可视性。"""
         # Normalize to lower-case keys to match action args
         self.cur_goal_places = {str(k).lower(): v for k, v in places.items()}
         # Recompute visibility when goal set changes
         self._update_goal_inview()
 
     def reset(self):
-        raise NotImplementedError
+        """重置环境：清空内部状态、发布零速以停止，并等待首次同步观测（最多约2秒）。"""
+        # Clear internal state
+        self.cur_agent_states = {}
+        self.goal_inview = {}
+        self._last_obs_time = None
 
     def task_finished(self):
+        """根据条件集合判定任务完成。"""
         # Delegate scheduling/completion to behavior tree
-        return self.cur_goal_set <= self.condition_set
+        return self.cur_goal_set and self.cur_goal_set <= self.condition_set
 
+    # ==========================================
+    # 动作发布与执行（cmd_vel、nav_pose、枚举命令）
+    # ==========================================
     def run_action(self, action_type: str, action: tuple, verbose=True):
         """
-        Strict action formats:
-          - 'cmd_vel': list/tuple/ndarray of 3 floats -> [vx, vy, wz]
-          - 'nav_pose': list/tuple/ndarray of 7 floats -> [x,y,z,qw,qx,qy,qz]
-          - 'enum'/'enum_command': int or iterable of ints -> publish each Int32
+        严格动作格式：
+          - 'cmd_vel': [vx, vy, wz]
+          - 'nav_pose': [x,y,z,qw,qx,qy,qz]
+          - 'enum'/'enum_command': 单个或多个 Int32
         """
         # priority to registered callbacks
         if action_type in self.action_callbacks_dict:
@@ -137,11 +300,11 @@ class IsaacsimEnv(BaseAgentEnv):
         # unknown action
         raise ValueError(f"Action type {action_type} not registered and not a known ROS-publishable command.")
 
-    # -------------------------------
-    # Helpers: camera frustum geometry
-    # -------------------------------
+    # ==========================================
+    # 相机几何与可视性辅助（旋转、视锥检测）
+    # ==========================================
     def _quat_to_rotmat(self, qw: float, qx: float, qy: float, qz: float) -> _np.ndarray:
-        """Convert unit quaternion (w,x,y,z) to 3x3 rotation matrix."""
+        """单位四元数 (w,x,y,z) -> 旋转矩阵 (3x3)。"""
         # Normalize to be safe
         n = math.sqrt(qw*qw + qx*qx + qy*qy + qz*qz)
         if n == 0.0:
@@ -165,11 +328,7 @@ class IsaacsimEnv(BaseAgentEnv):
         aspect: float,
         forward_axis: str = "z",
     ) -> bool:
-        """
-        Check if a world-space point lies within a pinhole camera frustum defined by pose and intrinsics.
-        cam_pose: [x,y,z,qw,qx,qy,qz] (camera pose in world, ROS convention), camera +Z forward.
-        forward_axis: "z" (default) or "x" for alternate rigs.
-        """
+        """判断点是否处于相机视锥内。"""
         cx, cy, cz, qw, qx, qy, qz = map(float, cam_pose)
         cam_pos = _np.array([cx, cy, cz], dtype=_np.float64)
         R_wc = self._quat_to_rotmat(qw, qx, qy, qz)  # world-from-camera
@@ -195,19 +354,15 @@ class IsaacsimEnv(BaseAgentEnv):
         # Projected half-width/height at current depth
         max_h = math.tan(half_x) * depth
         max_v = math.tan(half_y) * depth
-
         return (abs(v_cam[h_idx]) <= max_h) and (abs(v_cam[v_idx]) <= max_v)
 
     def _update_goal_inview(self):
-        """
-        Update self.goal_inview in real time based on current cam_pose_w and cur_goal_places.
-        """
+        """根据当前相机位姿与目标位置，实时更新目标是否在视野内。"""
         # Default: no goals or no pose => all False
         self.goal_inview = {name: False for name in self.cur_goal_places.keys()}
         cam_pose = self.cur_agent_states.get("cam_pose_w")
         if not cam_pose or len(cam_pose) != 7:
             return
-
         for name, pt in self.cur_goal_places.items():
             # Normalize point to xyz
             if isinstance(pt, (list, tuple, _np.ndarray)) and len(pt) >= 3:
@@ -217,7 +372,6 @@ class IsaacsimEnv(BaseAgentEnv):
             else:
                 self.goal_inview[name] = False
                 continue
-
             self.goal_inview[name] = self._point_in_cam_fov(
                 cam_pose,
                 point,
@@ -226,12 +380,33 @@ class IsaacsimEnv(BaseAgentEnv):
                 forward_axis=self.cam_forward_axis,
             )
 
+    # ==========================================
+    # ROS 生命周期（关闭/清理）
+    # ==========================================
     def close(self):
-        # Destroy only this node; do NOT shutdown rclpy (managed externally)
-        if hasattr(self, "ros_node") and self.ros_node is not None:
-            try:
-                self.ros_node.destroy_node()
-            except Exception:
-                pass
-            self.ros_node = None
+        """销毁节点与执行器线程；必要时关闭 rclpy。"""
+        # 先清理发布器资源
+        if self._ros_pub_timer is not None:
+            self._ros_pub_timer.cancel()
+            self._ros_pub_timer = None
+        if self._ros_pub_executor is not None:
+            self._ros_pub_executor.shutdown(wait=False)
+            self._ros_pub_executor = None
+        self._ros_publisher = None
+
+        # Destroy node and stop executor; do NOT shutdown rclpy unless owned
+        if self._ros_executor is not None:
+            self._ros_executor.remove_node(self.ros_node)
+        if self.ros_node is not None:
+            self.ros_node.destroy_node()
+        if self._ros_thread is not None:
+            self._ros_thread.join(timeout=2.0)
+        self._ros_executor = None
+        self._ros_thread = None
+        self._rgb_sub = self._depth_sub = self._odom_sub = None
+        self._sync = None
+        if self._ros_init_owner and rclpy.ok():
+            rclpy.shutdown()
+            self._ros_init_owner = False
+        self.ros_node = None
 

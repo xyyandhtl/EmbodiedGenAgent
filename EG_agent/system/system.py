@@ -4,13 +4,15 @@ import time
 from typing import Callable, Dict, List, Any, Iterable
 from pathlib import Path
 from PIL import Image
+from dynaconf import Dynaconf
 
 from EG_agent.prompts.object_sets import AllObject
 from EG_agent.reasoning.logic_goal import LogicGoalGenerator
 from EG_agent.planning.bt_planner import BTGenerator
 from EG_agent.planning.btpg import BehaviorTree
-from EG_agent.vlmap.vlmap_nav_ros2 import VLMapNavROS2
+from EG_agent.vlmap.vlmap import VLMapNav
 from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
+from EG_agent.system.module_path import AGENT_SYSTEM_PATH
 
 
 class EGAgentSystem:
@@ -35,12 +37,20 @@ class EGAgentSystem:
                                         key_objects=list(AllObject))
 
         # Agent 载体部署环境
-        # 组成：通过bint_bt动态绑定行为树，定义run_action实现智能体如何和部署环境交互
+        # 组成：通过bint_bt动态绑定行为树，定义run_action实现交互逻辑，通过ROS2与部署环境信息收发
         # 运行：行为树叶节点在被tick时，通过调用其绑定的env的run_action实现智能体到部署环境交互的action
         self.env = IsaacsimEnv()
+        cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
+        self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
 
-        # VLM 地图导航模块
-        self.vlmap_backend = VLMapNavROS2()
+        # VLM 语义地图导航后端
+        # 先创建并挂到环境，避免 env 内部发布计时器过早触发
+        self.vlmap_backend = VLMapNav()
+        self.env.set_vlmap_backend(self.vlmap_backend)
+        self.env.set_observation_callback(self._on_env_observation)
+
+        # 再配置 ROS（内部会创建订阅与可选的发布计时器）
+        self.env.configure_ros(self.cfg)
 
         # 运行控制
         self._running = False
@@ -62,7 +72,9 @@ class EGAgentSystem:
     def start(self):
         """Start the agent loop in a background thread."""
         if self._running:
+            self._log("Agent system already running.")
             return
+        self._log("Agent system started.")
         self._stop_event.clear()
         self._running = True
         self._is_finished = False
@@ -72,7 +84,9 @@ class EGAgentSystem:
     def stop(self):
         """Request stop and close environment safely."""
         if not self._running:
+            self._log("Agent system not running.")
             return
+        self._log("Agent system stop requested.")
         self._stop_event.set()
         self._running = False
         # 允许环境安全停止
@@ -85,21 +99,15 @@ class EGAgentSystem:
         self._log("Environment reset.")
         is_finished = False
         while not self._stop_event.is_set() and not is_finished:
-            # TODO: 替换为真实 step
             time.sleep(0.1)
 
-            # 环境 step，行为树 agent 执行动作，和部署环境通信
-            # self.env.env_update({
-            #     "cam_pose_w": self.vlmap_backend.get_cam_pose_w(),
-            #     "cam_fov_x_deg": self.vlmap_backend.intrinsics().fov_x_deg,
-            #     "cam_aspect": self.vlmap_backend.intrinsics().aspect,
-            # })
-            is_finished = self.env.step()
+            # 后端地图/导航处理一次
+            self.vlmap_backend.run_once(lambda: time.time())
 
-            # 条件完成判定 (占位)
-            if self.goal_set and self.goal_set <= self.env.condition_set:
-                is_finished = True
-            # 周期性占位数据刷新
+            # 环境 step，行为树 agent 执行动作，和部署环境通信
+            # is_finished = self.env.step()
+
+            # (Debug)周期性占位数据刷新
             self._placeholder_counter += 1
             if self._placeholder_counter % 5 == 0:
                 self._append_conversation(f"智能体: 占位回复 {self._placeholder_counter}")
@@ -107,6 +115,7 @@ class EGAgentSystem:
             if self._placeholder_counter % 7 == 0:
                 self._update_entities_placeholder()
                 self._emit("entities", self.get_entity_rows())
+
         self._is_finished = True
         self._running = False
         self._log("Agent loop stopped.")
@@ -151,8 +160,10 @@ class EGAgentSystem:
                          image: np.ndarray,
                          depth: np.ndarray):
         """Ingest an observation (placeholder pipeline to be implemented)."""
-        # TODO: camera observation -> vlmap -> update condition / generate ll actions
-        # 暂时仅记录一条日志
+        # 手动喂给后端（可选路径，常规由 IsaacsimEnv 回调驱动）
+        ts = time.time()
+        self.vlmap_backend.push_data(image, depth, pose, ts)
+
         self._log("Received observation (placeholder).")
         self._emit("observation", None)
 
@@ -181,12 +192,15 @@ class EGAgentSystem:
     def update_cur_goal_set(self):
         """After feed_instruction, bind bt to self.env, query the target object positions"""
         self.env.bind_bt(self.bt)
-        cur_goal_places ={}
+        if not getattr(self, "goal_set", None):
+            return
+        cur_goal_places = {}
         for obj in self.goal_set:
             target_position = self.vlmap_backend.query_object(obj)
             if target_position is not None:
                 cur_goal_places[obj] = target_position
-        self.env.set_object_places(cur_goal_places)
+        if cur_goal_places:
+            self.env.set_object_places(cur_goal_places)
 
     # ---------------------- 数据获取占位接口 ----------------------
     def get_conversation_text(self) -> str:
@@ -259,6 +273,12 @@ class EGAgentSystem:
         img[..., 1] = gx[None, :]
         img[..., 2] = (gy[:, None] // 2 + gx[None, :] // 2)
         return img
+
+    # ---------------------- 观测回调 -> 地图后端 ----------------------
+    def _on_env_observation(self, rgb_img: np.ndarray, depth_img: np.ndarray, pose_matrix: np.ndarray, timestamp: float):
+        """Receive synced RGB-D-Odom from IsaacsimEnv and forward to VLMapNav."""
+        # self._log(f"Received observation at time {timestamp}")
+        self.vlmap_backend.push_data(rgb_img, depth_img, pose_matrix, timestamp)
 
 
 if __name__ == "__main__":

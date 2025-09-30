@@ -1,0 +1,20 @@
+# todo: delete the original EG_agent/vlmap/config/runner_ros.yaml
+ros:
+  use_compressed_topic: false
+  ros_rate: 10
+  sync_threshold: 0.1
+  topics:
+    rgb: /camera/rgb/image_raw
+    depth: /camera/depth/image_raw
+    odom: /camera/pose
+    camera_info: /camera_info
+  pubs:
+    cmd_vel: /cmd_vel
+    nav_pose: /nav_pose
+    enum_cmd: /enum_cmd
+
+camera:
+  fov_x_deg: 90.0
+  aspect: 1.3333333333
+
+use_rviz: true
