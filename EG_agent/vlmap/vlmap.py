@@ -20,8 +20,7 @@ class VLMapNav(RunnerROSBase):
         cfg_files = [f"{AGENT_VLMAP_PATH}/config/base_config.yaml",
                      f"{AGENT_VLMAP_PATH}/config/system_config.yaml",
                      f"{AGENT_VLMAP_PATH}/config/support_config/mobility_config.yaml",
-                     f"{AGENT_VLMAP_PATH}/config/support_config/demo_config.yaml",
-                     f"{AGENT_VLMAP_PATH}/config/runner_ros.yaml"]
+                     f"{AGENT_VLMAP_PATH}/config/support_config/demo_config.yaml"]
         self.cfg = Dynaconf(settings_files=cfg_files, lowercase_read=True, merge_enabled=False)
         self.cfg.output_path = f'{AGENT_VLMAP_PATH}/{self.cfg.output_path}'
         self.cfg.logging_config = f'{AGENT_VLMAP_PATH}/{self.cfg.logging_config}'

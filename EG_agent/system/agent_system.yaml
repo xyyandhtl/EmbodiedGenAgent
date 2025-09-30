@@ -12,6 +12,9 @@ ros:
     cmd_vel: /cmd_vel
     nav_pose: /nav_pose
     enum_cmd: /enum_cmd
+
 camera:
   fov_x_deg: 90.0
   aspect: 1.3333333333
+
+use_rviz: true

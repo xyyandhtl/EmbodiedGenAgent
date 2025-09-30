@@ -55,7 +55,7 @@ class ROSPublisher:
             if len(dualmap.local_map_manager.local_map):
                 start_time = time.time()
                 self._publish_local_map(dualmap.local_map_manager, dualmap.visualizer, publish_rgb=False)
-                print(f"Publishing local map took {time.time() - start_time:.2f} seconds.")
+                # print(f"Publishing local map took {time.time() - start_time:.2f} seconds.")
 
             if len(dualmap.global_map_manager.global_map):
                 self._publish_global_map(dualmap.global_map_manager, dualmap.visualizer, publish_rgb=False)

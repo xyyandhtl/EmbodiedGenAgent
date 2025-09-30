@@ -9,51 +9,54 @@ from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 from scipy.spatial.transform import Rotation as R
+from dynaconf import Dynaconf
 
 from EG_agent.vlmap.vlmap import VLMapNav
 from EG_agent.vlmap.ros_runner.ros_publisher import ROSPublisher
+from EG_agent.system.module_path import AGENT_SYSTEM_PATH
 
-
-class VLMapRosRunner(Node, VLMapNav):
-    """ROS2-based runner by directly inheriting Node and VLMapNav."""
+class VLMapRosRunner(Node):
+    """ROS2-based unit test using composition: VLMapNav as a member."""
     def __init__(self):
-        Node.__init__(self, "vlmap_unit_test")
-        VLMapNav.__init__(self)
-
-        # Setup logging consistent with VLMapNav
+        super().__init__("vlmap_unit_test")
         self.logger = logging.getLogger(__name__)
         self.logger.warning("[VLMapRosRunner] start")
 
+        # Config and backend
+        cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
+        self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
+        self.backend = VLMapNav()  # VLMap backend (non-ROS)
+
         self.bridge = CvBridge()
 
-        # Subscribers and synchronizer (use cfg loaded by VLMapNav)
-        if bool(self.cfg.use_compressed_topic):
+        # Subscribers and synchronizer
+        if bool(self.cfg.ros.use_compressed_topic):
             self.logger.warning("[VLMapRosRunner] Using compressed topics.")
-            self.rgb_sub = Subscriber(self, CompressedImage, self.cfg.ros_topics.rgb)
-            self.depth_sub = Subscriber(self, CompressedImage, self.cfg.ros_topics.depth)
+            self.rgb_sub = Subscriber(self, CompressedImage, self.cfg.ros.topics.rgb)
+            self.depth_sub = Subscriber(self, CompressedImage, self.cfg.ros.topics.depth)
         else:
             self.logger.warning("[VLMapRosRunner] Using raw topics.")
-            self.rgb_sub = Subscriber(self, Image, self.cfg.ros_topics.rgb)
-            self.depth_sub = Subscriber(self, Image, self.cfg.ros_topics.depth)
-        self.odom_sub = Subscriber(self, Odometry, self.cfg.ros_topics.odom)
+            self.rgb_sub = Subscriber(self, Image, self.cfg.ros.topics.rgb)
+            self.depth_sub = Subscriber(self, Image, self.cfg.ros.topics.depth)
+        self.odom_sub = Subscriber(self, Odometry, self.cfg.ros.topics.odom)
 
         self.sync = ApproximateTimeSynchronizer(
             [self.rgb_sub, self.depth_sub, self.odom_sub],
             queue_size=10,
-            slop=float(self.cfg.sync_threshold),
+            slop=float(self.cfg.ros.sync_threshold),
         )
         self.sync.registerCallback(self._synced_callback)
 
         # Publisher (original ROSPublisher) and timer tick
         self.publisher = ROSPublisher(self, self.cfg)
         self.publish_executor = ThreadPoolExecutor(max_workers=2)
-        self.timer = self.create_timer(1.0 / float(self.cfg.ros_rate), self._tick)
+        self.timer = self.create_timer(1.0 / float(self.cfg.ros.ros_rate), self._tick)
 
     def _synced_callback(self, rgb_msg, depth_msg, odom_msg):
-        """Convert RGB/Depth/Odom to numpy and push to VLMap (self)."""
+        """Convert RGB/Depth/Odom to numpy and push to backend."""
         timestamp = rgb_msg.header.stamp.sec + rgb_msg.header.stamp.nanosec * 1e-9
 
-        if bool(self.cfg.use_compressed_topic):
+        if bool(self.cfg.ros.use_compressed_topic):
             rgb_img = self.bridge.compressed_imgmsg_to_cv2(rgb_msg, desired_encoding="rgb8")
             depth_cv = self.bridge.compressed_imgmsg_to_cv2(depth_msg, desired_encoding="16UC1")
         else:
@@ -77,13 +80,13 @@ class VLMapRosRunner(Node, VLMapNav):
         pose[:3, :3] = rot
         pose[:3, 3] = t
 
-        # Push into VLMapNav queue
-        self.push_data(rgb_img, depth_img, pose, timestamp)
+        # Push into backend queue
+        self.backend.push_data(rgb_img, depth_img, pose, timestamp)
 
     def _tick(self):
         """Periodic processing + publish maps/topics via the original ROSPublisher."""
-        self.run_once(lambda: self.get_clock().now().nanoseconds / 1e9)
-        self.publish_executor.submit(self.publisher.publish_all, self.dualmap)
+        self.backend.run_once(lambda: self.get_clock().now().nanoseconds / 1e9)
+        self.publish_executor.submit(self.publisher.publish_all, self.backend.dualmap)
 
     def destroy_node(self):
         try:
@@ -92,7 +95,6 @@ class VLMapRosRunner(Node, VLMapNav):
             pass
         self.publish_executor.shutdown(wait=True)
         super().destroy_node()
-
 
 def main():
     rclpy.init()
@@ -107,7 +109,6 @@ def main():
         node.destroy_node()
         rclpy.shutdown()
         node.get_logger().warning("[Main] Done.")
-
 
 if __name__ == "__main__":
     main()

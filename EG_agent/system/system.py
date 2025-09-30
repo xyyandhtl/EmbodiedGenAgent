@@ -12,6 +12,7 @@ from EG_agent.planning.bt_planner import BTGenerator
 from EG_agent.planning.btpg import BehaviorTree
 from EG_agent.vlmap.vlmap import VLMapNav
 from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
+from EG_agent.system.module_path import AGENT_SYSTEM_PATH
 
 
 class EGAgentSystem:
@@ -39,14 +40,17 @@ class EGAgentSystem:
         # 组成：通过bint_bt动态绑定行为树，定义run_action实现交互逻辑，通过ROS2与部署环境信息收发
         # 运行：行为树叶节点在被tick时，通过调用其绑定的env的run_action实现智能体到部署环境交互的action
         self.env = IsaacsimEnv()
-        cfg_path = Path(__file__).with_name("agent_system.yaml")
-        self.cfg = Dynaconf(settings_files=[str(cfg_path)], lowercase_read=True, merge_enabled=False)
-        self.env.configure_ros(self.cfg)
+        cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
+        self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
 
         # VLM 语义地图导航后端
-        # Wire IsaacsimEnv observation callback -> vlmap backend ingestion
+        # 先创建并挂到环境，避免 env 内部发布计时器过早触发
         self.vlmap_backend = VLMapNav()
+        self.env.set_vlmap_backend(self.vlmap_backend)
         self.env.set_observation_callback(self._on_env_observation)
+
+        # 再配置 ROS（内部会创建订阅与可选的发布计时器）
+        self.env.configure_ros(self.cfg)
 
         # 运行控制
         self._running = False
