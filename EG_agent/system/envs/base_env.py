@@ -67,13 +67,13 @@ class BaseAgentEnv(object):
         return self.task_finished()
 
     def task_finished(self):
-        return False
+        raise NotImplementedError
 
     def create_behavior_lib(self):
         self.behavior_lib = ExecBehaviorLibrary(self.behavior_lib_path)
 
     def env_step(self):
-        pass
+        raise NotImplementedError
 
     def reset(self):
         raise NotImplementedError

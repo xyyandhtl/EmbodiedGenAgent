@@ -65,7 +65,7 @@ given_classes_id_color: ""
 # DUALMAP CONFIG
 # ============================================================
 ### VISUALIZATION CONFIG
-use_rerun: True
+use_rerun: False
 
 
 ### OBSERVATION GENERATION CONFIG

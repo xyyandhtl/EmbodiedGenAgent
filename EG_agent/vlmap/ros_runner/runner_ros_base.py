@@ -109,6 +109,7 @@ class RunnerROSBase:
     def run_once(self, current_time_fn):
         """Check and process a keyframe if data is ready."""
         if not self.synced_data_queue:
+            self.logger.warning("[Main] No data in synced_data_queue")
             return
 
         data_input = self.synced_data_queue[-1]
@@ -117,7 +118,7 @@ class RunnerROSBase:
             current_time = current_time_fn()
             last_time = self.last_message_time
             if self.cfg.use_end_process and last_time is not None:
-                if current_time - last_time > 20.0:
+                if current_time - last_time > 10.0:
                     self.logger.warning("[Main] No new data received. Entering end process.")
                     self.dualmap.end_process()
                     self.shutdown_requested = True

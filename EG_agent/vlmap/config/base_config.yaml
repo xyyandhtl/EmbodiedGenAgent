@@ -31,21 +31,6 @@
 # ONLINE ROS CONFIG
 # ============================================================
 dataset_name: 'test'
-ros_topics:
-  rgb: "/camera/rgb/image_raw"
-  depth: "/camera/depth/image_raw"
-  odom: "/camera/pose"
-  camera_info: "/camera_info"
-intrinsic:
-  fx: 320
-  fy: 320
-  cx: 320
-  cy: 240
-# extrinsics:
-#   [1, 0, 0, 0, 
-#   0, 1, 0, 0, 
-#   0, 0, 1, 0,
-#   0, 0, 0, 1]
 
 # ============================================================
 # OUTPUT CONFIG
