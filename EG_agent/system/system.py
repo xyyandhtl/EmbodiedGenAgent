@@ -47,7 +47,6 @@ class EGAgentSystem:
         # 先创建并挂到环境，避免 env 内部发布计时器过早触发
         self.vlmap_backend = VLMapNav()
         self.env.set_vlmap_backend(self.vlmap_backend)
-        self.env.set_observation_callback(self._on_env_observation)
 
         # 再配置 ROS（内部会创建订阅与可选的发布计时器）
         self.env.configure_ros(self.cfg)
@@ -108,13 +107,13 @@ class EGAgentSystem:
             # is_finished = self.env.step()
 
             # (Debug)周期性占位数据刷新
-            self._placeholder_counter += 1
-            if self._placeholder_counter % 5 == 0:
-                self._append_conversation(f"智能体: 占位回复 {self._placeholder_counter}")
-                self._emit("conversation", self.get_conversation_text())
-            if self._placeholder_counter % 7 == 0:
-                self._update_entities_placeholder()
-                self._emit("entities", self.get_entity_rows())
+            # self._placeholder_counter += 1
+            # if self._placeholder_counter % 5 == 0:
+            #     self._append_conversation(f"智能体: 占位回复 {self._placeholder_counter}")
+            #     self._emit("conversation", self.get_conversation_text())
+            # if self._placeholder_counter % 7 == 0:
+            #     self._update_entities_placeholder()
+            #     self._emit("entities", self.get_entity_rows())
 
         self._is_finished = True
         self._running = False
@@ -211,33 +210,78 @@ class EGAgentSystem:
         """Return recent log tail for UI."""
         return "\n".join(self._logs[-n:])
 
-    def get_entity_rows(self) -> Iterable[tuple]:
-        """Yield (name, info) tuples for the entities table."""
-        # returns iterable of (name, info)
-        for e in self._entity_info:
-            yield e["name"], e["info"]
-
-    def get_semantic_map_image(self) -> np.ndarray:
-        """Return a placeholder semantic/path map image."""
-        return self._gen_dummy_image(640, 240, "Semantic+Path")
-
     def get_entity_bt_image(self) -> np.ndarray:
         """Return last BT image (or a placeholder if not available)."""
         # 行为树图
         # if self._last_bt_image is None or self._placeholder_counter % 10 == 0:
         #     self._last_bt_image = self._gen_dummy_image(300, 400, "Behavior Tree")
         return self._last_bt_image
+    
+    def get_entity_rows(self) -> Iterable[tuple]:
+        """Yield (name, info) tuples using dualmap content (local/global)."""
+        rows = []
+        dm = self.vlmap_backend.dualmap
+        vis = dm.visualizer
+        classes = vis.obj_classes.get_classes_arr()
+
+        # Local objects summary
+        for local_obj in dm.local_map_manager.local_map[:20]:
+            cid = local_obj.class_id
+            name = classes[cid] if 0 <= cid < len(classes) else f"class_{cid}"
+            pts = np.asarray(local_obj.pcd.points)
+            npts = pts.shape[0]
+            if npts > 0:
+                mean = pts.mean(axis=0)
+                mean_str = f"{mean[0]:.2f},{mean[1]:.2f},{mean[2]:.2f}"
+            else:
+                mean_str = "NA"
+            rows.append((f"local/{name}", f"id={cid}, npts={npts}, pos=({mean_str})"))
+
+        # Global objects summary
+        for global_obj in dm.global_map_manager.global_map[:20]:
+            cid = global_obj.class_id
+            name = classes[cid] if 0 <= cid < len(classes) else f"class_{cid}"
+            pts2 = np.asarray(global_obj.pcd_2d.points)
+            npts2 = pts2.shape[0]
+            if npts2 > 0:
+                mean2 = pts2.mean(axis=0)
+                mean2_str = f"{mean2[0]:.2f},{mean2[1]:.2f},{mean2[2]:.2f}"
+            else:
+                mean2_str = "NA"
+            rows.append((f"global/{name}", f"id={cid}, npts={npts2}, pos=({mean2_str})"))
+
+        if rows:
+            return rows
+        return [(e["name"], e["info"]) for e in self._entity_info]
+
+    def get_semantic_map_image(self) -> np.ndarray:
+        """Semantic/path map from dualmap; fallback to detector annotated image."""
+        dm = self.vlmap_backend.dualmap
+        if dm.detector.annotated_image is not None:
+            return dm.detector.annotated_image
+        return self._gen_dummy_image(640, 240, "Semantic+Path")
 
     def get_traversable_map_image(self) -> np.ndarray:
-        """Return a placeholder traversable map image."""
+        """Traversable map from dualmap."""
+        dm = self.vlmap_backend.dualmap
+        # TODO:
+        # if dm.traversable_map_image is not None:
+        #     return dm.traversable_map_image
         return self._gen_dummy_image(260, 180, "Traversable")
 
     def get_current_instance_seg_image(self) -> np.ndarray:
-        """Return a placeholder current 2D instance segmentation image."""
+        """Current 2D instance segmentation from dualmap.detector FastSAM."""
+        dm = self.vlmap_backend.dualmap
+        if dm.detector.annotated_image is not None:
+            return dm.detector.annotated_image
         return self._gen_dummy_image(260, 180, "Instance 2D")
 
     def get_current_instance_3d_image(self) -> np.ndarray:
-        """Return a placeholder 3D instance visualization image."""
+        """3D instance visualization image from dualmap."""
+        dm = self.vlmap_backend.dualmap
+        # TODO:
+        # if dm.visualizer.last_instance3d_image is not None:
+        #     return dm.visualizer.last_instance3d_image
         return self._gen_dummy_image(260, 180, "Instance 3D")
 
     # ---------------------- 占位内部工具 ----------------------
@@ -273,12 +317,6 @@ class EGAgentSystem:
         img[..., 1] = gx[None, :]
         img[..., 2] = (gy[:, None] // 2 + gx[None, :] // 2)
         return img
-
-    # ---------------------- 观测回调 -> 地图后端 ----------------------
-    def _on_env_observation(self, rgb_img: np.ndarray, depth_img: np.ndarray, pose_matrix: np.ndarray, timestamp: float):
-        """Receive synced RGB-D-Odom from IsaacsimEnv and forward to VLMapNav."""
-        # self._log(f"Received observation at time {timestamp}")
-        self.vlmap_backend.push_data(rgb_img, depth_img, pose_matrix, timestamp)
 
 
 if __name__ == "__main__":

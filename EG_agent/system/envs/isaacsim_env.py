@@ -61,7 +61,6 @@ class IsaacsimEnv(BaseAgentEnv):
 
         # Config reference
         self._cfg = None  # Dynaconf instance
-        self._obs_callback: Callable[[ _np.ndarray, _np.ndarray, _np.ndarray, float], None] | None = None
         # Track last synced observation time
         self._last_obs_time: float | None = None
 
@@ -120,19 +119,11 @@ class IsaacsimEnv(BaseAgentEnv):
         self._ros_thread = __import__("threading").Thread(target=_spin, daemon=True)
         self._ros_thread.start()
 
-        # --- 新增: 可选启用 ROSPublisher，周期发布 Dualmap 可视化等 ---
-        if cfg.use_rviz:
-            self._ros_publisher = ROSPublisher(self.ros_node, cfg)
-            self._ros_pub_executor = ThreadPoolExecutor(max_workers=2)
-            period = 1.0 / float(cfg.ros.ros_rate)
-            self._ros_pub_timer = self.ros_node.create_timer(period, self._ros_pub_tick)
-
-    # ==========================================
-    # ROS 观测与回调（同步回调、观测转发）
-    # ==========================================
-    def set_observation_callback(self, cb: Callable[[ _np.ndarray, _np.ndarray, _np.ndarray, float], None]) -> None:
-        """注册单一观测回调 (rgb, depth, pose4x4, timestamp)。"""
-        self._obs_callback = cb
+        # if cfg.use_rviz:
+        self._ros_publisher = ROSPublisher(self.ros_node, cfg)
+        self._ros_pub_executor = ThreadPoolExecutor(max_workers=2)
+        period = 1.0 / float(cfg.ros.ros_rate)
+        self._ros_pub_timer = self.ros_node.create_timer(period, self._ros_pub_tick)
 
     # 新增: 供上层注入 VLMap 后端（用于 ROSPublisher 发布 dualmap）
     def set_vlmap_backend(self, backend) -> None:
@@ -140,9 +131,10 @@ class IsaacsimEnv(BaseAgentEnv):
         self._vlmap_backend = backend
 
     def _synced_callback(self, rgb_msg, depth_msg, odom_msg):
-        """RGB/Depth/Odom 同步回调：解码 -> 位姿矩阵 -> 调用观测回调 -> 更新可视状态"""
+        """RGB/Depth/Odom 同步回调：解码 -> 位姿矩阵 -> 推送到 VLMap 后端 -> 更新可视状态"""
         # Timestamp
         timestamp = rgb_msg.header.stamp.sec + rgb_msg.header.stamp.nanosec * 1e-9
+        # print(f"Received synced data at time {timestamp}")
 
         # RGB/Depth conversion
         if self.use_compressed_topic:
@@ -171,9 +163,8 @@ class IsaacsimEnv(BaseAgentEnv):
         pose[:3, :3] = Rm
         pose[:3, 3] = t
 
-        # Single callback
-        if self._obs_callback is not None:
-            self._obs_callback(rgb_img, depth_img, pose, timestamp)
+        # Forward to backend directly
+        self._vlmap_backend.push_data(rgb_img, depth_img, pose, timestamp)
 
         # Record last observation time
         self._last_obs_time = timestamp
