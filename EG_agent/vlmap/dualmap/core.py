@@ -299,8 +299,9 @@ class Dualmap:
         """
         Process input data in parallel. 数据流入的主要入口
             1. 接收一帧数据 (DataInput，包含RGB、depth、pose等）
-            2. 调用 Detector 对图像进行处理，生成物体观测结果
-            3. 为不阻塞主线程（数据接收线程），将检测和观测结果放入 (`detection_results_queue`) 队列
+            2. 调用 Detector 对图像进行处理，生成物体观测结果。为不阻塞主线程（数据接收线程），将检测和观测结果放入 (`detection_results_queue`) 队列
+            3. 更新可视化信息
+            4. 更新地图，计算导航路径（全局+局部）
         """
         # Get current frame id
         self.curr_frame_id = data_input.idx
@@ -311,8 +312,8 @@ class Dualmap:
         # --- 1. Detection process ---
         start_time = time.time()
         with timing_context("Observation Generation", self):
-            # (1) 设置 当前帧数据
-            # (2) 运行 输入数据处理线程：检测当前帧是否可作为 全局点云的关键帧，如果是，则计算 当前帧的点云，并 merge 到全局点云中，更新`迁移关键帧数据`
+            # (1) 调用 Detector，将 当前帧 设为 curr_data
+            # (2) 运行 数据处理线程：检测当前帧是否可作为 全局点云的关键帧，如果是，则计算 当前帧的点云，并 merge 到全局点云中，更新`迁移关键帧数据`
             self.detector.set_data_input(data_input)
 
             with timing_context("Process Detection", self):

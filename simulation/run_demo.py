@@ -113,7 +113,7 @@ def main():
 
     # --- 4. Load Policy ---
     # Path to the pre-trained low-level locomotion policy
-    policy_ckpt_path = os.path.join(SIMULATION_DATA_DIR, "ckpts/go2w/blind/policy_roughRecover.jit")
+    policy_ckpt_path = os.path.join(SIMULATION_DATA_DIR, "ckpts/go2w/blind", str(CFG.policy_name))
     if not check_file_path(policy_ckpt_path):
         raise FileNotFoundError(f"Checkpoint file '{policy_ckpt_path}' not found. Please place your trained policy model (.jit file) in the 'ckpts' directory.")
     file_bytes = read_file(policy_ckpt_path)

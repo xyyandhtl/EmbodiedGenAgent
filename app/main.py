@@ -27,6 +27,7 @@ def np_to_qpix(img: np.ndarray) -> QtGui.QPixmap:
             qimg = QtGui.QImage(img.data, w, h, 3 * w, QtGui.QImage.Format_RGB888)
     return QtGui.QPixmap.fromImage(qimg.rgbSwapped())
 
+
 class MainWindow(QtWidgets.QMainWindow):
     # ---- 新增: 跨线程通信信号 ----
     logSignal = QtCore.pyqtSignal(str)
@@ -36,8 +37,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self):
         super().__init__()
+
         uic.loadUi(UI_PATH, self)
+
         self.agent = EGAgentSystem()
+
         # 连接信号到槽 (主线程更新 UI)
         self.logSignal.connect(self._on_log_update)
         self.convSignal.connect(self._on_conv_update)
@@ -86,7 +90,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ----------------- UI Events -----------------
     def on_start(self):
-        self.agent.start()
+        self.agent.start()  # 启动 EGAgentSystem 的主线程 _run_loop
         self.update_statusbar()
 
     def on_stop(self):
@@ -97,7 +101,7 @@ class MainWindow(QtWidgets.QMainWindow):
         text = self.instructionEdit.text().strip()
         if not text:
             return
-        self.agent.feed_instruction(text)
+        self.agent.feed_instruction(text)  # 将用户的自然语言指令 发送给 EGAgentSystem，并执行后续操作
         self.instructionEdit.clear()
 
     # ----------------- Periodic Updates -----------------
