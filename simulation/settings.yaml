@@ -3,7 +3,7 @@ defaults:
 #  - override hydra/job_logging: stdout
 
 # scene config
-terrain: "lobby"   # see assets/terrains/usd_scene.py
+terrain: "sketchfab"   # see assets/terrains/usd_scene.py
 add_physics: True # if the terrain usd dont have collision
 
 # locomotion config

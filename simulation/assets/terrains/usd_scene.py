@@ -33,6 +33,7 @@ ASSET_DICT = {
     #   https://github.com/usd-wg/assets
     #   https://developer.nvidia.com/usd?utm_source=chatgpt.com
     #   https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html
+    #   https://sketchfab.com/c1527823531/collections/7ba5ce3cc61543ddb5649166ebe50bc1-02254f3590f74e50aeee85a6bd19168c
     "carla": AssetBaseCfg(
         prim_path=f"/World/Terrain",
         spawn=UsdFileCfg(
@@ -79,5 +80,16 @@ ASSET_DICT = {
             usd_path=f"/media/lenovo/1/USD/island-usd-v2.1/island/usd/islandPrman.usda",
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, 0.0)),
+    ),
+    "sketchfab": AssetBaseCfg(
+        prim_path=f"/World/Terrain",
+        spawn=UsdFileCfg(
+            visible=True,
+            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/IsaacWarehouse/IsaacWarehouse.usd",
+            usd_path=f"/home/lenovo/Projects/GenAgent/simulation/data/terrains/Road/scene.usdc",
+            scale=(0.05, 0.05, 0.05),
+            # scale=(0.01, 0.01, 0.01),
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, 0.0), rot=(0.7071, 0.7071, 0.0, 0.0)),
     ),
 }

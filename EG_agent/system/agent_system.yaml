@@ -1,4 +1,3 @@
-# todo: delete the original EG_agent/vlmap/config/runner_ros.yaml
 ros:
   use_compressed_topic: false
   ros_rate: 10

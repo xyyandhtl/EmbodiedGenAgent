@@ -29,7 +29,7 @@ yolo:
   # given_classes_path: ./config/class_list/gpt_indoor_classroom.txt
 
   ## Outdoor Classes List
-  given_classes_path: ./config/class_list/gpt_outdoor_general.txt
+  given_classes_path: ./config/class_list/city_road.txt
 
   ## Dataset Classes List (_ycb add the classes from YCB)
   # given_classes_path: ./config/class_list/hm3d300_classes.txt
@@ -122,7 +122,7 @@ pcd_sample_ratio: 0.04
 sim_threshold: 1.2
 
 ### KEYFRAME CONFIG
-time_threshold: 0.5
+time_threshold: 2.0 # 0.5
 pose_threshold: 0.1
 rotation_threshold: 3
 
@@ -159,7 +159,7 @@ use_parallel: True
 ### GENERAL MAP CONFIG
 # If True, run local mapping only and get local map
 # If False, run both local and global mapping and get global map
-run_local_mapping_only: false
+run_local_mapping_only: False
 # Post 3D-level merging between objects, just like ConceptGraphs and HOV-SG
 # If True, the system will merge the local objects with similarity.
 merge_local_map: False
@@ -171,7 +171,7 @@ map_save_path: map
 # Save the generated local map
 save_local_map: True
 # Save the global map (set False if run_local_mapping_only is True)
-save_global_map: true
+save_global_map: True
 
 # DEBUG: save cropped images for every object
 save_cropped: False
