@@ -177,6 +177,10 @@ class EGAgentSystem:
         if self.goal:
             self.bt = self.bt_generator.generate(self.goal)  # 2. goal 逻辑指令 ==> BehaviorTree 实例（如：['Walk(ControlRoom)']）
             print(f"[system] [feed_instruction] BT is created!")
+            self.goal_set = self.bt_generator.goal_set
+
+            self.update_cur_goal_set()  # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置发送给 IsaacsimEnv，并刷新可视性
+
             # save behavior_tree.png to the current work dir to visualize in gui
             self.bt.draw(png_only=True)
             # load the saved behavior tree image into memory for GUI

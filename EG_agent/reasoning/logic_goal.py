@@ -218,6 +218,7 @@ class LogicGoalGenerator:
             format_correct, error_list = format_check(answer)
             if format_correct:
                 return answer
+            print(f"[Info] format_correct is: {format_correct}, error_list is: {error_list}!")
             last_error_list = error_list
 
         # all retries exhausted, no valid format

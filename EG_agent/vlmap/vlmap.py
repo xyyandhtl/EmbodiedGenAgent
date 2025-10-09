@@ -182,5 +182,41 @@ class VLMapNav(RunnerROSBase):
         return ((lin_vel_x, 0.0, ang_vel_z), False)
 
     def query_object(self, query: str):
-        self.logger.warning(f"[VLMapNav][query_object] Not implemented for query: '{query}'.")
-        return None
+        import re
+        # 1. 从查询（如："desk"/"RobotNear(ControlRoom)"）中提取物体名称
+        match = re.search(r'\((.*?)\)', query)
+        if match:
+            object_name = match.group(1)
+        else:
+            object_name = query  # 如果格式不匹配，则假定整个查询都是对象名
+
+        self.logger.info(f"[VLMapNav] [query_object] Received query '{query}', searching for object '{object_name}'.")
+
+        # 2. 检查全局地图是否存在
+        if not self.dualmap.global_map_manager.has_global_map():
+            self.logger.warning("[VLMapNav] [query_object] Global map is empty. Cannot find object.")
+            return None
+
+        # 3. 将对象名称转换为 CLIP 特征向量并设置为查询目标
+        try:
+            query_feat = self.dualmap.convert_inquiry_to_feat(object_name)
+            self.dualmap.global_map_manager.inquiry = query_feat  # TODO: 直接更改 global_map_manager 的查询不确定是否会与导航过程中的 parallel_process 中的查询起冲突，如果冲突，则可以将 self.inquiry 删除，直接在函数调用时传入特征向量
+        except Exception as e:
+            self.logger.error(f"[VLMapNav] [query_object] Failed to convert query to feature vector: {e}")
+            return None
+
+        # 4. 调用 GlobalMapManager 的 find_best_candidate_with_inquiry 来寻找最佳匹配
+        #    这将返回 GlobalObject 实例和分数
+        best_candidate, best_similarity = self.dualmap.global_map_manager.find_best_candidate_with_inquiry()
+
+        # 5. 处理结果
+        if best_candidate is not None:
+            # 提取物体边界框的中心点作为其位置
+            position = best_candidate.bbox_2d.get_center().tolist()
+            found_obj_name = self.dualmap.visualizer.obj_classes.get_classes_arr()[best_candidate.class_id]
+            
+            self.logger.info(f"[VLMapNav] [query_object] Found best match '{found_obj_name}' for query '{object_name}' with score {best_similarity:.4f} at position {position}.")
+            return position
+        else:
+            self.logger.warning(f"[VLMapNav] [query_object] No object found for query '{object_name}' in the global map.")
+            return None
