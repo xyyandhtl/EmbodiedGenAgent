@@ -95,7 +95,7 @@ show_fastsam_debug: False
 # skip refinement will be faster but less accurate
 skip_refinement: False
 # small mask filtering threshold
-small_mask_th: 204
+small_mask_th: 50
 
 
 ## Feature Settings
@@ -110,16 +110,16 @@ use_avg_feat_for_unknown: True
 # minimum points threshold for object's PCD
 min_points_threshold: 5
 # pcd params
-downsample_voxel_size: 0.02
+downsample_voxel_size: 0.05
 dbscan_remove_noise: !!bool True
 dbscan_eps: 0.1
 dbscan_min_points: 10
-pcd_sample_ratio: 0.04
+pcd_sample_ratio: 0.1
 
 
 ### MATCHING CONFIG
 # similarity threshold for matching
-sim_threshold: 1.2
+sim_threshold: 1.0
 
 ### KEYFRAME CONFIG
 time_threshold: 2.0 # 0.5
@@ -134,7 +134,7 @@ downsample_interval: 3
 max_common_th: 6
 max_pending_count: 5
 # Param for Stability Check
-stable_num: 8
+stable_num: 5
 
 
 ### GLOBAL OBJECTS CONFIG --> ANCHOR OBJECTS

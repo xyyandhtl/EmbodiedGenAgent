@@ -5,13 +5,15 @@ class CamDataMonitor:
 
     def __init__(self):
         self.frame_count = 0
+        self.monitor_camera = False
+        self.monitor_pose = True
 
     def process_frame(self, sensor_data: dict):
         """Receives sensor data, processes it, and prints information."""
         self.frame_count += 1
 
         # Print info every 30 frames to avoid spamming the console
-        if self.frame_count % 50 == 0:
+        if self.monitor_camera and self.frame_count % 50 == 0:
             rgb_np = sensor_data.get("rgb")
             depth_np = sensor_data.get("depth")
             pose_wxyz_np = sensor_data.get("pose")
@@ -42,4 +44,11 @@ class CamDataMonitor:
                 f"Pos_Agent: [x={pos_agent[0]:.3f}, y={pos_agent[1]:.3f}, z={pos_agent[2]:.3f}] | "
                 f"Quat_Agent: [w={quat_agent_wxyz[0]:.3f}, x={quat_agent_wxyz[1]:.3f}, y={quat_agent_wxyz[2]:.3f}, z={quat_agent_wxyz[3]:.3f}]"
             )
+            print(log_msg, flush=True)
+        
+        if self.monitor_pose and self.frame_count % 30 == 0:
+            pose_agent_wxyz_np = sensor_data.get("pose_agent")
+            pos_agent_w, quat_agent_wxyz_ros = pose_agent_wxyz_np
+            pos_agent = pos_agent_w.flatten()
+            log_msg = f"Pos_Agent: [x={pos_agent[0]:.3f}, y={pos_agent[1]:.3f}, z={pos_agent[2]:.3f}]"
             print(log_msg, flush=True)

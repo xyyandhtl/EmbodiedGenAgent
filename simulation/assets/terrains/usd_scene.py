@@ -25,7 +25,7 @@ def add_collision_and_material(prim, static_friction=0.7, dynamic_friction=0.5, 
     # 遍历子节点
     if recursive:
         for child in prim.GetChildren():
-            add_collision_and_material(child, static_friction, dynamic_friction, restitution)
+            add_collision_and_material(child, static_friction, dynamic_friction, restitution, recursive)
 
 
 ASSET_DICT = {

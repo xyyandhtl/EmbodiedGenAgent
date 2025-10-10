@@ -17,7 +17,7 @@ related_height: -0.1
 
 # Robot height
 # this one change the path height in rerun
-robot_height: 0.8
+robot_height: 0.5
 
 # path visualization radius in rerun
 # this one change the path width
@@ -26,7 +26,7 @@ action_path_color: [255, 0, 0]
 global_path_color: [0, 255, 0]
 
 # Filter the local objects around the ceiling for better visualization
-filter_ceiling: true
+filter_ceiling: false
 ceiling_height: 2.5
 ceiling_threshold: 0.2
 
