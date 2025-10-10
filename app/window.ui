@@ -283,6 +283,14 @@ QLabel#titleLabel {
         <layout class="QVBoxLayout" name="vboxEntitiesTop">
          <item>
           <widget class="QTableWidget" name="entityTable">
+           <!-- Make the first column wider by increasing default section size -->
+           <attribute name="horizontalHeaderDefaultSectionSize">
+            <number>300</number>
+           </attribute>
+           <!-- Stretch the last column to fill remaining space -->
+           <attribute name="horizontalHeaderStretchLastSection">
+            <bool>true</bool>
+           </attribute>
            <column>
             <property name="text">
              <string>实体</string>

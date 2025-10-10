@@ -1075,18 +1075,18 @@ class Detector:
 
             # 6. 使用 CLIP 特征 判断 物体移动性
             # judge if low mobility according to the clip feature
-            curr_obs.is_low_mobility = self.is_low_mobility(
-                curr_obs.clip_ft
-            )  # , hl_debug, hl_idx
-            # for debugging only
-            # bbox_hl_mapping.append([self.curr_results['xyxy'][i], hl_debug, hl_idx])
+            # curr_obs.is_low_mobility = self.is_low_mobility(
+            #     curr_obs.clip_ft
+            # )  # , hl_debug, hl_idx
+            # # for debugging only
+            # # bbox_hl_mapping.append([self.curr_results['xyxy'][i], hl_debug, hl_idx])
 
-            # if curr_obs classid is desk set as low mobility
-            if (
-                self.obj_classes.get_classes_arr()[curr_obs.class_id]
-                in self.cfg.lm_examples
-            ):
-                curr_obs.is_low_mobility = True
+            # # if curr_obs classid is desk set as low mobility
+            # if (
+            #     self.obj_classes.get_classes_arr()[curr_obs.class_id]
+            #     in self.cfg.lm_examples
+            # ):
+            curr_obs.is_low_mobility = True
 
             # 7. 保存裁剪后的 物体图像
             if self.cfg.save_cropped:

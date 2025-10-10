@@ -117,6 +117,9 @@ class EGAgentSystem:
             #     self._update_entities_placeholder()
             #     self._emit("entities", self.get_entity_rows())
 
+        self.vlmap_backend.dualmap.end_process()
+        self.vlmap_backend.shutdown_requested = True
+
         self._is_finished = True
         self._running = False
         self._log("Agent loop stopped.")
@@ -171,7 +174,8 @@ class EGAgentSystem:
     def feed_instruction(self, text: str):
         """Plan a behavior tree from instruction, draw it, and update UI caches."""
         # TODO: goal_generator -> bt_generator -> bt_agent.bind_bt
-        self.goal = self.goal_generator.generate_single(text)  # 1. 用户指令 ==> goal 逻辑指令（如：请前往控制室 转换为 RobotNear_ControlRoom）
+        # self.goal = self.goal_generator.generate_single(text)  # 1. 用户指令 ==> goal 逻辑指令（如：请前往控制室 转换为 RobotNear_ControlRoom）
+        self.goal = "RobotNear_Car"  # 调试测试
         print(f"[system] [feed_instruction] goal is: {self.goal}")
 
         if self.goal:

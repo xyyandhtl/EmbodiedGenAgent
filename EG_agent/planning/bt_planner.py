@@ -49,7 +49,7 @@ class BTGenerator:
             use_priority_act=self.use_priority_act
         )
 
-        self.goal_set = None
+        self.goal_set = set()
 
     def generate(self, goal: str, btml_name: str = "tree") -> BehaviorTree:
         """
