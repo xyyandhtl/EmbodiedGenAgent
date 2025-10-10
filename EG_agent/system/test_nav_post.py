@@ -88,7 +88,7 @@ def main():
         while rclpy.ok() and not nav_path:
             vlmap_node.get_logger().info(f"Attempting to find path for '{args.goal}'...")
             # Use a shorter timeout for each attempt inside the loop
-            path_attempt = vlmap_node.get_nav_path(args.goal, timeout_seconds=30)
+            path_attempt = vlmap_node.get_nav_path(args.goal, timeout_seconds=30)  # in ROS frame
 
             if path_attempt:
                 nav_path = path_attempt

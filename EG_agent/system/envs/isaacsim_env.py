@@ -19,6 +19,7 @@ from EG_agent.system.envs.base_env import BaseAgentEnv
 from EG_agent.system.module_path import AGENT_ENV_PATH
 from EG_agent.vlmap.ros_runner.ros_publisher import ROSPublisher
 
+
 class IsaacsimEnv(BaseAgentEnv):
     agent_num = 1
 
@@ -198,7 +199,7 @@ class IsaacsimEnv(BaseAgentEnv):
         self._update_goal_inview()
 
     def set_object_places(self, places: dict):
-        """设置/更新目标位置并刷新可视性。"""
+        """设置/更新目标位置，并更新可视性（每个目标是否在当前相机的视锥内）"""
         # Normalize to lower-case keys to match action args
         self.cur_goal_places = {str(k).lower(): v for k, v in places.items()}
         # Recompute visibility when goal set changes
@@ -363,6 +364,8 @@ class IsaacsimEnv(BaseAgentEnv):
             else:
                 self.goal_inview[name] = False
                 continue
+
+            # 根据当前目标点的3D坐标，判断是否在相机视锥内
             self.goal_inview[name] = self._point_in_cam_fov(
                 cam_pose,
                 point,

@@ -59,7 +59,7 @@ class VLMapNav(RunnerROSBase):
         if goal_mode is None:
             goal_mode = GoalMode.INQUIRY  # TODO：可能默认为 RANDOM
 
-        self.logger.warning(f"[VLMapNav][get_nav_path] Received navigation query: '{goal_query}'")
+        self.logger.warning(f"[VLMapNav] [get_nav_path] Received navigation query: '{goal_query}'")
         config_path = self.cfg.config_file_path
 
         # 1. Update the config file to trigger path planning
@@ -73,21 +73,21 @@ class VLMapNav(RunnerROSBase):
 
             with open(config_path, 'w') as f:
                 yaml.dump(config_data, f)
-            self.logger.warning(f"[VLMapNav][get_nav_path] Updated config file '{config_path}' to trigger path planning.")
+            self.logger.warning(f"[VLMapNav] [get_nav_path] Updated config file '{config_path}' to trigger path planning.")
 
         except Exception as e:
-            self.logger.warning(f"[VLMapNav][get_nav_path] Failed to update config file: {e}")
+            self.logger.warning(f"[VLMapNav] [get_nav_path] Failed to update config file: {e}")
             return None
 
         # 2. Wait for the path to be calculated by the dualmap thread
         start_time = time.time()
         while time.time() - start_time < timeout_seconds:
             if self.dualmap.global_map_manager.has_action_path:
-                self.logger.warning("[VLMapNavROS2][get_nav_path] Navigation path found.")
+                self.logger.warning("[VLMapNavROS2] [get_nav_path] Navigation path found.")
                 return self.dualmap.action_path  # a list of 3 elements [(x,y,z), ...]
             time.sleep(0.5)  # Check every 0.5 seconds
 
-        self.logger.warning("[VLMapNav][get_nav_path] Timed out waiting for navigation path.")
+        self.logger.warning("[VLMapNav] [get_nav_path] Timed out waiting for navigation path.")
         return None
 
     def get_cmd_vel(self, waypoint: list, kp: float = 0.25, max_lin_vel: float = 2.0, max_ang_vel: float = 1.0,
@@ -111,7 +111,7 @@ class VLMapNav(RunnerROSBase):
         # --- 1. Check Inputs ---
         camera_pose_ros = np.copy(self.dualmap.curr_pose)  # 4x4 pose matrix in ROS frame
         if waypoint is None or camera_pose_ros is None:
-            self.logger.warning("[VLMapNav][get_cmd_vel] Waypoint or camera_pose is None.")
+            self.logger.warning("[VLMapNav] [get_cmd_vel] Waypoint or camera_pose is None.")
             return ((0.0, 0.0, 0.0), False)
         if isinstance(camera_pose_ros, np.ndarray) and camera_pose_ros.ndim == 3:
             camera_pose_ros = camera_pose_ros[-1, :, :]
@@ -148,7 +148,7 @@ class VLMapNav(RunnerROSBase):
         # e. Calculate distance and angle to the goal
         dist_to_goal = np.linalg.norm(waypoint_world[:2] - robot_pos_world[:2])  # 3D distance
         if dist_to_goal <= goal_reached_threshold:
-            self.logger.info(f"[VLMapNav][get_cmd_vel] Waypoint reached (distance: {dist_to_goal: .2f}m).")
+            self.logger.info(f"[VLMapNav] [get_cmd_vel] Waypoint reached (distance: {dist_to_goal: .2f}m).")
             return ((0.0, 0.0, 0.0), True)
 
         # --- 4. Calculate Velocity Command in World Frame (following simulation/mdp/commands.py) ---
@@ -182,5 +182,41 @@ class VLMapNav(RunnerROSBase):
         return ((lin_vel_x, 0.0, ang_vel_z), False)
 
     def query_object(self, query: str):
-        self.logger.warning(f"[VLMapNav][query_object] Not implemented for query: '{query}'.")
-        return None
+        import re
+        # 1. 从查询（如："desk"/"RobotNear(ControlRoom)"）中提取物体名称
+        match = re.search(r'\((.*?)\)', query)
+        if match:
+            object_name = match.group(1)
+        else:
+            object_name = query  # 如果格式不匹配，则假定整个查询都是对象名
+
+        self.logger.info(f"[VLMapNav] [query_object] Received query '{query}', searching for object '{object_name}'.")
+
+        # 2. 检查全局地图是否存在
+        if not self.dualmap.global_map_manager.has_global_map():
+            self.logger.warning("[VLMapNav] [query_object] Global map is empty. Cannot find object.")
+            return None
+
+        # 3. 将对象名称转换为 CLIP 特征向量并设置为查询目标
+        try:
+            query_feat = self.dualmap.convert_inquiry_to_feat(object_name)
+            self.dualmap.global_map_manager.inquiry = query_feat  # TODO: 直接更改 global_map_manager 的查询不确定是否会与导航过程中的 parallel_process 中的查询起冲突，如果冲突，则可以将 self.inquiry 删除，直接在函数调用时传入特征向量
+        except Exception as e:
+            self.logger.error(f"[VLMapNav] [query_object] Failed to convert query to feature vector: {e}")
+            return None
+
+        # 4. 调用 GlobalMapManager 的 find_best_candidate_with_inquiry 来寻找最佳匹配
+        #    这将返回 GlobalObject 实例和分数
+        best_candidate, best_similarity = self.dualmap.global_map_manager.find_best_candidate_with_inquiry()
+
+        # 5. 处理结果
+        if best_candidate is not None:
+            # 提取物体边界框的中心点作为其位置
+            position = best_candidate.bbox_2d.get_center().tolist()
+            found_obj_name = self.dualmap.visualizer.obj_classes.get_classes_arr()[best_candidate.class_id]
+            
+            self.logger.info(f"[VLMapNav] [query_object] Found best match '{found_obj_name}' for query '{object_name}' with score {best_similarity:.4f} at position {position}.")
+            return position
+        else:
+            self.logger.warning(f"[VLMapNav] [query_object] No object found for query '{object_name}' in the global map.")
+            return None

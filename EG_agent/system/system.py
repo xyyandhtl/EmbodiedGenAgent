@@ -28,23 +28,23 @@ class EGAgentSystem:
 
     def __init__(self):
         """Initialize generators, environment runtime, and UI caches."""
-        # 逻辑 Goal 生成器
+        # 逻辑 Goal 生成器：用于将用户的自然语言指令（如“找到椅子”）解析为结构化的 逻辑目标
         self.goal_generator = LogicGoalGenerator()
 
-        # 行为树规划器
+        # 行为树规划器：用于根据逻辑目标，动态地生成一个 BT
         self.bt_generator = BTGenerator(env_name="embodied",
                                         cur_cond_set=set(),
                                         key_objects=list(AllObject))
 
         # Agent 载体部署环境
-        # 组成：通过bint_bt动态绑定行为树，定义run_action实现交互逻辑，通过ROS2与部署环境信息收发
-        # 运行：行为树叶节点在被tick时，通过调用其绑定的env的run_action实现智能体到部署环境交互的action
+        # 组成：通过 bint_bt 动态绑定行为树，定义 run_action 实现交互逻辑，通过 ROS2 与 部署环境信息收发
+        # 运行：行为树叶节点在被 tick 时，通过调用其绑定的 env 的 run_action 实现智能体到部署环境交互的 action
         self.env = IsaacsimEnv()
         cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
         self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
 
         # VLM 语义地图导航后端
-        # 先创建并挂到环境，避免 env 内部发布计时器过早触发
+        # 创建 VLMapNav 并挂到 IsaacsimEnv，避免 env 内部发布计时器过早触发
         self.vlmap_backend = VLMapNav()
         self.env.set_vlmap_backend(self.vlmap_backend)
 
@@ -101,6 +101,8 @@ class EGAgentSystem:
             time.sleep(0.1)
 
             # 后端地图/导航处理一次
+            # (1) 检查 synced_data_queue 中的最新帧是否为 关键帧
+            # (2) dualmap.parallel_process 处理该关键帧（Detector 对图像生成物体观测结果；更新地图并计算导航路径（全局+局部））
             self.vlmap_backend.run_once(lambda: time.time())
 
             # 环境 step，行为树 agent 执行动作，和部署环境通信
@@ -169,10 +171,16 @@ class EGAgentSystem:
     def feed_instruction(self, text: str):
         """Plan a behavior tree from instruction, draw it, and update UI caches."""
         # TODO: goal_generator -> bt_generator -> bt_agent.bind_bt
-        self.goal = self.goal_generator.generate_single(text)
-        # self.goal_set = self.goal_generator.extract_conditions(self.goal)
+        self.goal = self.goal_generator.generate_single(text)  # 1. 用户指令 ==> goal 逻辑指令（如：请前往控制室 转换为 RobotNear_ControlRoom）
+        print(f"[system] [feed_instruction] goal is: {self.goal}")
+
         if self.goal:
-            self.bt = self.bt_generator.generate(self.goal)
+            self.bt = self.bt_generator.generate(self.goal)  # 2. goal 逻辑指令 ==> BehaviorTree 实例（如：['Walk(ControlRoom)']）
+            print(f"[system] [feed_instruction] BT is created!")
+            self.goal_set = self.bt_generator.goal_set
+
+            self.update_cur_goal_set()  # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置发送给 IsaacsimEnv，并刷新可视性
+
             # save behavior_tree.png to the current work dir to visualize in gui
             self.bt.draw(png_only=True)
             # load the saved behavior tree image into memory for GUI
@@ -190,14 +198,21 @@ class EGAgentSystem:
     # ---------------------- 模块间数据交互 -----------------------
     def update_cur_goal_set(self):
         """After feed_instruction, bind bt to self.env, query the target object positions"""
+        # (1) 将 BT 与 IsaacsimEnv环境交互层 绑定
         self.env.bind_bt(self.bt)
         if not getattr(self, "goal_set", None):
             return
+
+        # (2) 调用 vlmap，查询每个目标在地图中的具体坐标
+        print(f"[system] [update_cur_goal_set]  self.goal_set: {self.goal_set}")
         cur_goal_places = {}
         for obj in self.goal_set:
             target_position = self.vlmap_backend.query_object(obj)
+            print(f"[system] [update_cur_goal_set] query {obj} result: {target_position}")
             if target_position is not None:
                 cur_goal_places[obj] = target_position
+
+        # (3) 将 目标位置 传递给 IsaacsimEnv，并更新可视性（每个目标是否在当前相机的视锥内）
         if cur_goal_places:
             self.env.set_object_places(cur_goal_places)
 
@@ -216,7 +231,7 @@ class EGAgentSystem:
         # if self._last_bt_image is None or self._placeholder_counter % 10 == 0:
         #     self._last_bt_image = self._gen_dummy_image(300, 400, "Behavior Tree")
         return self._last_bt_image
-    
+
     def get_entity_rows(self) -> Iterable[tuple]:
         """Yield (name, info) tuples using dualmap content (local/global)."""
         rows = []

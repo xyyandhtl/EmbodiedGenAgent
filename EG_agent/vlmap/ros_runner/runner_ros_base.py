@@ -124,11 +124,13 @@ class RunnerROSBase:
                     self.shutdown_requested = True
                     return
 
+        # 根据 时间戳和位姿 判断当前帧是否为 关键帧
         if not self.dualmap.check_keyframe(data_input.time_stamp, data_input.pose):
             return
 
         data_input.idx = self.dualmap.get_keyframe_idx()
 
+        # 调用 dualmap，处理该关键帧
         self.logger.info("[Main] ============================================================")
         with timing_context("Time Per Frame", self.dualmap):
             if self.cfg.use_parallel:
