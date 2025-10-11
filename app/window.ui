@@ -269,7 +269,7 @@ QLabel#titleLabel {
            <property name="text">
             <string>Semantic / Path Map</string>
            </property>
-           <property name="scaledContents"><bool>true</bool></property>
+           <property name="scaledContents"><bool>false</bool></property>
           </widget>
          </item>
         </layout>

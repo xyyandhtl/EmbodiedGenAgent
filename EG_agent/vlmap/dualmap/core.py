@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 import logging
 import psutil
+import cv2
 
 import yaml
 import numpy as np
@@ -853,7 +854,16 @@ class Dualmap:
         return text_query_ft
 
     def get_semantic_map_image(self):
-        return self.visualizer.get_semantic_map_image(self.global_map_manager)
+        semantic_map = self.visualizer.get_semantic_map_image(self.global_map_manager)
+
+        if semantic_map is not None:
+            save_dir = self.cfg.map_save_path
+            save_path = os.path.join(save_dir, "semantic_map.png")
+            if os.path.exists(save_dir) and not os.path.exists(save_path):
+                cv2.imwrite(save_path, semantic_map)
+                print(f"[visualizer] Semantic map saved to {save_path}")
+
+        return semantic_map
 
     def get_traversable_map_image(self):
         return self.visualizer.get_traversable_map_image(self.local_map_manager)

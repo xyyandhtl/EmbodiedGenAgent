@@ -131,22 +131,32 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ----------------- Periodic Updates -----------------
     def update_fast(self):
-        # 高频: 当前视野实例分割
+        """高频: 当前视野实例分割"""
         img = self.agent.get_current_instance_seg_image()
         self.instanceSegLabel.setPixmap(np_to_qpix(img))
 
     def update_medium(self):
-        # 中频: 可通行地图 + 实体表
+        """中频: 可通行地图 + 实体表"""
         self.traversableMapLabel.setPixmap(
             np_to_qpix(self.agent.get_traversable_map_image()))
         self.refresh_entities()
 
     def update_slow(self):
-        # 低频: 3D实例 + 语义/路径地图
+        """低频: 3D实例 + 语义/路径地图"""
+        # 3D实例
         self.instance3DLabel.setPixmap(
             np_to_qpix(self.agent.get_current_instance_3d_image()))
-        self.semanticMapLabel.setPixmap(
-            np_to_qpix(self.agent.get_semantic_map_image()))
+        
+        # 语义地图（长宽比修正）
+        img = self.agent.get_semantic_map_image()
+        pixmap = np_to_qpix(img)
+        # 按比例缩放 QPixmap 以适应 QLabel 的尺寸
+        scaled_pixmap = pixmap.scaled(
+            self.semanticMapLabel.size(),
+            QtCore.Qt.KeepAspectRatio,
+            QtCore.Qt.SmoothTransformation
+        )
+        self.semanticMapLabel.setPixmap(scaled_pixmap)
 
     def update_bt(self):
         # 行为树更新
