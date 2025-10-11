@@ -435,6 +435,20 @@ QLabel#titleLabel {
         </widget>
        </item>
        <item>
+        <widget class="QPushButton" name="saveMapBtn">
+         <property name="text">
+          <string>保存地图</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="loadMapBtn">
+         <property name="text">
+          <string>载入地图</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <spacer name="verticalSpacer">
          <property name="orientation">
           <enum>Qt::Vertical</enum>

@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image
 from dynaconf import Dynaconf
 
-from EG_agent.prompts.object_sets import AllObject
+from EG_agent.prompts.default_objects import AllObject
 from EG_agent.reasoning.logic_goal import LogicGoalGenerator
 from EG_agent.planning.bt_planner import BTGenerator
 from EG_agent.planning.btpg import BehaviorTree
@@ -30,14 +30,16 @@ class EGAgentSystem:
         """Initialize generators, environment runtime, and UI caches."""
         # 逻辑 Goal 生成器：用于将用户的自然语言指令（如“找到椅子”）解析为结构化的 逻辑目标
         self.goal_generator = LogicGoalGenerator()
+        # TODO：后续改为动态注入 object sets，同时传入下面 bt_generator 的 key_objects
+        self.goal_generator.prepare_prompt(object_set=None)
 
         # 行为树规划器：用于根据逻辑目标，动态地生成一个 BT
         self.bt_generator = BTGenerator(env_name="embodied",
-                                        cur_cond_set=set(),
+                                        cur_cond_set=set(), # TODO: 连续任务时需即时更新 cur_cond_set
                                         key_objects=list(AllObject))
 
         # Agent 载体部署环境
-        # 组成：通过 bint_bt 动态绑定行为树，定义 run_action 实现交互逻辑，通过 ROS2 与 部署环境信息收发
+        # 组成：通过 bint_bt 动态绑定行为树，定义 run_action 实现交互逻辑，通过 ROS2 与部署环境信息收发
         # 运行：行为树叶节点在被 tick 时，通过调用其绑定的 env 的 run_action 实现智能体到部署环境交互的 action
         self.env = IsaacsimEnv()
         cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
@@ -91,6 +93,20 @@ class EGAgentSystem:
         # 允许环境安全停止
         self.env.close()
 
+    def save(self, map_path: str | None = None):
+        """Save the current global map to the given path or default cfg.map_save_path."""
+        path = map_path or getattr(self.vlmap_backend.cfg, "map_save_path", None)
+        self._log(f"Saving current global map to: {path}")
+        self.vlmap_backend.dualmap.save_map(map_path=path)
+        self._log("Map saved.")
+
+    def load(self, map_path: str | None = None):
+        """Load the global map from the given path or default cfg.preload_path."""
+        path = map_path or getattr(self.vlmap_backend.cfg, "preload_path", None)
+        self._log(f"Loading global map from: {path}")
+        self.vlmap_backend.dualmap.load_map(map_path=path)
+        self._log("Map loaded.")
+
     def _run_loop(self):
         """Main loop: step environment, propagate events, and check completion."""
         # 主执行循环 (简化)
@@ -124,15 +140,6 @@ class EGAgentSystem:
         self._running = False
         self._log("Agent loop stopped.")
         self._emit("status", self.status)
-
-    # 保留原 run 名称以兼容外部调用
-    def run(self):
-        """Alias for start(), kept for external compatibility."""
-        self.start()
-
-    def set_env(self, env):
-        """Replace the running environment instance."""
-        self.env = env
 
     @property
     def finished(self) -> bool:
