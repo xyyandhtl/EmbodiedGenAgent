@@ -851,3 +851,98 @@ class Dualmap:
         text_query_ft = text_query_ft.squeeze()
 
         return text_query_ft
+
+    def get_semantic_map_image(self):
+        return self.visualizer.get_semantic_map_image(self.global_map_manager)
+
+    def get_traversable_map_image(self):
+        return self.visualizer.get_traversable_map_image(self.local_map_manager)
+
+    # def get_cmd_vel(self, camera_pose_ros):
+    #     # This logic mimics the verified implementation in simulation/mdp/commands.py
+    #     # It correctly handles all transformations:
+    #     # 1. From Camera Pose to Base Pose.
+    #     # 2. From ROS coordinate system to World coordinate system.
+    #
+    #     # === 1. Define Coordinate Transformations ===
+    #     # a) Transformation from ROS frame (+Z fwd, -Y up) to World frame (+X fwd, +Z up)
+    #     # Based on axis mapping: ROS(+z->fwd, -y->up, +x->right) to World(+x->fwd, +z->up, -y->right)
+    #     M_ros_to_world = np.array([
+    #         [0, 0, 1],  # ROS +Z (fwd) maps to World +X (fwd)
+    #         [-1, 0, 0], # ROS +X (right) maps to World -Y (right)
+    #         [0, -1, 0]  # ROS +Y (down) maps to World -Z (down)
+    #     ])
+    #     rot_ros_to_world = R.from_matrix(M_ros_to_world)
+    #
+    #     # b) Transformation from Camera to Base (in Base/Camera local frame)
+    #     # Camera is 0.2m above the base, so base is 0.2m below the camera.
+    #     t_cam_to_base_local = np.array([0.0, 0.0, -0.2])
+    #
+    #     # === 2. Get Inputs & Perform Transformations ===
+    #     # Use self.action_path as the source of waypoints
+    #     if self.action_path is None or len(self.action_path) == 0:
+    #         return {"linear": [0.0, 0.0, 0.0], "angular": [0.0, 0.0, 0.0]}
+    #
+    #     # a) Get camera pose in ROS frame
+    #     camera_pos_ros = np.array(camera_pose_ros[:3])
+    #     camera_quat_ros = np.array(camera_pose_ros[3:])  # (x,y,z,w)
+    #     camera_rot_ros = R.from_quat(camera_quat_ros)
+    #
+    #     # b) Calculate base pose in ROS frame
+    #     # Rotation is the same. Position is offset by t_cam_to_base_local in the camera's local frame.
+    #     base_pos_ros = camera_pos_ros + camera_rot_ros.apply(t_cam_to_base_local)
+    #     base_rot_ros = camera_rot_ros # Same orientation
+    #
+    #     # c) Transform base pose to World frame for calculation
+    #     base_pos_world = rot_ros_to_world.apply(base_pos_ros)
+    #     base_rot_world = rot_ros_to_world * base_rot_ros
+    #
+    #     # d) Select waypoint in ROS frame and transform to World frame
+    #     base_pos_2d_world = base_pos_world[:2]
+    #     try:
+    #         path_points_ros = np.array([p['pose']['position'] for p in self.action_path])
+    #     except (TypeError, KeyError):
+    #         path_points_ros = np.array([p for p in self.action_path])
+    #
+    #     path_points_world = rot_ros_to_world.apply(path_points_ros)
+    #     path_points_2d_world = path_points_world[:, :2]
+    #
+    #     distances = np.linalg.norm(path_points_2d_world - base_pos_2d_world, axis=1)
+    #     current_index = np.argmin(distances)
+    #
+    #     lookahead = self.cfg.get('waypoint_lookahead', 5)
+    #     target_index = min(current_index + lookahead, len(self.action_path) - 1)
+    #     waypoint_pos_world = path_points_world[target_index]
+    #
+    #     # === 3. Apply Verified Velocity Calculation Logic in World Frame ===
+    #     # a) Convert robot's world rotation to yaw angle (around Z axis)
+    #     current_yaw = base_rot_world.as_euler('xyz', degrees=False)[2]
+    #
+    #     # b) Calculate distance and yaw to the goal in the world frame
+    #     dist_to_goal = np.linalg.norm(waypoint_pos_world - base_pos_world)
+    #     goal_yaw = np.arctan2(waypoint_pos_world[1] - base_pos_world[1], waypoint_pos_world[0] - base_pos_world[0])
+    #
+    #     # c) Calculate heading error, wrapped to [-pi, pi]
+    #     yaw_error = goal_yaw - current_yaw
+    #     yaw_error = np.arctan2(np.sin(yaw_error), np.cos(yaw_error))
+    #
+    #     # d) Decide velocity based on the provided logic
+    #     lin_vel_x = 0.0
+    #     ang_vel_z = 0.0
+    #
+    #     goal_reached_threshold = self.cfg.get('goal_threshold', 0.2)
+    #     if dist_to_goal > goal_reached_threshold:
+    #         kp = self.cfg.get('p_gain_angular', 0.25)
+    #         max_ang_vel = self.cfg.get('w_max', 0.5)
+    #         max_lin_vel = self.cfg.get('v_max', 0.3)
+    #         yaw_error_threshold = self.cfg.get('yaw_error_threshold', 0.3)
+    #
+    #         ang_vel_z = kp * yaw_error
+    #         ang_vel_z = np.clip(ang_vel_z, -max_ang_vel, max_ang_vel)
+    #
+    #         if abs(yaw_error) > yaw_error_threshold:
+    #             lin_vel_x = max_lin_vel * 0.3
+    #         else:
+    #             lin_vel_x = max_lin_vel
+    #
+    #             return {"linear": [lin_vel_x, 0.0, 0.0], "angular": [0.0, 0.0, ang_vel_z]}
