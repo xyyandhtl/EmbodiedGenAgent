@@ -122,9 +122,9 @@ pcd_sample_ratio: 0.1
 sim_threshold: 1.0
 
 ### KEYFRAME CONFIG
-time_threshold: 2.0 # 0.5
-pose_threshold: 0.1
-rotation_threshold: 3
+time_threshold: 3.0 # 0.5
+pose_threshold: 0.5
+rotation_threshold: 5
 
 
 ### LOCAL OBJECTS CONFIG --> CONCRETE OBJECTS
@@ -185,7 +185,7 @@ save_layout: True
 # PRELOADING CONFIG
 # ============================================================
 # Preload an existing global map from disk
-preload_global_map: False
+# preload_global_map: False
 
 # Preload an existing layout pcd and wall pcd from disk
 # If preload the layout, the layout pcd thread will be disabled

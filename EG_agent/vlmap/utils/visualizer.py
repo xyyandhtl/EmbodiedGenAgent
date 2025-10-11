@@ -77,9 +77,9 @@ class ReRunVisualizer:
                     logger.warning(f"[Visualizar] '{name}' is not a valid rerun method.")
             else:
                 if not self._use_rerun:
-                    logger.info(f"[Visualizar] Skipping optional rerun call to '{name}' because rerun usage is disabled.")
+                    logger.debug(f"[Visualizar] Skipping optional rerun call to '{name}' because rerun usage is disabled.")
                 elif self._rerun is None:
-                    logger.info(f"[Visualizar] Skipping optional rerun call to '{name}' because rerun is not installed.")
+                    logger.debug(f"[Visualizar] Skipping optional rerun call to '{name}' because rerun is not installed.")
         return method
 
     def update_intrinsic(self, intrinsic, force=False):
@@ -91,7 +91,7 @@ class ReRunVisualizer:
 
     def update_pose(self, pose):
         self.pose = pose
-        logger.info("[Visualizar] Pose updated.")
+        # logger.info("[Visualizar] Pose updated.")
 
     def set_camera_info(self, intrinsic, pose):
         self.update_intrinsic(intrinsic)

@@ -28,11 +28,11 @@ class LayoutMap:
         self.min_area = min_area
         self.kernel_size = kernel_size
 
-        self.point_cloud = None
+        self.point_cloud: o3d.geometry.PointCloud = None
         self.occ_map = None
         self.x_edges = None
         self.y_edges = None
-        self.wall_pcd = None  # Store extracted wall point cloud
+        self.wall_pcd: o3d.geometry.PointCloud = None  # Store extracted wall point cloud
 
     def set_layout_pcd(self, layout_pcd):
         """

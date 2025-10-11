@@ -149,10 +149,10 @@ class Dualmap:
             ("Map Save Dir", self.cfg.map_save_path),
             ("Class List Path", self.cfg.yolo.given_classes_path),
             ("Use FastSAM for OV?", self.cfg.use_fastsam),
-            ("Running Concrete Map Only?", self.cfg.run_local_mapping_only),
-            ("Save Concrete Map?", self.cfg.save_local_map),
-            ("Save Global Map?", self.cfg.save_global_map),
-            ("Use Preload Global Map?", self.cfg.preload_global_map),
+            # ("Running Concrete Map Only?", self.cfg.run_local_mapping_only),
+            # ("Save Concrete Map?", self.cfg.save_local_map),
+            # ("Save Global Map?", self.cfg.save_global_map),
+            # ("Use Preload Global Map?", self.cfg.preload_global_map),
             ("Use Rerun for Visualization?", self.cfg.use_rerun),
             ("Camera Intrinsics", str(self.cfg.intrinsic)),
             # ("Cmaera Extrinsics": str(self.cfg.extrinsics)},
@@ -203,6 +203,9 @@ class Dualmap:
         logger.info("[Core][Init] Preloading layout...")
         self.detector.load_layout()
         self.global_map_manager.load_wall()
+        # TODO: the dualmap save/load logic should be reorgainized
+        layout_pcd = self.detector.get_layout_pointcloud()
+        self.global_map_manager.set_layout_info(layout_pcd)
 
     def get_keyframe_idx(self):
         return self.keyframe_counter
@@ -250,7 +253,7 @@ class Dualmap:
 
         if is_keyframe:
             self.keyframe_counter += 1
-            logger.info(
+            logger.debug(
                 f"[Core][CheckKeyframe] Current frame is keyframe: {self.keyframe_counter}"
             )
             return True
@@ -398,7 +401,7 @@ class Dualmap:
 
         # --- 2. 计算导航路径 ---
         # TODO：现逻辑：计算得到 全局路径 后，就重置状态，将 `calculate_path` 置 False，后续应改为 一直低频查询
-        logger.info(f"[Core] calculate_path: {self.calculate_path}")
+        logger.debug(f"[Core] calculate_path: {self.calculate_path}")
         if self.calculate_path and self.global_map_manager.has_global_map():
             logger.warning("[Core] Global Navigation enabled! Triggering functionality...")
 

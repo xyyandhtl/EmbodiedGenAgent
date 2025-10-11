@@ -167,7 +167,7 @@ class LocalMapManager(BaseMapManager):
             return
 
         # if not first, then do the matching
-        logger.info("[LocalMap] Matching")
+        logger.debug("[LocalMap] Matching")
         self.tracker.set_current_frame(curr_observations)
 
         # Set tracker reference
