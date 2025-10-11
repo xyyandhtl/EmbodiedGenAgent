@@ -40,14 +40,13 @@
 
 ### test vlmap ros2 runner
 `python -m examples.vlmap_run.py`
-- This module requires ros2 rgb, depth and odom topics, you can either use [habitat-simulator-collector](https://github.com/Eku127/habitat-data-collector.git) or [isaacsim-simulator](SIMULATION.md) to test.
-
-**Note**: not intended to deploy the agent in habitat-simulator, because it is rather a high-level simulator, sim2real gap would be huge
+- This module requires ros2 rgb, depth and odom topics, you can either use [habitat-simulator-collector](https://github.com/Eku127/habitat-data-collector.git) or [isaacsim-simulator](SIMULATION.md) to test. Turn on the use_rerun visualizer:  (you can also use the rviz2 visualizer from [rviz2_config](../EG_agent/system/system_vis.rviz))
 
 | <img src="assets/vlmap_rerun_habitat.png" alt="habitat" height="200"> | <img src="assets/vlmap_rerun_isaac.png" alt="isaac" height="200"> |
 |:---------------------------------------------------------------------:|:-----------------------------------------------------------------:|
 | Habitat 仿真                                                      | Isaac 仿真                                                    |
 
+**Note**: not intended to deploy the agent in habitat-simulator, because it is rather a high-level simulator, sim2real gap would be huge
 
 - after end_process, the global map will be saved and the timing statistics will be printed:
 ```shell
@@ -98,8 +97,6 @@ INFO:EG_agent.vlmap.utils.time_utils:+-------------------------------+----------
 +-------------------------------+----------------+-----------------------+
 ```
 
-
-
 ### test simulation env receiving ROS2 command topics
 Publish cmd_vel (10 Hz), then stop:
 ```shell
@@ -126,3 +123,5 @@ ros2 topic pub /enum_cmd std_msgs/msg/Int32 "{data: 1}" --once
 # Report
 ros2 topic pub /enum_cmd std_msgs/msg/Int32 "{data: 2}" --once
 ```
+- Mark action would place a flag in front of the robot:
+![alt text](assets/mark.jpg)
