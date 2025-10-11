@@ -230,6 +230,92 @@ class ReRunVisualizer:
         cv2.putText(image, name, label_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
         return image
+
+    def get_semantic_map_image(self, global_map_manager) -> None | np.ndarray:
+        """
+        Generates a top-down 2D image of the global semantic map.
+        """
+        map_objects = global_map_manager.global_map
+        if not map_objects:
+            print(f"[visualizer] [get_semantic_map_image] Don't have objects in this map.")
+            return None
+
+        # Determine map boundaries
+        all_points = np.vstack([np.asarray(obj.pcd_2d.points) for obj in map_objects if not obj.pcd_2d.is_empty()])
+        all_points = all_points[np.isfinite(all_points).all(axis=1)]  # Filter out invalid values
+        if all_points.size == 0:
+            print(f"[visualizer] [get_semantic_map_image] All points of the objects is None.")
+            return None
+        print(f"[visualizer] [get_semantic_map_image] all_points shape: {all_points.shape}")
+
+        min_coords = np.min(all_points[:, :2], axis=0)
+        max_coords = np.max(all_points[:, :2], axis=0)
+
+        # Create a blank image
+        resolution = 0.05  # meters per pixel
+        padding = 50 # pixels
+        width = int((max_coords[0] - min_coords[0]) / resolution) + padding
+        height = int((max_coords[1] - min_coords[1]) / resolution) + padding
+        image = np.zeros((height, width, 3), dtype=np.uint8)
+
+        # Get colors for each class
+        colors = self.obj_classes.get_class_color_dict_by_index()
+
+        # Draw each object
+        for obj in map_objects:
+            if obj.pcd_2d.is_empty():
+                continue
+
+            points = np.asarray(obj.pcd_2d.points)
+            points = points[np.isfinite(points).all(axis=1)]
+            if points.shape[0] == 0:
+                continue
+
+            class_id = obj.class_id
+            class_name = self.obj_classes.get_classes_arr()[class_id]
+            # print(f"[visualizer] [get_semantic_map_image] Object {obj.uid}, class_id = {class_id}, class_name = {class_name}, has 3D points, shape = {points.shape}")
+            # Get float RGB color (0-1 range)
+            color_rgb = colors.get(str(class_id), (1.0, 1.0, 1.0))
+            # Convert to integer BGR color (0-255 range) for OpenCV
+            color_bgr_int = tuple(int(c * 255) for c in (color_rgb[2], color_rgb[1], color_rgb[0]))
+            # print(f"[visualizer] [get_semantic_map_image] its color_bgr = {color_bgr_int}")
+
+            # Convert world coordinates to image coordinates
+            img_points = ((points[:, :2] - min_coords) / resolution).astype(int)
+            img_points += padding // 2
+            img_points[:, 1] = height - img_points[:, 1] - 1  # Flip Y axis
+
+            # Draw points as 1x1 squares
+            for p in img_points:
+                x, y = p
+                if 0 <= x < width-1 and 0 <= y < height-1:
+                    image[y:y+2, x:x+2] = color_bgr_int
+
+            # Draw label
+            if img_points.shape[0] > 0:
+                label_pos = np.mean(img_points, axis=0).astype(int)
+                if 0 <= label_pos[0] < width and 0 <= label_pos[1] < height:
+                    cv2.putText(image, class_name, tuple(label_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+        return image
+
+    def get_traversable_map_image(self, local_map_manager) -> None | np.ndarray:
+        """
+        Generates a top-down 2D image of the local traversable map.
+        """
+        grid = local_map_manager.get_traversability_grid()  # Assume this method exists
+        if grid is None:
+            return None
+
+        # Create a color representation of the grid
+        h, w = grid.shape
+        image = np.zeros((h, w, 3), dtype=np.uint8)
+
+        # Color based on grid value (0=occupied, 1=free)
+        image[grid == 1] = [255, 255, 255]  # White for free space
+        image[grid == 0] = [0, 0, 0]  # Black for occupied
+
+        return cv2.resize(image, (260, 180), interpolation=cv2.INTER_NEAREST)
     
 def visualize_result_rgb(
     image: np.ndarray,

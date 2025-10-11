@@ -8,7 +8,7 @@ add_physics: True # if the terrain usd dont have collision
 
 # locomotion config
 policy: eilab  # (reconstructed from legged-loco)
-policy_name: "policy_roughRecover.jit"
+policy_name: "policy_roughRecover_dt01.jit"
 observation_len: 5
 policy_device: cuda:0
 

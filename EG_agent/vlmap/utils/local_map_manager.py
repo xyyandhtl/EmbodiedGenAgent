@@ -54,6 +54,11 @@ class LocalMapManager(BaseMapManager):
         self.global_bbox = None
         self.global_score = 0.0
 
+    def get_traversability_grid(self):
+        if self.nav_graph and hasattr(self.nav_graph, 'free_space'):
+            return self.nav_graph.free_space
+        return None
+
     def set_click_goal(self, goal):
         self.click_goal = goal
 

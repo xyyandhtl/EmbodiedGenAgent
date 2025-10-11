@@ -283,16 +283,23 @@ class EGAgentSystem:
     def get_semantic_map_image(self) -> np.ndarray:
         """Semantic/path map from dualmap; fallback to detector annotated image."""
         dm = self.vlmap_backend.dualmap
-        if dm.detector.annotated_image is not None:
-            return dm.detector.annotated_image
-        return self._gen_dummy_image(640, 240, "Semantic+Path")
+        semantic_map = dm.get_semantic_map_image()
+        # TODO: 语义实体地图 + 导航路径 (not at all)
+        print(f"[system] [get_semantic_map_image] Getting the semantic_map per 3s...")
+        if semantic_map is not None:
+            return semantic_map
+        print(f"[system] [get_semantic_map_image] The semantic_map is None!")
+        return self._gen_dummy_image(400, 300, "Semantic+Path")
 
     def get_traversable_map_image(self) -> np.ndarray:
         """Traversable map from dualmap."""
         dm = self.vlmap_backend.dualmap
-        # TODO:
-        # if dm.traversable_map_image is not None:
-        #     return dm.traversable_map_image
+        traversable_map = dm.get_traversable_map_image()
+        # TODO: 可通行地图 (not work)
+        print(f"[system] [get_traversable_map_image] Getting the traversable_map per 1s...")
+        if traversable_map is not None:
+            return traversable_map
+        print(f"[system] [get_traversable_map_image] The traversable_map is None!")
         return self._gen_dummy_image(260, 180, "Traversable")
 
     def get_current_instance_seg_image(self) -> np.ndarray:
@@ -305,7 +312,7 @@ class EGAgentSystem:
     def get_current_instance_3d_image(self) -> np.ndarray:
         """3D instance visualization image from dualmap."""
         dm = self.vlmap_backend.dualmap
-        # TODO:
+        # TODO: 3D实例分割可视化
         # if dm.visualizer.last_instance3d_image is not None:
         #     return dm.visualizer.last_instance3d_image
         return self._gen_dummy_image(260, 180, "Instance 3D")

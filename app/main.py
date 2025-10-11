@@ -2,6 +2,7 @@ import sys
 import os
 import numpy as np
 from PyQt5 import QtWidgets, QtCore, QtGui, uic
+from zoom_widget import ZoomableImageWidget
 
 # 正式运行
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -91,6 +92,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self._setup_image_browser()
         self._setup_report_browser()
 
+        # --- 新增：将 semanticMapLabel ==> semanticMapWidget，以实现用鼠标左键拖拽和滚轮平移 ---
+        self.semanticMapWidget = ZoomableImageWidget()
+        # Assuming the placeholder is in a layout within its parent
+        if self.semanticMapLabel.parentWidget().layout() is not None:
+            layout = self.semanticMapLabel.parentWidget().layout()
+            index = layout.indexOf(self.semanticMapLabel)
+            layout.removeWidget(self.semanticMapLabel)
+            self.semanticMapLabel.deleteLater()
+            layout.insertWidget(index, self.semanticMapWidget)
+            # Set size policies to match what the QLabel might have had
+            self.semanticMapWidget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        else:
+            print("Warning: Could not find layout to replace semantic map placeholder.")
+
     # ----------------- UI Events -----------------
     def on_start(self):
         self.agent.start()  # 启动 EGAgentSystem 的主线程 _run_loop
@@ -131,22 +146,26 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ----------------- Periodic Updates -----------------
     def update_fast(self):
-        # 高频: 当前视野实例分割
+        """高频: 当前视野实例分割"""
         img = self.agent.get_current_instance_seg_image()
         self.instanceSegLabel.setPixmap(np_to_qpix(img))
 
     def update_medium(self):
-        # 中频: 可通行地图 + 实体表
+        """中频: 可通行地图 + 实体表"""
         self.traversableMapLabel.setPixmap(
             np_to_qpix(self.agent.get_traversable_map_image()))
         self.refresh_entities()
 
     def update_slow(self):
-        # 低频: 3D实例 + 语义/路径地图
+        """低频: 3D实例 + 语义/路径地图"""
+        # 3D实例
         self.instance3DLabel.setPixmap(
-            np_to_qpix(self.agent.get_current_instance_3d_image()))
-        self.semanticMapLabel.setPixmap(
-            np_to_qpix(self.agent.get_semantic_map_image()))
+            np_to_qpix(self.agent.get_current_instance_3d_image())
+        )
+        # 语义地图
+        self.semanticMapWidget.setPixmap(
+            np_to_qpix(self.agent.get_semantic_map_image())
+        )
 
     def update_bt(self):
         # 行为树更新
