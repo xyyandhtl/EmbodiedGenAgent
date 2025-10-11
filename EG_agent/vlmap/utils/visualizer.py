@@ -91,7 +91,7 @@ class ReRunVisualizer:
 
     def update_pose(self, pose):
         self.pose = pose
-        logger.info("[Visualizar] Pose updated.")
+        # logger.info("[Visualizar] Pose updated.")
 
     def set_camera_info(self, intrinsic, pose):
         self.update_intrinsic(intrinsic)

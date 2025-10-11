@@ -297,7 +297,7 @@ class Detector:
             return
 
         # Print current frame index
-        logger.info(f"[Detector][Layout] Processing frame idx: {self.curr_data.idx}")
+        logger.debug(f"[Detector][Layout] Processing frame idx: {self.curr_data.idx}")
 
         # Check if layout_pointcloud needs to be updated
         if self.check_keyframe_for_layout_pcd():
@@ -309,7 +309,7 @@ class Detector:
             # Merge point clouds
             with self.layout_lock:
                 self.layout_pointcloud += current_pcd
-                logger.info(
+                logger.debug(
                     f"[Detector][Layout] Points before downsample: {len(self.layout_pointcloud.points)}"
                 )
                 self.layout_pointcloud = self.layout_pointcloud.voxel_down_sample(
@@ -321,14 +321,14 @@ class Detector:
 
             # Update prev_kf_data
             self.prev_kf_data = self.curr_data.copy()
-            logger.info("[Detector][Layout] Updated layout pointcloud.")
+            logger.debug("[Detector][Layout] Updated layout pointcloud.")
 
             # Update time and count
             end_time = time.time()
             layout_time = end_time - start_time
             self.layout_time += layout_time
             self.layout_num += 1
-            logger.info(
+            logger.debug(
                 f"[Detector][Layout] Layout update took {layout_time:.4f} seconds."
             )
 
@@ -1107,7 +1107,7 @@ class Detector:
             # Add observation to the list
             self.curr_observations.append(curr_obs)
 
-        logger.info(
+        logger.debug(
             f"[Detector] Current observations num: {len(self.curr_observations)}"
         )
 
@@ -1523,7 +1523,7 @@ class Detector:
 
                     # text_feats[idx] = random_feats
 
-            logger.info(
+            logger.debug(
                 f"[Detector] Updated {count} unknown class text features to the mean value."
             )
         else:
@@ -1597,7 +1597,7 @@ class Filter:
     def run_filter(self):
         original_num = self.get_len()
         if self.confidence is None or original_num == 0:
-            logger.warning("[Detector][Filter] No detections to filter.")
+            logger.debug("[Detector][Filter] No detections to filter.")
             return
 
         keep = self.filter_by_mask_size()
@@ -1619,7 +1619,7 @@ class Filter:
         self.set_detections(keep)
 
         if self.get_len() == 0:
-            logger.warning(
+            logger.info(
                 "[Detector][Filter] After filtering, no detection result remains..."
             )
             return None
@@ -1687,7 +1687,7 @@ class Filter:
                         keep[i] = False
                         break
 
-        logger.info(
+        logger.debug(
             f"[Detector][Filter] Original number of detections: {N}, after mask IoU filter: {np.sum(keep)}"
         )
         return keep
@@ -1751,7 +1751,7 @@ class Filter:
                                 f"[Detector][Filter] Merging {class_i} into {class_j}"
                             )
 
-        logger.info(
+        logger.debug(
             f"[Detector][Filter] Original number of detections: {N}, after proximity filter: {np.sum(keep)}"
         )
         return keep

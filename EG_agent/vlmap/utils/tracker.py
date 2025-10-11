@@ -234,7 +234,7 @@ class Tracker:
         len_map = len(self.ref_map)
         len_curr = len(self.curr_frame)
 
-        logger.info(f"[Tracker][Global] Current obs num: {len_curr}, current map num: {len_map}")
+        logger.debug(f"[Tracker][Global] Current obs num: {len_curr}, current map num: {len_map}")
 
         # Get stacked bboxes for iou calculation
         map_bbox_values = []
@@ -374,7 +374,7 @@ class Tracker:
                 map_idx = sim_mat[obs_idx].argmax().item()
 
                 # print obs_idx, map_idx, max_sim_value
-                logger.info(f"[Tracker][Global] obs_idx: {obs_idx}, map_idx: {map_idx}, max_sim_value: {max_sim_value}  ")
+                logger.debug(f"[Tracker][Global] obs_idx: {obs_idx}, map_idx: {map_idx}, max_sim_value: {max_sim_value}  ")
 
                 self.curr_frame[obs_idx].matched_obj_uid = self.ref_map[map_idx].uid
                 self.curr_frame[obs_idx].matched_obj_score = sim_mat[obs_idx][map_idx].item()
@@ -386,7 +386,7 @@ class Tracker:
                 self.curr_frame[obs_idx].matched_obj_uid = None
                 add_new_obj += 1
 
-        logger.info(f"[Tracker][Global] Added {add_new_obj} new objects, current observations: {len_curr_obs}")
+        logger.info(f"[Tracker][Global] Added {add_new_obj} new objects, current frame_obs: {len_curr_obs}")
 
     def find_overlapping_ratio_faiss(self, pcd1, pcd2, radius=0.02):
         """

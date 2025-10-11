@@ -253,7 +253,7 @@ class Dualmap:
 
         if is_keyframe:
             self.keyframe_counter += 1
-            logger.info(
+            logger.debug(
                 f"[Core][CheckKeyframe] Current frame is keyframe: {self.keyframe_counter}"
             )
             return True
@@ -401,7 +401,7 @@ class Dualmap:
 
         # --- 2. 计算导航路径 ---
         # TODO：现逻辑：计算得到 全局路径 后，就重置状态，将 `calculate_path` 置 False，后续应改为 一直低频查询
-        logger.info(f"[Core] calculate_path: {self.calculate_path}")
+        logger.debug(f"[Core] calculate_path: {self.calculate_path}")
         if self.calculate_path and self.global_map_manager.has_global_map():
             logger.warning("[Core] Global Navigation enabled! Triggering functionality...")
 

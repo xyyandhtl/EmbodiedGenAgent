@@ -74,7 +74,7 @@ class GlobalMapManager(BaseMapManager):
             self.visualize_global_map()
 
         if len(curr_observations) == 0:
-            logger.info("[GlobalMap] No global observation update this time, return")
+            logger.debug("[GlobalMap] No global observation update this time, return")
             return
 
         if self.is_initialized == False:
@@ -86,7 +86,7 @@ class GlobalMapManager(BaseMapManager):
 
         # The test part, no matching just adding
         if self.cfg.no_update:
-            logger.info("[GlobalMap] No update mode, simply adding")
+            logger.debug("[GlobalMap] No update mode, simply adding")
             for obs in curr_observations:
                 self.global_map.append(GlobalObject(obs))
 
@@ -96,7 +96,7 @@ class GlobalMapManager(BaseMapManager):
             return
 
         # if not the first, then do the global matching
-        logger.info("[GlobalMap] Matching")
+        logger.debug("[GlobalMap] Matching")
         self.tracker.set_current_frame(curr_observations)
 
         # Set tracker reference
