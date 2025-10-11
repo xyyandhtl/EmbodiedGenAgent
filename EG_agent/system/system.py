@@ -289,7 +289,7 @@ class EGAgentSystem:
         if semantic_map is not None:
             return semantic_map
         print(f"[system] [get_semantic_map_image] The semantic_map is None!")
-        return self._gen_dummy_image(640, 240, "Semantic+Path")
+        return self._gen_dummy_image(400, 300, "Semantic+Path")
 
     def get_traversable_map_image(self) -> np.ndarray:
         """Traversable map from dualmap."""

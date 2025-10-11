@@ -7,19 +7,29 @@ class ZoomableImageWidget(QtWidgets.QWidget):
         self.zoom_factor = 1.0
         self.pan_offset = QtCore.QPoint()
         self.last_mouse_pos = QtCore.QPoint()
+        self._is_first_paint = True
 
         self.setCursor(QtCore.Qt.OpenHandCursor)
 
     def setPixmap(self, pixmap):
-        """Set the pixmap to be displayed."""
+        """Set the pixmap to be displayed, preserving the current view unless it's the first paint."""
         self.pixmap = pixmap
-        # Reset zoom and pan when a new image is set
-        self.zoom_factor = 1.0
+        self.update()
+
+    def fitToWindow(self):
+        """Fit the image to the window, preserving aspect ratio. Can be called to reset the view."""
+        if self.pixmap.isNull():
+            return
+        
+        x_ratio = self.width() / self.pixmap.width()
+        y_ratio = self.height() / self.pixmap.height()
+        self.zoom_factor = min(x_ratio, y_ratio)
         self.pan_offset = QtCore.QPoint()
         self.update()
 
     def wheelEvent(self, event: QtGui.QWheelEvent):
         """Handle mouse wheel event for zooming."""
+        self._is_first_paint = False  # Manual zoom overrides any initial fit
         zoom_in_factor = 1.25
         zoom_out_factor = 1 / zoom_in_factor
 
@@ -35,6 +45,7 @@ class ZoomableImageWidget(QtWidgets.QWidget):
     def mousePressEvent(self, event: QtGui.QMouseEvent):
         """Handle mouse press event for starting a pan."""
         if event.button() == QtCore.Qt.LeftButton:
+            self._is_first_paint = False  # Manual pan overrides any initial fit
             self.last_mouse_pos = event.pos()
             self.setCursor(QtCore.Qt.ClosedHandCursor)
 
@@ -55,6 +66,11 @@ class ZoomableImageWidget(QtWidgets.QWidget):
         """Paint the pixmap with the current zoom and pan."""
         if self.pixmap.isNull():
             return
+
+        # On the first paint event, fit the image to the window.
+        if self._is_first_paint:
+            self.fitToWindow()
+            self._is_first_paint = False
 
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
