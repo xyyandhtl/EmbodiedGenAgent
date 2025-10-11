@@ -1,14 +1,14 @@
 from EG_agent.planning.btpg.behavior_tree.base_nodes import Action
 from EG_agent.planning.btpg.behavior_tree import Status
-# import shared object sets
-from EG_agent.prompts.object_sets import *
-from EG_agent.system.envs.base_env import BaseAgentEnv
+from EG_agent.prompts.default_objects import *
+# from EG_agent.system.envs.base_env import BaseAgentEnv
+from EG_agent.system.envs.isaacsim_env import IsaacsimEnv   # for debug convenience
 
 class EmbodiedAction(Action):
     can_be_expanded = True
     num_args = 1
 
-    env: BaseAgentEnv = None  # type: ignore
+    env: IsaacsimEnv = None  # type: ignore
 
     # use shared sets from object_sets.py
     LOCATIONS = LOCATIONS
@@ -40,21 +40,21 @@ class EmbodiedAction(Action):
         cur_action_done = False
 
         if cur_action == "walk":
-            cur_goal_place = self.agent.cur_goal_places[self.args[0].lower()]
-            cur_cmd_vel = self.agent.cur_agent_states.get("cmd_vel", (0,0,0))
+            cur_goal_place = self.env.cur_goal_places[self.args[0].lower()]
+            cur_cmd_vel = self.env.cur_agent_states.get("cmd_vel", (0,0,0))
             self.env.run_action("cmd_vel", cur_cmd_vel)
             # If current target has entered camera FOV, consider walk complete
             # if getattr(self.env, "goal_inview", {}).get(self.args[0].lower(), False):
             if self.env.goal_inview[self.args[0].lower()]:
                 cur_action_done = True
         elif cur_action == "capture":
-            self.env.run_action("enum_command", 0)
+            self.env.run_action("enum_command", (0,))
             cur_action_done = True
         elif cur_action == "mark":
-            self.env.run_action("enum_command", 1)
+            self.env.run_action("enum_command", (1,))
             cur_action_done = True
         elif cur_action == "report":
-            self.env.run_action("enum_command", 2)
+            self.env.run_action("enum_command", (2,))
             cur_action_done = True
         else:
             raise ValueError(f"Unknown action type: {cur_action}")

@@ -53,6 +53,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stopBtn.clicked.connect(self.on_stop)
         self.sendInstructionBtn.clicked.connect(self.on_send_instruction)
         self.instructionEdit.returnPressed.connect(self.on_send_instruction)
+        # 新增：保存/载入地图
+        self.saveMapBtn.clicked.connect(self.on_save_map)
+        self.loadMapBtn.clicked.connect(self.on_load_map)
 
         # Timers (差异化更新频率)
         self.timer_fast = QtCore.QTimer(self)      # 200ms
@@ -103,6 +106,28 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self.agent.feed_instruction(text)  # 将用户的自然语言指令 发送给 EGAgentSystem，并执行后续操作
         self.instructionEdit.clear()
+
+    def on_save_map(self):
+        # 默认目录：cfg.map_save_path
+        default_dir = getattr(self.agent.vlmap_backend.cfg, "map_save_path", "") or ""
+        if not default_dir:
+            default_dir = os.path.expanduser("~")
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "选择地图保存文件夹", default_dir)
+        if not path:
+            return
+        self.agent.save(map_path=path)
+        self.statusbar.showMessage(f"地图已保存至: {path}", 3000)
+
+    def on_load_map(self):
+        # 默认目录：cfg.preload_path
+        default_dir = getattr(self.agent.vlmap_backend.cfg, "preload_path", "") or ""
+        if not default_dir:
+            default_dir = os.path.expanduser("~")
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "选择地图载入文件夹", default_dir)
+        if not path:
+            return
+        self.agent.load(map_path=path)
+        self.statusbar.showMessage(f"已载入地图: {path}", 3000)
 
     # ----------------- Periodic Updates -----------------
     def update_fast(self):

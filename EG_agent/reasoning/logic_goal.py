@@ -18,7 +18,7 @@ class LogicGoalGenerator:
         with open(f'{AGENT_PROMPT_PATH}/{prompt_folder}/{test_data_set_file}', 'r', encoding="utf-8") as f:
             self.data_set = f.read()
         self.sections = re.split(r'\n\s*\n', self.data_set)
-        
+
         # read prompt_scene as a template and format with module-level object sets
         with open(f'{AGENT_PROMPT_PATH}/{prompt_folder}/{prompt_scene}', 'r', encoding="utf-8") as f:
             self.prompt_scene_template = f.read()
@@ -26,23 +26,32 @@ class LogicGoalGenerator:
             self.prompt_goal = f.read()
 
         self.llm = VLMInference()
-        self.llm.add_system_prompt(self.prompt)
 
-    def prepare_prompt(self, question):
-        # import object sets and prepare string representations for formatting
-        from EG_agent.prompts import object_sets
-        nav_list = sorted(list(object_sets.NAV_POINTS))
-        targ_list = sorted(list(object_sets.TARGETS))
-        nav_str = json.dumps(nav_list, ensure_ascii=False)
-        targ_str = json.dumps(targ_list, ensure_ascii=False)
-        all_cond_str = object_sets.AllCondition
-        # format template (placeholders: {NAV_POINTS}, {TARGETS}, {AllCondition})
-        self.prompt_scene = self.prompt_scene_template.format(
-            NAV_POINTS=nav_str,
-            TARGETS=targ_str,
-            AllCondition=all_cond_str
-        )
+    def prepare_prompt(self, object_set=None):
+        from EG_agent.prompts import default_objects
+        all_cond_str = default_objects.AllCondition
+        if object_set is None:
+            # 预定义 object sets 时用这个
+            nav_list = sorted(list(default_objects.NAV_POINTS))
+            targ_list = sorted(list(default_objects.TARGETS))
+            nav_str = json.dumps(nav_list, ensure_ascii=False)
+            targ_str = json.dumps(targ_list, ensure_ascii=False)
+            # format template (placeholders: {NAV_POINTS}, {TARGETS}, {AllCondition})
+            self.prompt_scene = self.prompt_scene_template.format(
+                NAV_POINTS=nav_str,
+                TARGETS=targ_str,
+                AllCondition=all_cond_str
+            )
+        else:
+            # 需要动态传入 object sets 时用这个在外部调用
+            objects = json.dumps(object_set, ensure_ascii=False)
+            self.prompt_scene = self.prompt_scene_template.format(
+                NAV_POINTS=objects,
+                TARGETS=objects,
+                AllCondition=all_cond_str
+            )
         self.prompt = self.prompt_scene + self.prompt_goal
+        self.llm.add_system_prompt(self.prompt)
 
     def _parse_section(self, section):
         """

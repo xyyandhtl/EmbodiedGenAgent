@@ -83,15 +83,7 @@ class Dualmap:
         self.prev_pose = None
         self.wait_count = 0
 
-        # check if need to preload the global map
-        if self.cfg.preload_global_map:
-            logger.info("[Core][Init] Preloading global map...")
-            self.global_map_manager.load_map()
-
-        if self.cfg.preload_layout:
-            logger.info("[Core][Init] Preloading layout...")
-            self.detector.load_layout()
-            self.global_map_manager.load_wall()
+        # self.load_map()
 
         # --- 2. Start the file monitoring thread ---
         self.stop_thread = False  # Signal to stop the thread
@@ -175,6 +167,41 @@ class Dualmap:
         for key, value in cfg_items:
             print(f"{key:<30} : {value}")
         print("=" * line_length)
+
+    def save_map(self, map_path=None):
+        """
+        Save the local and global maps to disk.
+        """
+        if map_path is not None:
+            self.cfg.map_save_path = map_path
+
+        # if self.cfg.save_local_map:
+        self.local_map_manager.save_map()
+
+        # if self.cfg.save_global_map:
+        self.global_map_manager.save_map()
+        
+        # if self.cfg.save_layout:
+        self.detector.save_layout()
+        layout_pcd = self.detector.get_layout_pointcloud()
+        self.global_map_manager.set_layout_info(layout_pcd)
+
+    def load_map(self, map_path=None):
+        """
+        Load the local and global maps from disk.
+        """
+        if map_path is not None:
+            self.cfg.preload_path = map_path
+
+        # check if need to preload the global map
+        # if self.cfg.preload_global_map:
+        logger.info("[Core][Init] Preloading global map...")
+        self.global_map_manager.load_map()
+
+        # if self.cfg.preload_layout:
+        logger.info("[Core][Init] Preloading layout...")
+        self.detector.load_layout()
+        self.global_map_manager.load_wall()
 
     def get_keyframe_idx(self):
         return self.keyframe_counter
@@ -679,15 +706,7 @@ class Dualmap:
                 logger.info("[Core][EndProcess] Local Map Merged")
 
         # save the local mapping results
-        if self.cfg.save_local_map:
-            self.local_map_manager.save_map()
-
-        # save the global mapping results
-        if self.cfg.save_global_map:
-            self.global_map_manager.save_map()
-
-        if self.cfg.save_layout:
-            self.detector.save_layout()
+        # self.save_map()
 
         # Dualmap process timing
         if hasattr(self, "timing_results"):
