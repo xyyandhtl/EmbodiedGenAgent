@@ -41,7 +41,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         uic.loadUi(UI_PATH, self)
 
-        self.agent = EGAgentSystem()
+        self.agent_system = EGAgentSystem()
 
         # 连接信号到槽 (主线程更新 UI)
         self.logSignal.connect(self._on_log_update)
@@ -76,10 +76,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer_bt.start(5000)
 
         # 替换原直接更新 UI 的监听器 -> 仅发射信号
-        self.agent.add_listener("log", lambda data: self.logSignal.emit(data))
-        self.agent.add_listener("conversation", lambda data: self.convSignal.emit(data))
-        self.agent.add_listener("entities", lambda data: self.entitiesSignal.emit(list(data)))
-        self.agent.add_listener("status", lambda data: self.statusSignal.emit(bool(data)))
+        self.agent_system.add_listener("log", lambda data: self.logSignal.emit(data))
+        self.agent_system.add_listener("conversation", lambda data: self.convSignal.emit(data))
+        self.agent_system.add_listener("entities", lambda data: self.entitiesSignal.emit(list(data)))
+        self.agent_system.add_listener("status", lambda data: self.statusSignal.emit(bool(data)))
 
         self.entityTable.setColumnCount(2)
         self.entityTable.setHorizontalHeaderLabels(["实体", "信息"])
@@ -108,69 +108,71 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ----------------- UI Events -----------------
     def on_start(self):
-        self.agent.start()  # 启动 EGAgentSystem 的主线程 _run_loop
+        self.agent_system.start()  # 启动 EGAgentSystem 的主线程 _run_loop
         self.update_statusbar()
 
     def on_stop(self):
-        self.agent.stop()
+        self.agent_system.stop()
         self.update_statusbar()
 
     def on_send_instruction(self):
         text = self.instructionEdit.text().strip()
         if not text:
             return
-        self.agent.feed_instruction(text)  # 将用户的自然语言指令 发送给 EGAgentSystem，并执行后续操作
+        self.agent_system.feed_instruction(text)  # 将用户的自然语言指令 发送给 EGAgentSystem，并执行后续操作
         self.instructionEdit.clear()
 
     def on_save_map(self):
         # 默认目录：cfg.map_save_path
-        default_dir = getattr(self.agent.vlmap_backend.cfg, "map_save_path", "") or ""
-        if not default_dir:
-            default_dir = os.path.expanduser("~")
-        path = QtWidgets.QFileDialog.getExistingDirectory(self, "选择地图保存文件夹", default_dir)
-        if not path:
-            return
-        self.agent.save(map_path=path)
+        default_dir = getattr(self.agent_system.vlmap_backend.cfg, "map_save_path", "") or ""
+        # if not default_dir:
+        #     default_dir = os.path.expanduser("~")
+        # path = QtWidgets.QFileDialog.getExistingDirectory(self, "选择地图保存文件夹", default_dir)
+        # if not path:
+        #     return
+        # TODO: 现在Dualmap只能保存到预设目录，因为每个obj在创建时给定了预设目录+文件名，以后改掉这限制
+        path = default_dir
+        self.agent_system.save(map_path=path)
         self.statusbar.showMessage(f"地图已保存至: {path}", 3000)
 
     def on_load_map(self):
         # 默认目录：cfg.preload_path
-        default_dir = getattr(self.agent.vlmap_backend.cfg, "preload_path", "") or ""
+        default_dir = getattr(self.agent_system.vlmap_backend.cfg, "preload_path", "") or ""
         if not default_dir:
             default_dir = os.path.expanduser("~")
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "选择地图载入文件夹", default_dir)
         if not path:
             return
-        self.agent.load(map_path=path)
+        self.agent_system.load(map_path=path)
         self.statusbar.showMessage(f"已载入地图: {path}", 3000)
 
     # ----------------- Periodic Updates -----------------
     def update_fast(self):
-        """高频: 当前视野实例分割"""
-        img = self.agent.get_current_instance_seg_image()
+        # 高频: 当前视野实例分割
+        img = self.agent_system.get_current_instance_seg_image()
         self.instanceSegLabel.setPixmap(np_to_qpix(img))
 
     def update_medium(self):
         """中频: 可通行地图 + 实体表"""
         self.traversableMapLabel.setPixmap(
-            np_to_qpix(self.agent.get_traversable_map_image()))
+            np_to_qpix(self.agent_system.get_traversable_map_image()))
         self.refresh_entities()
 
     def update_slow(self):
         """低频: 3D实例 + 语义/路径地图"""
         # 3D实例
         self.instance3DLabel.setPixmap(
-            np_to_qpix(self.agent.get_current_instance_3d_image())
+            np_to_qpix(self.agent_system.get_current_instance_3d_image())
         )
         # 语义地图
         self.semanticMapWidget.setPixmap(
-            np_to_qpix(self.agent.get_semantic_map_image())
+            np_to_qpix(self.agent_system.get_semantic_map_image())
         )
 
     def update_bt(self):
         # 行为树更新
         self.behaviorTreeLabel.setPixmap(
-            np_to_qpix(self.agent.get_entity_bt_image()))
+            np_to_qpix(self.agent_system.get_entity_bt_image()))
 
     # ----------------- Slots for signals (主线程执行) -----------------
     def _on_log_update(self, txt: str):
@@ -193,17 +195,17 @@ class MainWindow(QtWidgets.QMainWindow):
     # ----------------- Legacy helper methods (仍被定时器调用) -----------------
     def refresh_conversation(self):
         # (保留以防手动调用) 线程安全: 仅从主线程调用
-        self._on_conv_update(self.agent.get_conversation_text())
+        self._on_conv_update(self.agent_system.get_conversation_text())
 
     def refresh_log(self):
-        self._on_log_update(self.agent.get_log_text_tail())
+        self._on_log_update(self.agent_system.get_log_text_tail())
 
     def refresh_entities(self):
-        rows = list(self.agent.get_entity_rows())
+        rows = list(self.agent_system.get_entity_rows())
         self._on_entities_update(rows)
 
     def update_statusbar(self):
-        state = "运行中" if self.agent.status else "已停止"
+        state = "运行中" if self.agent_system.status else "已停止"
         self.statusbar.showMessage(f"智能体状态: {state}")
 
     # --- 新增：图像浏览器初始化与行为 ---
@@ -450,7 +452,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ----------------- Close -----------------
     def closeEvent(self, event: QtGui.QCloseEvent):
-        self.agent.stop()
+        self.agent_system.stop()
         super().closeEvent(event)
 
 def main():

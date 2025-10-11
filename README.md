@@ -29,13 +29,13 @@ to deploy and test EG_agent in simulation:
 
 
 ## Usage
-- the GUI demo: [APP.md](docs/APP.md)
+- GUI demo: [APP.md](docs/APP.md). Need EGAgentSystem as backend, which should be implemented its deployment env, check [envs](EG_agent/system/envs)
 
-- agent introduction: [EG_agent.md](docs/EG_agent.md)
+- Agent introduction: [EG_agent.md](docs/EG_agent.md)
 
-- agent module unit test: [EXAMPLES.md](docs/EXAMPLES.md)
+- Agent module unit test: [EXAMPLES.md](docs/EXAMPLES.md)
 
-- agent system test in simulation: [SIMULATION.md](docs/SIMULATION.md)
+- Agent system isaacsim deployment: [SIMULATION.md](docs/SIMULATION.md), an well-explained example of the envs impl
 
 
 ## Acknowledgments

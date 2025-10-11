@@ -35,6 +35,8 @@ class IsaacsimEnv(BaseAgentEnv):
     cam_forward_axis = "z"  # hardcoded: camera's +Z faces forward
     # Real-time visibility state: {goal_name_lower: bool}
     goal_inview = {}
+    # 新增：可视距离阀值（米）
+    near_dist = 12.0
 
     # =========================================================
     # 构造与配置（初始化、ROS 话题与发布者/订阅者配置）
@@ -80,6 +82,7 @@ class IsaacsimEnv(BaseAgentEnv):
         self.cam_fov_x_deg = float(cfg.camera.fov_x_deg)
         self.cam_aspect = float(cfg.camera.aspect)
         self.use_compressed_topic = bool(cfg.ros.use_compressed_topic)
+        self.near_dist = float(cfg.camera.near_dist)
 
         # Init rclpy if needed
         if not rclpy.ok():
@@ -198,7 +201,7 @@ class IsaacsimEnv(BaseAgentEnv):
         # Recompute real-time visibility using cam_pose_w
         self._update_goal_inview()
 
-    def set_object_places(self, places: dict):
+    def set_object_places(self, places: dict[str, list[float]]):
         """设置/更新目标位置，并更新可视性（每个目标是否在当前相机的视锥内）"""
         # Normalize to lower-case keys to match action args
         self.cur_goal_places = {str(k).lower(): v for k, v in places.items()}
@@ -355,17 +358,18 @@ class IsaacsimEnv(BaseAgentEnv):
         cam_pose = self.cur_agent_states.get("cam_pose_w")
         if not cam_pose or len(cam_pose) != 7:
             return
+        
+        cam_pos = _np.array(cam_pose[:3])
         for name, pt in self.cur_goal_places.items():
-            # Normalize point to xyz
-            if isinstance(pt, (list, tuple, _np.ndarray)) and len(pt) >= 3:
-                point = _np.array([float(pt[0]), float(pt[1]), float(pt[2])], dtype=_np.float64)
-            elif isinstance(pt, dict) and all(k in pt for k in ("x", "y", "z")):
-                point = _np.array([float(pt["x"]), float(pt["y"]), float(pt["z"])], dtype=_np.float64)
-            else:
+            point = _np.array(pt[:3])
+            
+            # 先进行距离阀值判断
+            dist = float(_np.linalg.norm(point - cam_pos))
+            if dist > float(self.near_dist):
                 self.goal_inview[name] = False
                 continue
 
-            # 根据当前目标点的3D坐标，判断是否在相机视锥内
+            # 再根据当前目标点的3D坐标，判断是否在相机视锥内
             self.goal_inview[name] = self._point_in_cam_fov(
                 cam_pose,
                 point,
@@ -386,21 +390,3 @@ class IsaacsimEnv(BaseAgentEnv):
         if self._ros_pub_executor is not None:
             self._ros_pub_executor.shutdown(wait=False)
             self._ros_pub_executor = None
-        self._ros_publisher = None
-
-        # Destroy node and stop executor; do NOT shutdown rclpy unless owned
-        if self._ros_executor is not None:
-            self._ros_executor.remove_node(self.ros_node)
-        if self.ros_node is not None:
-            self.ros_node.destroy_node()
-        if self._ros_thread is not None:
-            self._ros_thread.join(timeout=2.0)
-        self._ros_executor = None
-        self._ros_thread = None
-        self._rgb_sub = self._depth_sub = self._odom_sub = None
-        self._sync = None
-        if self._ros_init_owner and rclpy.ok():
-            rclpy.shutdown()
-            self._ros_init_owner = False
-        self.ros_node = None
-

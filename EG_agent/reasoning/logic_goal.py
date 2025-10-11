@@ -51,7 +51,7 @@ class LogicGoalGenerator:
                 AllCondition=all_cond_str
             )
         self.prompt = self.prompt_scene + self.prompt_goal
-        self.llm.add_system_prompt(self.prompt)
+        self.llm.set_system_prompt(self.prompt)
 
     def _parse_section(self, section):
         """

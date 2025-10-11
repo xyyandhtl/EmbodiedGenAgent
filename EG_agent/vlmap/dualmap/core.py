@@ -149,10 +149,10 @@ class Dualmap:
             ("Map Save Dir", self.cfg.map_save_path),
             ("Class List Path", self.cfg.yolo.given_classes_path),
             ("Use FastSAM for OV?", self.cfg.use_fastsam),
-            ("Running Concrete Map Only?", self.cfg.run_local_mapping_only),
-            ("Save Concrete Map?", self.cfg.save_local_map),
-            ("Save Global Map?", self.cfg.save_global_map),
-            ("Use Preload Global Map?", self.cfg.preload_global_map),
+            # ("Running Concrete Map Only?", self.cfg.run_local_mapping_only),
+            # ("Save Concrete Map?", self.cfg.save_local_map),
+            # ("Save Global Map?", self.cfg.save_global_map),
+            # ("Use Preload Global Map?", self.cfg.preload_global_map),
             ("Use Rerun for Visualization?", self.cfg.use_rerun),
             ("Camera Intrinsics", str(self.cfg.intrinsic)),
             # ("Cmaera Extrinsics": str(self.cfg.extrinsics)},
@@ -203,6 +203,9 @@ class Dualmap:
         logger.info("[Core][Init] Preloading layout...")
         self.detector.load_layout()
         self.global_map_manager.load_wall()
+        # TODO: the dualmap save/load logic should be reorgainized
+        layout_pcd = self.detector.get_layout_pointcloud()
+        self.global_map_manager.set_layout_info(layout_pcd)
 
     def get_keyframe_idx(self):
         return self.keyframe_counter

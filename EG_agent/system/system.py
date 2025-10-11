@@ -105,7 +105,9 @@ class EGAgentSystem:
         path = map_path or getattr(self.vlmap_backend.cfg, "preload_path", None)
         self._log(f"Loading global map from: {path}")
         self.vlmap_backend.dualmap.load_map(map_path=path)
-        self._log("Map loaded.")
+        self._log(f"Map loaded with {len(self.vlmap_backend.dualmap.global_map_manager.global_map)} objects and "
+                  f"{len(self.vlmap_backend.dualmap.global_map_manager.layout_map.point_cloud.points)} layout points"
+                  f" and {len(self.vlmap_backend.dualmap.global_map_manager.layout_map.wall_pcd.points)} wall points")
 
     def _run_loop(self):
         """Main loop: step environment, propagate events, and check completion."""
@@ -182,12 +184,12 @@ class EGAgentSystem:
         """Plan a behavior tree from instruction, draw it, and update UI caches."""
         # TODO: goal_generator -> bt_generator -> bt_agent.bind_bt
         # self.goal = self.goal_generator.generate_single(text)  # 1. 用户指令 ==> goal 逻辑指令（如：请前往控制室 转换为 RobotNear_ControlRoom）
-        self.goal = "RobotNear_Car"  # 调试测试
-        print(f"[system] [feed_instruction] goal is: {self.goal}")
+        self.goal = "RobotNear_Equipment"  # 调试测试
+        self._log(f"[system] [feed_instruction] goal is: {self.goal}")
 
         if self.goal:
             self.bt = self.bt_generator.generate(self.goal)  # 2. goal 逻辑指令 ==> BehaviorTree 实例（如：['Walk(ControlRoom)']）
-            print(f"[system] [feed_instruction] BT is created!")
+            self._log(f"[system] [feed_instruction] BT is created!")
             self.goal_set = self.bt_generator.goal_set
 
             self.update_cur_goal_set()  # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置发送给 IsaacsimEnv，并刷新可视性
@@ -201,6 +203,13 @@ class EGAgentSystem:
                 self._log(f"Behavior tree image updated: {img_path.resolve()}")
             else:
                 self._log(f"Behavior tree image not found: {img_path.resolve()}")
+        else:
+            self._log(f"User instruction: {text}")
+            self._append_conversation(f"用户: {text}")
+            self._append_conversation(f"智能体: 无法理解指令")
+            self._emit("conversation", self.get_conversation_text())
+            return
+        
         self._log(f"User instruction: {text}")
         self._append_conversation(f"用户: {text}")
         self._append_conversation(f"智能体: {self.goal}")
@@ -211,15 +220,15 @@ class EGAgentSystem:
         """After feed_instruction, bind bt to self.env, query the target object positions"""
         # (1) 将 BT 与 IsaacsimEnv环境交互层 绑定
         self.env.bind_bt(self.bt)
-        if not getattr(self, "goal_set", None):
-            return
 
         # (2) 调用 vlmap，查询每个目标在地图中的具体坐标
-        print(f"[system] [update_cur_goal_set]  self.goal_set: {self.goal_set}")
+        self._log(f"[system] [update_cur_goal_set] self.goal_set: {self.goal_set}")
         cur_goal_places = {}
         for obj in self.goal_set:
+            self._append_conversation(f"智能体: 正在从地图索引目标 {obj}")
+            self._emit("conversation", self.get_conversation_text())
             target_position = self.vlmap_backend.query_object(obj)
-            print(f"[system] [update_cur_goal_set] query {obj} result: {target_position}")
+            self._log(f"[system] [update_cur_goal_set] query {obj} result: {target_position}")
             if target_position is not None:
                 cur_goal_places[obj] = target_position
 

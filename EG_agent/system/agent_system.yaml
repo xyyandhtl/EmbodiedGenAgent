@@ -15,5 +15,6 @@ ros:
 camera:
   fov_x_deg: 90.0
   aspect: 1.3333333333
+  near_dist: 2.0  # RobotNear状态是否达到距离阈值
 
 use_rviz: true
