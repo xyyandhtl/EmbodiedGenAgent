@@ -177,7 +177,7 @@ class Dualmap:
             self.cfg.map_save_path = map_path
 
         # if self.cfg.save_local_map:
-        self.local_map_manager.save_map()
+        # self.local_map_manager.save_map()
 
         # if self.cfg.save_global_map:
         self.global_map_manager.save_map()

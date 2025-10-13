@@ -237,16 +237,16 @@ class ReRunVisualizer:
         """
         map_objects = global_map_manager.global_map
         if not map_objects:
-            print(f"[visualizer] [get_semantic_map_image] Don't have objects in this map.")
+            # print(f"[visualizer] [get_semantic_map_image] Don't have objects in this map.")
             return None
 
         # Determine map boundaries
         all_points = np.vstack([np.asarray(obj.pcd_2d.points) for obj in map_objects if not obj.pcd_2d.is_empty()])
         all_points = all_points[np.isfinite(all_points).all(axis=1)]  # Filter out invalid values
         if all_points.size == 0:
-            print(f"[visualizer] [get_semantic_map_image] All points of the objects is None.")
+            # print(f"[visualizer] [get_semantic_map_image] All points of the objects is None.")
             return None
-        print(f"[visualizer] [get_semantic_map_image] all_points shape: {all_points.shape}")
+        # print(f"[visualizer] [get_semantic_map_image] all_points shape: {all_points.shape}")
 
         min_coords = np.min(all_points[:, :2], axis=0)
         max_coords = np.max(all_points[:, :2], axis=0)

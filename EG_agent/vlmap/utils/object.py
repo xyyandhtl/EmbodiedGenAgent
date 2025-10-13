@@ -49,7 +49,7 @@ class BaseObject:
         self.clip_ft: Optional[np.ndarray] = np.empty(0, dtype=np.float32)
         
         # class id 
-        self.class_id: Optional[int] = None
+        self.class_id: int = -1
         
         # Initialize save_path
         self.save_path = self._initialize_save_path()
@@ -703,8 +703,8 @@ class GlobalObject(BaseObject):
         super().__init__()
 
         # Spatial primitives
-        self.pcd_2d: Optional[o3d.geometry.PointCloud] = o3d.geometry.PointCloud()
-        self.bbox_2d: Optional[o3d.geometry.AxisAlignedBoundingBox] = o3d.geometry.AxisAlignedBoundingBox()
+        self.pcd_2d: o3d.geometry.PointCloud = o3d.geometry.PointCloud()
+        self.bbox_2d: o3d.geometry.AxisAlignedBoundingBox = o3d.geometry.AxisAlignedBoundingBox()
         
         # Related objs
         # Current we "only save clip feats" <-- PAY Attention!

@@ -17,7 +17,7 @@ from EG_agent.planning.btpg.algos.bt_planning.reactive_planner import ReactivePl
 from EG_agent.planning.btpg.algos.bt_planning.obtea import OBTEA
 from EG_agent.planning.btpg.algos.bt_planning.hbtp import HBTP
 from EG_agent.planning.btpg.algos.bt_planning.uhbtp import UHBTP
-
+from EG_agent.planning.btpg.behavior_tree.behavior_libs.ExecBehaviorLibrary import ExecBehaviorLibrary
 
 # Used for experimental test data recording
 from EG_agent.planning.btpg.algos.bt_planning_exp.bt_expansion_test import BTExpansionTest
@@ -29,90 +29,89 @@ from EG_agent.planning.btpg.algos.bt_planning_exp.uhbtp_test import UHBTPTest
 
 # 封装好的主接口
 class BTPlannerInterface:
-    def __init__(self, behavior_lib, cur_cond_set, priority_act_ls=[], key_predicates=[], key_objects=[], selected_algorithm="opt",
-                 mode="big",
-                 bt_algo_opt=True, llm_reflect=False, llm=None, messages=None, action_list=None,use_priority_act=True,time_limit=None,
-                 heuristic_choice=-1,output_just_best=True,exp=False,exp_cost=False,max_expanded_num=None,
-                 theory_priority_act_ls=None):
+    def __init__(self, behavior_lib, cur_cond_set, priority_act_ls=[], key_predicates=[], key_objects=[], 
+                 selected_algorithm="opt", mode="big", bt_algo_opt=True, llm_reflect=False, llm=None, messages=None, 
+                 action_list=None, use_priority_act=True, time_limit=None, heuristic_choice=-1, 
+                 output_just_best=True, exp=False, exp_cost=False, max_expanded_num=None, theory_priority_act_ls=None):
         """
         Initialize the BTOptExpansion with a list of actions.
-        :param action_list: A list of actions to be used in the behavior tree.
         """
-
-
         self.cur_cond_set = cur_cond_set
         self.bt_algo_opt = bt_algo_opt
         self.selected_algorithm = selected_algorithm
-        self.time_limit=time_limit
-
+        self.time_limit = time_limit
         self.output_just_best = output_just_best
         self.exp = exp
         self.exp_cost = exp_cost
-        self.max_expanded_num=max_expanded_num
-
-        # 剪枝操作,现在的条件是以前扩展过的条件的超集
+        self.max_expanded_num = max_expanded_num
         self.consider_priopity = False
+        self.heuristic_choice = heuristic_choice
+        self.behavior_lib: ExecBehaviorLibrary = behavior_lib
 
-        # 选择全是0的启发式，还是 cost/10000 的启发式，还是都不采用
-        # 定义变量 heuristic_choice：
-        # 0 表示全是 0 的启发式
-        # 1 表示 cost/10000 的启发式
-        # -1 表示不使用启发式
-        self.heuristic_choice = heuristic_choice  # 可以根据需要更改这个值
-
-        # 自定义动作空间
-        if behavior_lib == None:
-            self.actions = action_list
-            self.big_actions=self.actions
-        # 默认的大动作空间
+        # 自定义动作空间或大动作空间
+        if behavior_lib is None:
+            self.big_actions = action_list
         else:
             self.big_actions = collect_action_nodes(behavior_lib)
 
-
-        if mode == "big":
-            self.actions = self.big_actions
-        elif mode=="user-defined":
-            self.actions = action_list
-            # print(f"自定义小动作空间：收集到 {len(self.actions)} 个动作")
-            # print("----------------------------------------------")
-        elif mode=="small-objs":
-            self.actions = self.collect_compact_object_actions(key_objects)
-            # print(f"选择小动作空间，只考虑物体：收集到 {len(self.actions)} 个动作")
-            # print("----------------------------------------------")
-        elif mode=="small-predicate-objs":
-            self.actions = self.collect_compact_predicate_object_actions(key_predicates,key_objects)
-            # print(f"选择小动作空间，考虑谓词和物体：收集到 {len(self.actions)} 个动作")
-            # print("----------------------------------------------")
-        else:
-            raise ValueError(f"Invalid mode: {mode}, please select from 'big', 'user-defined', 'small-objs', 'small-predicate-objs'")
-        
-        if use_priority_act:
-            self.priority_act_ls = self.filter_actions(priority_act_ls)
-            self.priority_obj_ls = key_objects
-        else:
-            self.priority_act_ls=[]
-            self.priority_obj_ls =[]
-        if self.priority_act_ls !=[]:
-            self.consider_priopity=True
-
-
-        # if self.heuristic_choice==-1: 在 adjust_action_priority 里面已经写了这个控制
-        #     self.priority_act_ls=[]
-
-        if theory_priority_act_ls!=None:
-            self.theory_priority_act_ls=theory_priority_act_ls
-        else:
-            self.theory_priority_act_ls=self.priority_act_ls
-
-        self.actions = self.adjust_action_priority(self.actions, self.priority_act_ls, self.priority_obj_ls,
-                                                       self.selected_algorithm)
-
+        # 初始化核心变量
+        self.actions = []
+        self.priority_act_ls = []
+        self.priority_obj_ls = []
+        self.theory_priority_act_ls = theory_priority_act_ls
         self.has_processed = False
         self.llm_reflect = llm_reflect
         self.llm = llm
         self.messages = messages
-
         self.min_cost = float("inf")
+
+        # ✅ 使用类方法完成逻辑初始化（支持后续动态更新）
+        self.set_key_objects(key_objects=key_objects, mode=mode, key_predicates=key_predicates,
+                             priority_act_ls=priority_act_ls, use_priority_act=use_priority_act)
+
+    # --------------------------- 新增的方法 --------------------------- #
+    def set_key_objects(self, key_objects=[], mode="small-objs", key_predicates=[],
+                        priority_act_ls=[], use_priority_act=False):
+        # TODO: 需要把 key_objects 传给 self.behavior_lib 的 Action.valid_args，是否可以更优雅
+        for cls in self.behavior_lib["Action"].values():
+            cls.valid_args = key_objects
+
+        # ✅ 用 behavior_lib 重建 big_actions
+        self.big_actions = collect_action_nodes(self.behavior_lib)
+        # print(f"已设置big_actions: {[action.name for action in self.big_actions]}")
+
+        # ✅ 按 mode 选择动作集
+        if mode == "big":
+            self.actions = self.big_actions
+        elif mode == "user-defined":
+            self.actions = self.big_actions
+        elif mode == "small-objs":
+            self.actions = self.collect_compact_object_actions(key_objects)
+        elif mode == "small-predicate-objs":
+            self.actions = self.collect_compact_predicate_object_actions(key_predicates, key_objects)
+        else:
+            raise ValueError(f"Invalid mode: {mode}, please select from 'big', 'user-defined', 'small-objs', or 'small-predicate-objs'")
+        print(f"已设置actions: {[action.name for action in self.actions]}")
+
+        # ✅ 更新优先动作与物体
+        if use_priority_act:
+            self.priority_act_ls = self.filter_actions(priority_act_ls)
+            self.priority_obj_ls = key_objects
+        else:
+            self.priority_act_ls = []
+            self.priority_obj_ls = []
+
+        # ✅ 是否考虑优先级
+        self.consider_priopity = len(self.priority_act_ls) > 0
+
+        # ✅ 若理论优先动作列表未定义，则与实际优先动作相同
+        if not hasattr(self, "theory_priority_act_ls") or self.theory_priority_act_ls is None:
+            self.theory_priority_act_ls = self.priority_act_ls
+
+        # ✅ 调整优先级顺序
+        self.actions = self.adjust_action_priority(
+            self.actions, self.priority_act_ls, self.priority_obj_ls, self.selected_algorithm
+        )
 
     def process(self, goal):
         """
@@ -306,6 +305,7 @@ class BTPlannerInterface:
             if match:
                 # 将括号内的内容按逗号分割
                 action_objects = match.group(1).split(',')
+                # print(f"Checking action: {act.name}, match: {match} with objects {action_objects}")
                 # 遍历每个物体名称
                 if all(obj in key_objects for obj in action_objects):
                     small_act.append(act)

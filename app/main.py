@@ -92,6 +92,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._setup_image_browser()
         self._setup_report_browser()
 
+        # --- 新增：聊天视图初始化（替换对话文本框为聊天气泡） ---
+        self._conv_msg_seen = 0  # 改为按消息计数，而不是按行
+        self._init_chat_view()
+
         # --- 新增：将 semanticMapLabel ==> semanticMapWidget，以实现用鼠标左键拖拽和滚轮平移 ---
         self.semanticMapWidget = ZoomableImageWidget()
         # Assuming the placeholder is in a layout within its parent
@@ -105,6 +109,16 @@ class MainWindow(QtWidgets.QMainWindow):
             self.semanticMapWidget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         else:
             print("Warning: Could not find layout to replace semantic map placeholder.")
+
+        # --- 新增：将 behaviorTreeLabel ==> behaviorTreeWidget，同样支持拖拽/缩放 ---
+        self.behaviorTreeWidget = ZoomableImageWidget()
+        if hasattr(self, "behaviorTreeLabel") and self.behaviorTreeLabel.parentWidget().layout() is not None:
+            bt_layout = self.behaviorTreeLabel.parentWidget().layout()
+            bt_index = bt_layout.indexOf(self.behaviorTreeLabel)
+            bt_layout.removeWidget(self.behaviorTreeLabel)
+            self.behaviorTreeLabel.deleteLater()
+            bt_layout.insertWidget(bt_index, self.behaviorTreeWidget)
+            self.behaviorTreeWidget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
     # ----------------- UI Events -----------------
     def on_start(self):
@@ -170,9 +184,11 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
     def update_bt(self):
-        # 行为树更新
-        self.behaviorTreeLabel.setPixmap(
-            np_to_qpix(self.agent_system.get_entity_bt_image()))
+        # 行为树更新 -> ZoomableImageWidget
+        if hasattr(self, "behaviorTreeWidget"):
+            self.behaviorTreeWidget.setPixmap(
+                np_to_qpix(self.agent_system.get_entity_bt_image())
+            )
 
     # ----------------- Slots for signals (主线程执行) -----------------
     def _on_log_update(self, txt: str):
@@ -180,8 +196,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.logText.verticalScrollBar().setValue(self.logText.verticalScrollBar().maximum())
 
     def _on_conv_update(self, txt: str):
-        self.conversationText.setPlainText(txt)
-        self.conversationText.verticalScrollBar().setValue(self.conversationText.verticalScrollBar().maximum())
+        # 解析为消息组（按“用户:”/“智能体:”开头分组），多行作为单条消息
+        if not hasattr(self, "conversationList"):
+            return
+        groups = self._group_messages(txt)
+        if len(groups) < self._conv_msg_seen:
+            self._conv_msg_seen = 0
+            self.conversationList.clear()
+        for msg in groups[self._conv_msg_seen:]:
+            self._append_chat_line(msg)  # 传入带角色前缀的整条消息
+        self._conv_msg_seen = len(groups)
+        self.conversationList.scrollToBottom()
 
     def _on_entities_update(self, rows):
         self.entityTable.setRowCount(len(rows))
@@ -192,10 +217,168 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_status_update(self, running: bool):
         self.update_statusbar()
 
+    # ----------------- Chat view helpers -----------------
+    def _init_chat_view(self):
+        # 若 UI 未合并，安全跳过
+        if not hasattr(self, "conversationList"):
+            return
+        lw: QtWidgets.QListWidget = self.conversationList
+        lw.setSpacing(6)
+        lw.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
+        lw.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
+        lw.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        lw.setWordWrap(True)
+        # 让列表项在宽度变化时能触发我们调整行宽
+        lw.installEventFilter(self)
+
+        # 预生成圆形头像
+        self._avatar_user = self._make_avatar(QtGui.QColor("#3d7cff"), "你")
+        self._avatar_agent = self._make_avatar(QtGui.QColor("#6a7a8a"), "智")
+
+    def _group_messages(self, txt: str) -> list:
+        """将全量对话文本按‘用户:’/‘智能体:’分组，保持单条消息内的换行。"""
+        lines = txt.splitlines()
+        groups = []
+        role = None  # "用户" or "智能体"
+        buf = []
+
+        def flush():
+            nonlocal role, buf
+            if role is None and not buf:
+                return
+            content = "\n".join(buf).rstrip()
+            if role is None:
+                role = "智能体"
+            if content:
+                groups.append(f"{role}: {content}")
+            role = None
+            buf = []
+
+        for ln in lines:
+            if ln.startswith("用户:") or ln.startswith("智能体:"):
+                flush()
+                if ln.startswith("用户:"):
+                    role = "用户"
+                else:
+                    role = "智能体"
+                buf = [ln.split(":", 1)[1].lstrip()]
+            else:
+                if role is None and not groups:
+                    role = "智能体"
+                buf.append(ln)
+        flush()
+        return groups
+
+    def _make_avatar(self, color: QtGui.QColor, text: str) -> QtGui.QPixmap:
+        size = 36
+        pm = QtGui.QPixmap(size, size)
+        pm.fill(QtCore.Qt.transparent)
+        p = QtGui.QPainter(pm)
+        p.setRenderHint(QtGui.QPainter.Antialiasing)
+        p.setPen(QtCore.Qt.NoPen)
+        p.setBrush(color)
+        p.drawEllipse(0, 0, size, size)
+        # 文字
+        f = QtGui.QFont()
+        f.setPointSize(12)
+        f.setBold(True)
+        p.setFont(f)
+        p.setPen(QtGui.QPen(QtCore.Qt.white))
+        p.drawText(pm.rect(), QtCore.Qt.AlignCenter, text[:1])
+        p.end()
+        return pm
+
+    def _append_chat_line(self, line: str):
+        if not hasattr(self, "conversationList"):
+            return
+        # 解析角色与内容
+        is_user = False
+        content = line
+        if line.startswith("用户:"):
+            is_user = True
+            content = line.split(":", 1)[1].strip()
+        elif line.startswith("智能体:"):
+            is_user = False
+            content = line.split(":", 1)[1].strip()
+
+        widget = self._build_chat_item(content or line, is_user)
+        item = QtWidgets.QListWidgetItem()
+        # 使每一行占满列表视口宽度，便于将用户气泡推到最右侧边缘
+        row_w = self.conversationList.viewport().width() or 600
+        item.setSizeHint(QtCore.QSize(row_w, widget.sizeHint().height()))
+        self.conversationList.addItem(item)
+        self.conversationList.setItemWidget(item, widget)
+        # 新增：确保添加后行宽正确（处理偶发的延迟布局）
+        self._update_chat_item_widths()
+
+    def _build_chat_item(self, text: str, is_user: bool) -> QtWidgets.QWidget:
+        w = QtWidgets.QWidget()
+        h = QtWidgets.QHBoxLayout(w)
+        h.setContentsMargins(6, 2, 6, 2)
+        h.setSpacing(8)
+        # 让容器可横向扩展，从而 stretch 能把用户消息推到右边缘
+        w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+
+        # 头像
+        avatar_lbl = QtWidgets.QLabel()
+        avatar_lbl.setFixedSize(36, 36)
+        avatar_lbl.setPixmap((self._avatar_user if is_user else self._avatar_agent))
+
+        # 气泡
+        bubble = QtWidgets.QLabel(text)
+        bubble.setWordWrap(True)
+        bubble.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        bubble.setStyleSheet(
+            "QLabel {"
+            f" background: {'#3d7cff' if is_user else '#3a3f4b'};"
+            " color: white;"
+            " border-radius: 8px;"
+            " padding: 8px 10px;"
+            "}"
+        )
+        bubble.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        # 限制气泡最大宽度为视口宽度的 70%，而不是限制容器宽度
+        view_w = self.conversationList.viewport().width() if hasattr(self, "conversationList") else 600
+        bubble.setMaximumWidth(max(320, int(view_w * 0.7)))
+
+        # 左右排布：用户居右，智能体居左（头像贴边）
+        if is_user:
+            h.addStretch(1)
+            h.addWidget(bubble, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignTop)
+            h.addWidget(avatar_lbl, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignTop)
+        else:
+            h.addWidget(avatar_lbl, 0, QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+            h.addWidget(bubble, 0, QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+            h.addStretch(1)
+        return w
+
+    # 新增：根据列表视口宽度，更新所有行宽以确保用户消息贴右边缘
+    def _update_chat_item_widths(self):
+        if not hasattr(self, "conversationList"):
+            return
+        lw = self.conversationList
+        row_w = lw.viewport().width() or lw.width()
+        for i in range(lw.count()):
+            it = lw.item(i)
+            if not it:
+                continue
+            w = lw.itemWidget(it)
+            if not w:
+                continue
+            it.setSizeHint(QtCore.QSize(row_w, w.sizeHint().height()))
+
+    # 新增：监听 conversationList 的尺寸变化
+    def eventFilter(self, obj, event):
+        if hasattr(self, "conversationList") and obj is self.conversationList:
+            if event.type() == QtCore.QEvent.Resize:
+                self._update_chat_item_widths()
+        return super().eventFilter(obj, event)
+
     # ----------------- Legacy helper methods (仍被定时器调用) -----------------
     def refresh_conversation(self):
-        # (保留以防手动调用) 线程安全: 仅从主线程调用
-        self._on_conv_update(self.agent_system.get_conversation_text())
+        # 聊天视图由信号驱动，这里保持兼容：从系统拉取文本并喂给 _on_conv_update
+        if hasattr(self, "conversationList"):
+            self._on_conv_update(self.agent_system.get_conversation_text())
 
     def refresh_log(self):
         self._on_log_update(self.agent_system.get_log_text_tail())

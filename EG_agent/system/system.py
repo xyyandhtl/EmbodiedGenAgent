@@ -30,13 +30,14 @@ class EGAgentSystem:
         """Initialize generators, environment runtime, and UI caches."""
         # 逻辑 Goal 生成器：用于将用户的自然语言指令（如“找到椅子”）解析为结构化的 逻辑目标
         self.goal_generator = LogicGoalGenerator()
-        # TODO：后续改为动态注入 object sets，同时传入下面 bt_generator 的 key_objects
+        # 使用 goal_generator 的一个预定义 object set，同时给下面 bt_generator，供简单调试
         self.goal_generator.prepare_prompt(object_set=None)
 
         # 行为树规划器：用于根据逻辑目标，动态地生成一个 BT
         self.bt_generator = BTGenerator(env_name="embodied",
-                                        cur_cond_set=set(), # TODO: 连续任务时需即时更新 cur_cond_set
+                                        cur_cond_set=set(),
                                         key_objects=list(AllObject))
+        # TODO: 连续任务时需即时更新 cur_cond_set 和 key_objects
 
         # Agent 载体部署环境
         # 组成：通过 bint_bt 动态绑定行为树，定义 run_action 实现交互逻辑，通过 ROS2 与部署环境信息收发
@@ -49,6 +50,7 @@ class EGAgentSystem:
         # 创建 VLMapNav 并挂到 IsaacsimEnv，避免 env 内部发布计时器过早触发
         self.vlmap_backend = VLMapNav()
         self.env.set_vlmap_backend(self.vlmap_backend)
+        self.dm = self.vlmap_backend.dualmap    # a reference for fast access
 
         # 再配置 ROS（内部会创建订阅与可选的发布计时器）
         self.env.configure_ros(self.cfg)
@@ -65,7 +67,7 @@ class EGAgentSystem:
         # QT 缓存/占位数据
         self._conversation: List[str] = []
         self._logs: List[str] = []
-        self._entity_info: List[dict] = []   # each: {"name":..., "info":...}
+        # self._entity_info: List[dict] = []   # each: {"name":..., "info":...}
         self._last_bt_image: np.ndarray = self._gen_dummy_image(300, 400, "Behavior Tree")
         self._placeholder_counter = 0
 
@@ -90,24 +92,40 @@ class EGAgentSystem:
         self._log("Agent system stop requested.")
         self._stop_event.set()
         self._running = False
-        # 允许环境安全停止
         self.env.close()
 
     def save(self, map_path: str | None = None):
         """Save the current global map to the given path or default cfg.map_save_path."""
         path = map_path or getattr(self.vlmap_backend.cfg, "map_save_path", None)
         self._log(f"Saving current global map to: {path}")
-        self.vlmap_backend.dualmap.save_map(map_path=path)
+        self.dm.save_map(map_path=path)
         self._log("Map saved.")
 
     def load(self, map_path: str | None = None):
         """Load the global map from the given path or default cfg.preload_path."""
         path = map_path or getattr(self.vlmap_backend.cfg, "preload_path", None)
         self._log(f"Loading global map from: {path}")
-        self.vlmap_backend.dualmap.load_map(map_path=path)
-        self._log(f"Map loaded with {len(self.vlmap_backend.dualmap.global_map_manager.global_map)} objects and "
-                  f"{len(self.vlmap_backend.dualmap.global_map_manager.layout_map.point_cloud.points)} layout points"
-                  f" and {len(self.vlmap_backend.dualmap.global_map_manager.layout_map.wall_pcd.points)} wall points")
+        self.dm.load_map(map_path=path)
+        self._log(f"Map loaded with {len(self.dm.global_map_manager.global_map)} objects and "
+                  f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
+                  f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
+        self.update_objects_from_map()
+        
+    def update_objects_from_map(self):
+        entites = self.get_entity_rows()
+        if entites:
+            # 取所有 entity 的 name 并首字母大写组成 object_set
+            self.bt_objects = {name.split('/', 1)[1].capitalize() for name, _ in entites if name.startswith("global/")}
+            self._log(f"Prepared goal generator from loaded map with the following "
+                      f"{len(self.bt_objects)} objects: \n{self.bt_objects} .")
+            # 用这些地图 objects 更新 goal_generator 和 bt_generator 的 key_objects
+            self.goal_generator.prepare_prompt(self.bt_objects)
+            self.bt_generator.set_key_objects(list(self.bt_objects))
+            self._log(f"已设置原子动作: \n{[action.name for action in self.bt_generator.planner.actions]}")
+            chinese_objs = self.goal_generator.ask_question(
+                f"请用中文列出以下英文目标集合：{self.bt_objects}", use_system_prompt=False)
+            self._append_conversation(f"智能体: 可以参考的任务对象有 {chinese_objs}")
+            self._emit("conversation", self.get_conversation_text())
 
     def _run_loop(self):
         """Main loop: step environment, propagate events, and check completion."""
@@ -126,16 +144,7 @@ class EGAgentSystem:
             # 环境 step，行为树 agent 执行动作，和部署环境通信
             # is_finished = self.env.step()
 
-            # (Debug)周期性占位数据刷新
-            # self._placeholder_counter += 1
-            # if self._placeholder_counter % 5 == 0:
-            #     self._append_conversation(f"智能体: 占位回复 {self._placeholder_counter}")
-            #     self._emit("conversation", self.get_conversation_text())
-            # if self._placeholder_counter % 7 == 0:
-            #     self._update_entities_placeholder()
-            #     self._emit("entities", self.get_entity_rows())
-
-        self.vlmap_backend.dualmap.end_process()
+        self.dm.end_process()
         self.vlmap_backend.shutdown_requested = True
 
         self._is_finished = True
@@ -167,24 +176,11 @@ class EGAgentSystem:
                 pass
 
     # ---------------------- 输入接口 ----------------------
-    def feed_observation(self,
-                         pose: np.ndarray,
-                         intrinsics: np.ndarray,
-                         image: np.ndarray,
-                         depth: np.ndarray):
-        """Ingest an observation (placeholder pipeline to be implemented)."""
-        # 手动喂给后端（可选路径，常规由 IsaacsimEnv 回调驱动）
-        ts = time.time()
-        self.vlmap_backend.push_data(image, depth, pose, ts)
-
-        self._log("Received observation (placeholder).")
-        self._emit("observation", None)
-
     def feed_instruction(self, text: str):
         """Plan a behavior tree from instruction, draw it, and update UI caches."""
-        # TODO: goal_generator -> bt_generator -> bt_agent.bind_bt
-        # self.goal = self.goal_generator.generate_single(text)  # 1. 用户指令 ==> goal 逻辑指令（如：请前往控制室 转换为 RobotNear_ControlRoom）
-        self.goal = "RobotNear_Equipment"  # 调试测试
+        # text = "请前往拍摄车辆"   ＃ for test
+        self.goal = self.goal_generator.generate_single(text)  # 1. 用户指令 ==> goal 逻辑指令（如：请前往控制室 转换为 RobotNear_ControlRoom）
+        # self.goal = "RobotNear_Equipment"  # 调试测试
         self._log(f"[system] [feed_instruction] goal is: {self.goal}")
 
         if self.goal:
@@ -255,26 +251,24 @@ class EGAgentSystem:
     def get_entity_rows(self) -> Iterable[tuple]:
         """Yield (name, info) tuples using dualmap content (local/global)."""
         rows = []
-        dm = self.vlmap_backend.dualmap
-        vis = dm.visualizer
-        classes = vis.obj_classes.get_classes_arr()
+        classes = self.dm.visualizer.obj_classes.get_classes_arr()
 
         # Local objects summary
-        for local_obj in dm.local_map_manager.local_map[:20]:
-            cid = local_obj.class_id
-            name = classes[cid] if 0 <= cid < len(classes) else f"class_{cid}"
-            pts = np.asarray(local_obj.pcd.points)
-            npts = pts.shape[0]
-            if npts > 0:
-                mean = pts.mean(axis=0)
-                mean_str = f"{mean[0]:.2f},{mean[1]:.2f},{mean[2]:.2f}"
-            else:
-                mean_str = "NA"
-            rows.append((f"local/{name}", f"id={cid}, npts={npts}, pos=({mean_str})"))
+        # for local_obj in dm.local_map_manager.local_map[:20]:
+        #     cid = local_obj.class_id
+        #     name = classes[cid] if 0 <= cid < len(classes) else f"class_{cid}"
+        #     pts = np.asarray(local_obj.pcd.points)
+        #     npts = pts.shape[0]
+        #     if npts > 0:
+        #         mean = pts.mean(axis=0)
+        #         mean_str = f"{mean[0]:.2f},{mean[1]:.2f},{mean[2]:.2f}"
+        #     else:
+        #         mean_str = "NA"
+        #     rows.append((f"local/{name}", f"id={cid}, npts={npts}, pos=({mean_str})"))
 
         # Global objects summary
-        for global_obj in dm.global_map_manager.global_map[:20]:
-            cid = global_obj.class_id
+        for global_obj in self.dm.global_map_manager.global_map:
+            cid: int = global_obj.class_id
             name = classes[cid] if 0 <= cid < len(classes) else f"class_{cid}"
             pts2 = np.asarray(global_obj.pcd_2d.points)
             npts2 = pts2.shape[0]
@@ -285,42 +279,32 @@ class EGAgentSystem:
                 mean2_str = "NA"
             rows.append((f"global/{name}", f"id={cid}, npts={npts2}, pos=({mean2_str})"))
 
-        if rows:
-            return rows
-        return [(e["name"], e["info"]) for e in self._entity_info]
+        return rows
 
     def get_semantic_map_image(self) -> np.ndarray:
         """Semantic/path map from dualmap; fallback to detector annotated image."""
-        dm = self.vlmap_backend.dualmap
-        semantic_map = dm.get_semantic_map_image()
+        semantic_map = self.dm.get_semantic_map_image()
         # TODO: 语义实体地图 + 导航路径 (not at all)
-        print(f"[system] [get_semantic_map_image] Getting the semantic_map per 3s...")
         if semantic_map is not None:
             return semantic_map
-        print(f"[system] [get_semantic_map_image] The semantic_map is None!")
         return self._gen_dummy_image(400, 300, "Semantic+Path")
 
     def get_traversable_map_image(self) -> np.ndarray:
         """Traversable map from dualmap."""
-        dm = self.vlmap_backend.dualmap
-        traversable_map = dm.get_traversable_map_image()
+        traversable_map = self.dm.get_traversable_map_image()
         # TODO: 可通行地图 (not work)
-        print(f"[system] [get_traversable_map_image] Getting the traversable_map per 1s...")
         if traversable_map is not None:
             return traversable_map
-        print(f"[system] [get_traversable_map_image] The traversable_map is None!")
         return self._gen_dummy_image(260, 180, "Traversable")
 
     def get_current_instance_seg_image(self) -> np.ndarray:
         """Current 2D instance segmentation from dualmap.detector FastSAM."""
-        dm = self.vlmap_backend.dualmap
-        if dm.detector.annotated_image is not None:
-            return dm.detector.annotated_image
+        if self.dm.detector.annotated_image is not None:
+            return self.dm.detector.annotated_image
         return self._gen_dummy_image(260, 180, "Instance 2D")
 
     def get_current_instance_3d_image(self) -> np.ndarray:
         """3D instance visualization image from dualmap."""
-        dm = self.vlmap_backend.dualmap
         # TODO: 3D实例分割可视化
         # if dm.visualizer.last_instance3d_image is not None:
         #     return dm.visualizer.last_instance3d_image
@@ -340,14 +324,6 @@ class EGAgentSystem:
         if len(self._logs) > 5000:
             self._logs = self._logs[-3000:]
         self._emit("log", self.get_log_text_tail())
-
-    def _update_entities_placeholder(self):
-        """Generate placeholder entity info for the UI table."""
-        # 模拟实体增量
-        self._entity_info = [
-            {"name": f"obj_{i}", "info": f"state={np.random.randint(0,3)}"}
-            for i in range(1, 8)
-        ]
 
     def _gen_dummy_image(self, w: int, h: int, text: str) -> np.ndarray:
         """Generate a simple gradient placeholder image of shape (h, w, 3)."""

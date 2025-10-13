@@ -44,7 +44,8 @@ class LogicGoalGenerator:
             )
         else:
             # 需要动态传入 object sets 时用这个在外部调用
-            objects = json.dumps(object_set, ensure_ascii=False)
+            objects_list = sorted(list(object_set))
+            objects = json.dumps(objects_list, ensure_ascii=False)
             self.prompt_scene = self.prompt_scene_template.format(
                 NAV_POINTS=objects,
                 TARGETS=objects,
@@ -234,6 +235,12 @@ class LogicGoalGenerator:
 
         # all retries exhausted, no valid format
         return ""
+    
+    def ask_question(self, question: str, use_system_prompt: bool = True) -> str:
+        """
+        直接问答接口对外暴露，不存入记忆。
+        """
+        return self.llm.infer(question, record_memory=False, use_system_prompt=use_system_prompt)
 
 
 if __name__ == "__main__":

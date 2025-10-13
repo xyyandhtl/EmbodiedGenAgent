@@ -26,7 +26,7 @@ class GlobalMapManager(BaseMapManager):
         super().__init__(cfg)
 
         # global objects list
-        self.global_map = []
+        self.global_map: List[GlobalObject] = []
 
         # set global flag in tracker
         self.tracker.set_global()
