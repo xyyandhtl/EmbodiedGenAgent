@@ -24,7 +24,7 @@ class EGAgentSystem:
     goal: str
     goal_set: set
     bt: BehaviorTree
-    bt_path: str = "behavior_tree.png"
+    bt_name: str = "behavior_tree"
 
     def __init__(self):
         """Initialize generators, environment runtime, and UI caches."""
@@ -183,33 +183,32 @@ class EGAgentSystem:
         # self.goal = "RobotNear_Equipment"  # 调试测试
         self._log(f"[system] [feed_instruction] goal is: {self.goal}")
 
-        if self.goal:
-            self.bt = self.bt_generator.generate(self.goal)  # 2. goal 逻辑指令 ==> BehaviorTree 实例（如：['Walk(ControlRoom)']）
-            self._log(f"[system] [feed_instruction] BT is created!")
-            self.goal_set = self.bt_generator.goal_set
-
-            self.update_cur_goal_set()  # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置发送给 IsaacsimEnv，并刷新可视性
-
-            # save behavior_tree.png to the current work dir to visualize in gui
-            self.bt.draw(png_only=True)
-            # load the saved behavior tree image into memory for GUI
-            img_path = Path(self.bt_path)
-            if img_path.exists():
-                self._last_bt_image = np.array(Image.open(img_path).convert("RGB"))
-                self._log(f"Behavior tree image updated: {img_path.resolve()}")
-            else:
-                self._log(f"Behavior tree image not found: {img_path.resolve()}")
-        else:
+        if not self.goal:
             self._log(f"User instruction: {text}")
             self._append_conversation(f"用户: {text}")
             self._append_conversation(f"智能体: 无法理解指令")
             self._emit("conversation", self.get_conversation_text())
             return
         
+        self.bt = self.bt_generator.generate(self.goal)  # 2. goal 逻辑指令 ==> BehaviorTree 实例（如：['Walk(ControlRoom)']）
+        self._log(f"[system] [feed_instruction] BT is created!")
         self._log(f"User instruction: {text}")
         self._append_conversation(f"用户: {text}")
-        self._append_conversation(f"智能体: {self.goal}")
+        self._append_conversation(f"智能体: 准备执行行为树指令 {self.goal}")
         self._emit("conversation", self.get_conversation_text())
+        self.goal_set = self.bt_generator.goal_set
+
+        self.update_cur_goal_set()  # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置发送给 IsaacsimEnv，并刷新可视性
+
+        # save behavior_tree.png to the current work dir to visualize in gui
+        self.bt.draw(png_only=True, file_name=self.bt_name)
+        # load the saved behavior tree image into memory for GUI
+        img_path = Path(self.bt_name + ".png")
+        if img_path.exists():
+            self._last_bt_image = np.array(Image.open(img_path).convert("RGB"))
+            self._log(f"Behavior tree image updated: {img_path.resolve()}")
+        else:
+            self._log(f"Behavior tree image not found: {img_path.resolve()}")            
 
     # ---------------------- 模块间数据交互 -----------------------
     def update_cur_goal_set(self):
@@ -221,8 +220,6 @@ class EGAgentSystem:
         self._log(f"[system] [update_cur_goal_set] self.goal_set: {self.goal_set}")
         cur_goal_places = {}
         for obj in self.goal_set:
-            self._append_conversation(f"智能体: 正在从地图索引目标 {obj}")
-            self._emit("conversation", self.get_conversation_text())
             target_position = self.vlmap_backend.query_object(obj)
             self._log(f"[system] [update_cur_goal_set] query {obj} result: {target_position}")
             if target_position is not None:
@@ -231,6 +228,9 @@ class EGAgentSystem:
         # (3) 将 目标位置 传递给 IsaacsimEnv，并更新可视性（每个目标是否在当前相机的视锥内）
         if cur_goal_places:
             self.env.set_object_places(cur_goal_places)
+            self._log(f"[system] [update_cur_goal_set] set cur_goal_places to env: {cur_goal_places}")
+            self._append_conversation(f"智能体: 已更新当前目标位置为 \n{cur_goal_places}")
+            self._emit("conversation", self.get_conversation_text())
 
     # ---------------------- 数据获取占位接口 ----------------------
     def get_conversation_text(self) -> str:

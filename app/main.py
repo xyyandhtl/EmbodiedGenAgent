@@ -316,17 +316,16 @@ class MainWindow(QtWidgets.QMainWindow):
         h = QtWidgets.QHBoxLayout(w)
         h.setContentsMargins(6, 2, 6, 2)
         h.setSpacing(8)
-        # 让容器可横向扩展，从而 stretch 能把用户消息推到右边缘
         w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
 
-        # 头像
         avatar_lbl = QtWidgets.QLabel()
         avatar_lbl.setFixedSize(36, 36)
         avatar_lbl.setPixmap((self._avatar_user if is_user else self._avatar_agent))
 
-        # 气泡
         bubble = QtWidgets.QLabel(text)
-        bubble.setWordWrap(True)
+        # 仅在显式换行符处分行
+        bubble.setTextFormat(QtCore.Qt.PlainText)
+        bubble.setWordWrap(False)
         bubble.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         bubble.setStyleSheet(
             "QLabel {"
@@ -337,11 +336,10 @@ class MainWindow(QtWidgets.QMainWindow):
             "}"
         )
         bubble.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
-        # 限制气泡最大宽度为视口宽度的 70%，而不是限制容器宽度
-        view_w = self.conversationList.viewport().width() if hasattr(self, "conversationList") else 600
-        bubble.setMaximumWidth(max(320, int(view_w * 0.7)))
+        # 移除最大宽度限制，避免因宽度上限导致按空格换行或截断
+        # (若需要可改为在气泡内部加入水平滚动的只读文本控件)
+        # bubble.setMaximumWidth(...)
 
-        # 左右排布：用户居右，智能体居左（头像贴边）
         if is_user:
             h.addStretch(1)
             h.addWidget(bubble, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignTop)
