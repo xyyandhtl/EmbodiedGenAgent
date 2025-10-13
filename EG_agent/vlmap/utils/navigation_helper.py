@@ -423,7 +423,7 @@ class RRT:
         plt.show()
 
 class NavigationGraph:
-    def __init__(self, cfg: Dynaconf, pcd: o3d.geometry.PointCloud, cell_size: int):
+    def __init__(self, cfg: Dynaconf, pcd: o3d.geometry.PointCloud, cell_size: float):
         """Initialization of the NavigationGraph class.
 
         Args:
@@ -438,7 +438,7 @@ class NavigationGraph:
             np.int32
         )
         self.grid_size = self.grid_size[[0, 1]]
-        print(self.grid_size)
+        print(f"[NavigationGraph] grid size:{self.grid_size}")
         self.cell_size = cell_size
         self.pcd = pcd
 

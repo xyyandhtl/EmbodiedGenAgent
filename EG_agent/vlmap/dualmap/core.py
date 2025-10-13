@@ -564,6 +564,9 @@ class Dualmap:
 
         self.get_action_path()
 
+        # Update traversability grid for GUI display
+        self.local_map_manager.update_traversability_grid()
+
     def run_mapping_thread(self):
         """
         Independent thread: Monitor detection results and process local mapping and global mapping.
