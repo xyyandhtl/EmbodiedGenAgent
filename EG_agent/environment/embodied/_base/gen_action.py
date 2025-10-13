@@ -10,6 +10,7 @@ class EmbodiedAction(Action):
 
     env: IsaacsimEnv = None  # type: ignore
 
+    # TODO: 不再区分 NAV_POINTS 和 CAPTUREABLE 等等了，所有 TARGETS 一律地位相同
     # use shared sets from object_sets.py
     LOCATIONS = LOCATIONS
     INSPECTION_POINTS = INSPECTION_POINTS

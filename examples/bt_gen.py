@@ -7,12 +7,12 @@ if __name__ == "__main__":
         cur_cond_set = set()
         goal_str = 'RobotNear_Doorway & IsCaptured_Victim'
         key_objects = ["StagingArea", "Corridor", "Intersection", "Stairwell",
-                        "Office", "Warehouse", "ControlRoom", "LoadingBay", 
-                        "Lobby", "ChargingStation", "Outdoor", "Indoor", "Wall",
-                        "Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
-                        "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",
-                        "Blood", "Fire", "Gas", "Debris",
-                        "Victim", "Rescuer", "Visitor", "Staff"]
+                    "Office", "Warehouse", "ControlRoom", "LoadingBay", 
+                    "Lobby", "ChargingStation", "Outdoor", "Indoor", "Wall",
+                    "Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
+                    "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",
+                    "Blood", "Fire", "Gas", "Debris",
+                    "Victim", "Rescuer", "Visitor", "Staff"]
     elif test_env == "virtualhome":
         cur_cond_set = {'IsSwitchedOff(dishwasher)', 'IsSwitchedOff(tablelamp)', 'IsClose(garbagecan)', 
                         'IsClose(cabinet)', 'IsStanding(self)', 'IsSwitchedOff(toaster)', 'IsClose(dishwasher)', 
@@ -31,9 +31,10 @@ if __name__ == "__main__":
     bt_gen = BTGenerator(
         env_name=test_env,
         cur_cond_set=cur_cond_set,
-        key_objects=key_objects,
+        key_objects=["tv","microwave"], # fro test, key_objects in __init__ and set_key_objects is different
     )
 
+    bt_gen.set_key_objects(key_objects)
     bt = bt_gen.generate(goal_str, btml_name="tree")
 
      # if scene in ["VH","RW"]:

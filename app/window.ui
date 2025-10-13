@@ -68,10 +68,18 @@ QLabel#titleLabel {
           </property>
           <layout class="QVBoxLayout" name="vboxConv">
            <item>
-            <widget class="QTextEdit" name="conversationText">
-             <property name="readOnly"><bool>true</bool></property>
-             <property name="placeholderText">
-              <string>智能体对话内容...</string>
+            <!-- 用 QListWidget 替换 QTextEdit 以支持聊天气泡 -->
+            <widget class="QListWidget" name="conversationList">
+             <property name="alternatingRowColors"><bool>false</bool></property>
+             <property name="uniformItemSizes"><bool>false</bool></property>
+             <property name="selectionMode">
+              <enum>QAbstractItemView::NoSelection</enum>
+             </property>
+             <property name="verticalScrollMode">
+              <enum>QAbstractItemView::ScrollPerPixel</enum>
+             </property>
+             <property name="horizontalScrollBarPolicy">
+              <enum>Qt::ScrollBarAlwaysOff</enum>
              </property>
             </widget>
            </item>
@@ -98,6 +106,10 @@ QLabel#titleLabel {
         <layout class="QHBoxLayout" name="hboxInput">
          <item>
           <widget class="QLineEdit" name="instructionEdit">
+           <!-- 预设默认文本 -->
+           <property name="text">
+            <string>请前往拍摄车辆</string>
+           </property>
            <property name="placeholderText">
             <string>输入指令...</string>
            </property>

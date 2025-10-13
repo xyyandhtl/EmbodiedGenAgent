@@ -141,7 +141,7 @@ class ObjectClasses:
                 
         return selected_classes, selected_class_to_color
 
-    def get_classes_arr(self):
+    def get_classes_arr(self) -> list:
         '''
         Return the list of classes names
         '''

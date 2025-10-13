@@ -21,7 +21,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("vlm_inference")
 
-VLM_MODEL_NAME = "InternVL3"  # Replace with your local model name
+# VLM_MODEL_NAME = "InternVL3"  # Replace with your local model name
+VLM_MODEL_NAME = "internvl3_5-14b"
 PROMPT_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 def annotate_tercios(img: Image.Image, color: tuple[int, int, int, int] = (255, 0, 255, 80)) -> Image.Image:
@@ -60,7 +61,7 @@ class VLMInference:
     """
 
     def __init__(self) -> None:
-        self.client = OpenAI(base_url="http://127.0.0.1:8000/v1", api_key="EMPTY")
+        self.client = OpenAI(base_url="http://10.88.105.117:1234/v1", api_key="EMPTY")
         self.system_prompt = ""
         # simple memory as list of messages: {"role": "user"/"assistant", "content": str or list}
         self.memory: list[dict] = []
@@ -103,7 +104,8 @@ class VLMInference:
     def infer(self, 
               text: str, 
               image: Union[str, Path, Image.Image, np.ndarray, None] = None, 
-              record_memory: bool = False) -> str:
+              record_memory: bool = False,
+              use_system_prompt: bool = True) -> str:
         """
         Perform inference. If record_memory is True, the user prompt and the assistant reply
         will be appended to internal memory after a successful call.
@@ -113,7 +115,9 @@ class VLMInference:
             # build prompt text (no template handling)
             prompt = text
 
-            reply = self._call_llm(image_url, prompt, include_memory=True)
+            reply = self._call_llm(image_url, prompt,
+                                   include_memory=use_system_prompt,    # TODO: when to include memory?
+                                   use_system_prompt=use_system_prompt)
 
             # optionally record into memory
             if record_memory:
@@ -156,19 +160,16 @@ class VLMInference:
     # OpenAI call
     # ---------------------------------------------------------------------
 
-    def _call_llm(self, image_url: str, prompt: str, include_memory: bool = True) -> str:
+    def _call_llm(self, image_url: str, prompt: str, include_memory: bool = True,
+                  use_system_prompt: bool = True) -> str:
         t0 = time.time()
 
         messages = []
-        if self.system_prompt:
+        if use_system_prompt and self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
 
-        # include past memory if requested
         if include_memory and self.memory:
-            # memory items are already in the form {"role":..., "content":...}
-            # for msg in self.memory:
-            #     messages.append({"role": msg["role"], "content": msg["content"]})
-            messages += self.memory       
+            messages += self.memory
 
         # current user message (with optional image)
         if image_url:

@@ -28,7 +28,7 @@ class BTGenerator:
         self.priority_act_ls: List[str] = []
         self.key_predicates: List[str] = []
         self.selected_algorithm = "hbtp"
-        self.mode = "small-objs"
+        self.mode = "small-objs"   # big, user-defined, small-objs, small-predicate-objs
         self.time_limit = 60
         self.heuristic_choice = 0
         self.output_just_best = True
@@ -50,6 +50,10 @@ class BTGenerator:
         )
 
         self.goal_set = set()
+
+    def set_key_objects(self, key_objects: List[str]):
+        self.key_objects = key_objects
+        self.planner.set_key_objects(key_objects=self.key_objects)
 
     def generate(self, goal: str, btml_name: str = "tree") -> BehaviorTree:
         """

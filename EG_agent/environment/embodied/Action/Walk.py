@@ -23,7 +23,7 @@ class Walk(EmbodiedAction):
         info = {}
         info["pre"] = set()
         info["add"] = {f"RobotNear({target})"}
-        info["del_set"] = {f"RobotNear({place})" for place in cls.valid_args & EmbodiedAction.NAV_POINTS if place != target}
+        info["del_set"] = {f"RobotNear({place})" for place in cls.valid_args if place != target}
         info["cost"] = 15
         return info
 
