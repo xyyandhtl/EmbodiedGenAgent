@@ -384,7 +384,7 @@ class Detector:
     ) -> DataInput:
         return self.curr_data
 
-    def get_curr_observations(self) -> None:
+    def get_curr_observations(self) -> None | list[LocalObservation]:
         return self.curr_observations
 
     def check_keyframe_for_layout_pcd(self):

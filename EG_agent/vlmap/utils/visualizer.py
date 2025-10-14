@@ -235,67 +235,104 @@ class ReRunVisualizer:
         """
         Generates a top-down 2D image of the global semantic map.
         """
-        map_objects = global_map_manager.global_map
-        if not map_objects:
-            # print(f"[visualizer] [get_semantic_map_image] Don't have objects in this map.")
+        if not global_map_manager.has_global_map():
             return None
 
-        # Determine map boundaries
-        all_points = np.vstack([np.asarray(obj.pcd_2d.points) for obj in map_objects if not obj.pcd_2d.is_empty()])
+        # Get all points from the global map
+        all_points = np.vstack([np.asarray(obj.pcd_2d.points) for obj in global_map_manager.global_map if not obj.pcd_2d.is_empty()])
         all_points = all_points[np.isfinite(all_points).all(axis=1)]  # Filter out invalid values
         if all_points.size == 0:
-            # print(f"[visualizer] [get_semantic_map_image] All points of the objects is None.")
             return None
-        # print(f"[visualizer] [get_semantic_map_image] all_points shape: {all_points.shape}")
 
+        # Determine the bounding box of all points
         min_coords = np.min(all_points[:, :2], axis=0)
         max_coords = np.max(all_points[:, :2], axis=0)
 
-        # Create a blank image
-        resolution = 0.05  # meters per pixel
-        padding = 50 # pixels
-        width = int((max_coords[0] - min_coords[0]) / resolution) + padding
-        height = int((max_coords[1] - min_coords[1]) / resolution) + padding
-        image = np.zeros((height, width, 3), dtype=np.uint8)
+        map_size = max_coords - min_coords  # the size of the image
 
-        # Get colors for each class
-        colors = self.obj_classes.get_class_color_dict_by_index()
+        resolution = 0.05  # meters per pixel
+        scale_factor = 3.0
+        padding = 100  # pixels
+        width = int((map_size[0]) / resolution * scale_factor) + padding
+        height = int((map_size[1]) / resolution * scale_factor) + padding
+        image = np.full((height, width, 3), 255, dtype=np.uint8)
+
+        placed_label_boxes = [] # List to store bounding boxes of placed labels
 
         # Draw each object
-        for obj in map_objects:
-            if obj.pcd_2d.is_empty():
-                continue
-
+        for obj in global_map_manager.global_map:
             points = np.asarray(obj.pcd_2d.points)
             points = points[np.isfinite(points).all(axis=1)]
             if points.shape[0] == 0:
                 continue
 
-            class_id = obj.class_id
-            class_name = self.obj_classes.get_classes_arr()[class_id]
-            # print(f"[visualizer] [get_semantic_map_image] Object {obj.uid}, class_id = {class_id}, class_name = {class_name}, has 3D points, shape = {points.shape}")
-            # Get float RGB color (0-1 range)
-            color_rgb = colors.get(str(class_id), (1.0, 1.0, 1.0))
-            # Convert to integer BGR color (0-255 range) for OpenCV
-            color_bgr_int = tuple(int(c * 255) for c in (color_rgb[2], color_rgb[1], color_rgb[0]))
-            # print(f"[visualizer] [get_semantic_map_image] its color_bgr = {color_bgr_int}")
+            # Transform points to image coordinates (with scaling)
+            points_img = ((points[:, :2] - min_coords) / resolution * scale_factor).astype(int)
+            points_img[:, 1] = height - points_img[:, 1] - 1  # flip Y axis
+            
+            # Get the color for the object
+            obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
+            color_rgb = self.obj_classes.get_class_color(obj_name)  # float RGB color (0-1 range)
+            color_bgr_int = tuple(int(c * 255) for c in (color_rgb[2], color_rgb[1], color_rgb[0]))  # convert to integer BGR color (0-255 range)
 
-            # Convert world coordinates to image coordinates
-            img_points = ((points[:, :2] - min_coords) / resolution).astype(int)
-            img_points += padding // 2
-            img_points[:, 1] = height - img_points[:, 1] - 1  # Flip Y axis
+            # Draw the points on the image
+            for p in points_img:
+                # Use a slightly larger radius due to upscaling
+                cv2.circle(image, (p[0], p[1]), radius=int(2 * (scale_factor - 1)), color=color_bgr_int, thickness=-1)
 
-            # Draw points as 1x1 squares
-            for p in img_points:
-                x, y = p
-                if 0 <= x < width-1 and 0 <= y < height-1:
-                    image[y:y+2, x:x+2] = color_bgr_int
+            # Get object bbox and text size
+            obj_x_min, obj_y_min = np.min(points_img, axis=0)
+            obj_x_max, obj_y_max = np.max(points_img, axis=0)
+            centroid = np.mean(points_img, axis=0).astype(int)
 
-            # Draw label
-            if img_points.shape[0] > 0:
-                label_pos = np.mean(img_points, axis=0).astype(int)
-                if 0 <= label_pos[0] < width and 0 <= label_pos[1] < height:
-                    cv2.putText(image, class_name, tuple(label_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            font_face = cv2.FONT_HERSHEY_DUPLEX
+            font_scale = 0.3 * (scale_factor / 2)
+            font_thickness = 1
+            (text_w, text_h), baseline = cv2.getTextSize(obj_name, font_face, font_scale, font_thickness)
+
+            # Define candidate positions (bottom-left corner of text)
+            candidates = [
+                (centroid[0] - text_w // 2, centroid[1] - text_h // 2 - 3),  # Center
+                (obj_x_min + (obj_x_max - obj_x_min) // 2 - text_w // 2, obj_y_min - text_h), # Top-center
+                (obj_x_max + 1, obj_y_min + text_h // 2), # Top-right
+                (obj_x_min - text_w - 1, obj_y_min + text_h // 2), # Top-left
+                (obj_x_max + 1, obj_y_max), # Bottom-right
+                (obj_x_min - text_w - 1, obj_y_max), # Bottom-left
+            ]
+
+            final_pos = None
+
+            # Find a non-colliding position
+            for pos in candidates:
+                # Calculate label bounding box
+                lx, ly = pos[0], pos[1]
+                label_box = (lx, ly - text_h, text_w, text_h + baseline)
+
+                # Check for collision with image boundaries
+                if not (lx >= 0 and ly >= 0 and lx + label_box[2] < width and ly + label_box[3] < height):
+                    continue
+
+                # Check for collision with other labels
+                is_colliding = False
+                for placed_box in placed_label_boxes:
+                    if not (label_box[0] > placed_box[0] + placed_box[2] or \
+                            label_box[0] + label_box[2] < placed_box[0] or \
+                            label_box[1] > placed_box[1] + placed_box[3] or \
+                            label_box[1] + label_box[3] < placed_box[1]):
+                        is_colliding = True
+                        break
+                
+                if not is_colliding:
+                    final_pos = pos
+                    placed_label_boxes.append(label_box)
+                    break
+            
+            # If no good position is found, fall back to the default (top-right)
+            if final_pos is None:
+                final_pos = candidates[0]
+
+            # Draw the text at the final position
+            cv2.putText(image, obj_name, final_pos, font_face, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)
 
         return image
 

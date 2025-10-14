@@ -167,7 +167,7 @@ merge_sim_threshold: 0.9
 
 # Map objects saving directory, if save map
 # map_save_path: ${output_path}/${dataset_name}_${scene_id}/map
-map_save_path: map
+map_save_path: map  # 拼接后的完整路径是 vlmap/outputs/${scene_id}/map
 # Save the generated local map
 save_local_map: True
 # Save the global map (set False if run_local_mapping_only is True)
