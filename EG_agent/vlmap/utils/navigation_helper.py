@@ -442,7 +442,7 @@ class NavigationGraph:
         self.cell_size = cell_size
         self.pcd = pcd
 
-        self.pos_path=None
+        self.pos_path = []
 
         self.snapped_goal = None
 
@@ -1176,12 +1176,12 @@ class NavigationGraph:
         # TODO: judge whether the end point is in the occ map
         if not self.is_in_bounds(start):
             print("Start point is out of bounds!")
-            self.pos_path = None
+            self.pos_path = []
             return []
         
         if not self.is_in_bounds(goal):
             print("Goal point is out of bounds!")
-            self.pos_path = None
+            self.pos_path = []
             return []
 
         self.rrt.set_occ_map(self.free_space)

@@ -31,7 +31,6 @@ class LocalMapManager(BaseMapManager):
         # global observations, all are low mobility objects
         self.global_observations = []
         
-
         # objects list
         self.local_map = []
         self.global_map = []
@@ -47,7 +46,7 @@ class LocalMapManager(BaseMapManager):
 
         # For navigation
         self.nav_graph = None
-        self.inquiry = ''
+        self.inquiry = None
         # If in Click mode, the goal by clicked
         self.click_goal = None
         # If in Inquiry mode, the goal by bbox
@@ -983,7 +982,7 @@ class LocalMapManager(BaseMapManager):
             )
 
     def calculate_local_path(
-        self, curr_pose, goal_mode=GoalMode.RANDOM, resolution=0.03
+        self, curr_pose, goal_mode=GoalMode.POSE, resolution=0.03, goal_position=None
     ):
         # import open3d as o3d
         #
@@ -1026,7 +1025,8 @@ class LocalMapManager(BaseMapManager):
         curr_position = curr_pose[:3, 3]
         start_position = nav_graph.calculate_pos_2d(curr_position)
 
-        goal_position = self.get_goal_position(nav_graph, start_position, goal_mode)
+        if goal_mode is not GoalMode.POSE:
+            goal_position = self.get_goal_position(nav_graph, start_position, goal_mode)
 
         if goal_position is None:
             logger.warning("[LocalMap][Path] No goal position found!")

@@ -114,16 +114,6 @@ class RunnerROSBase:
 
         data_input = self.synced_data_queue[-1]
 
-        # if not self.dualmap.calculate_path:
-        #     current_time = current_time_fn()
-        #     last_time = self.last_message_time
-        #     if self.cfg.use_end_process and last_time is not None:
-        #         if current_time - last_time > 10.0:
-        #             self.logger.warning("[Main] No new data received. Entering end process.")
-        #             self.dualmap.end_process()
-        #             self.shutdown_requested = True
-        #             return
-
         # 根据 时间戳和位姿 判断当前帧是否为 关键帧
         if not self.dualmap.check_keyframe(data_input.time_stamp, data_input.pose):
             return

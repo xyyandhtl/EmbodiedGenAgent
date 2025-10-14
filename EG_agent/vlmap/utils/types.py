@@ -184,3 +184,4 @@ class GoalMode(Enum):
     RANDOM = "random"
     CLICK = "click"
     INQUIRY = "inquiry"
+    POSE = "pose"

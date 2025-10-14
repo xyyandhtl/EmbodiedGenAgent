@@ -91,15 +91,15 @@ class VLMInference:
 
     def add_system_prompt(self, system_prompt: str) -> None:
         self.system_prompt += system_prompt
-        logger.info(f"Updated system prompt: \n{self.system_prompt}")
+        logger.debug(f"Updated system prompt: \n{self.system_prompt}")
     
     def set_system_prompt(self, system_prompt: str) -> None:
         self.system_prompt = system_prompt
-        logger.info(f"Updated system prompt: \n{self.system_prompt}")
+        logger.debug(f"Updated system prompt: \n{self.system_prompt}")
 
     def add_system_prompt_file(self, system_prompt_file: str) -> None:
         self.system_prompt += self._load_prompt(system_prompt_file)
-        logger.info(f"Updated system prompt: \n{self.system_prompt}")
+        logger.debug(f"Updated system prompt: \n{self.system_prompt}")
 
     def infer(self, 
               text: str, 

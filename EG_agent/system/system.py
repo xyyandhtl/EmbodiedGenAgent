@@ -66,8 +66,49 @@ class EGAgentSystem:
 
         self._emit("conversation", self.get_conversation_text())
 
-    # 新增：创建后端（由 GUI 按钮触发）
+    # ---------------------- 状态查询 ----------------------
+    @property
+    def backend_ready(self) -> bool:
+        return self.vlmap_backend is not None and self.dm is not None
+    
+    @property
+    def finished(self) -> bool:
+        """Whether the agent loop has finished."""
+        return self._is_finished
+
+    @property
+    def status(self) -> bool:
+        """Running state; True when the loop thread is active."""
+        return self._running
+
+    # ---------------------- 监听/事件 ----------------------
+    def add_listener(self, kind: str, cb: Callable[[Any], None]):
+        """Register an event listener for a given kind and immediately replay latest cached state."""
+        self._listeners.setdefault(kind, []).append(cb)
+        # 注册后立刻推送一次当前缓存数据，避免首次 emit 早于监听器注册而丢失
+        try:
+            if kind == "conversation":
+                cb(self.get_conversation_text())
+            elif kind == "log":
+                cb(self.get_log_text_tail())
+            elif kind == "entities" and self.backend_ready:
+                cb(list(self.get_entity_rows()))
+            elif kind == "status":
+                cb(self.status)
+        except Exception:
+            pass
+
+    def _emit(self, kind: str, data: Any):
+        """Emit an event to all listeners of the given kind."""
+        for cb in self._listeners.get(kind, []):
+            try:
+                cb(data)
+            except Exception:
+                pass
+
+    # ---------------------- 控制接口 ----------------------
     def create_backend(self) -> bool:
+        """Create the VLMapNav backend and configure ROS subscriptions."""
         if self.vlmap_backend is not None:
             self._log("Backend already created.")
             return True
@@ -81,12 +122,7 @@ class EGAgentSystem:
         self.env.configure_ros(self.cfg)
         self._log("Backend created successfully.")
         return True
-
-    @property
-    def backend_ready(self) -> bool:
-        return self.vlmap_backend is not None and self.dm is not None
-
-    # ---------------------- 控制接口 ----------------------
+    
     def start(self):
         """Start the agent loop in a background thread."""
         if self._running:
@@ -131,6 +167,8 @@ class EGAgentSystem:
                   f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
                   f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
         self.update_objects_from_map()
+        # For quick test, directly set a goal pose
+        self.vlmap_backend.get_global_path(goal_pose=np.array([4.0, 5.0]))
 
 
     def update_objects_from_map(self):
@@ -160,6 +198,7 @@ class EGAgentSystem:
             if self.backend_ready:
                 self.vlmap_backend.run_once(lambda: time.time())
             # 环境 step（如启用）：is_finished = self.env.step()
+            self.env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
 
         if self.backend_ready:
             self.dm.end_process()
@@ -169,41 +208,6 @@ class EGAgentSystem:
         self._running = False
         self._log("Agent loop stopped.")
         self._emit("status", self.status)
-
-    @property
-    def finished(self) -> bool:
-        """Whether the agent loop has finished."""
-        return self._is_finished
-
-    @property
-    def status(self) -> bool:
-        """Running state; True when the loop thread is active."""
-        return self._running
-
-    # ---------------------- 监听/事件 ----------------------
-    def add_listener(self, kind: str, cb: Callable[[Any], None]):
-        """Register an event listener for a given kind and immediately replay latest cached state."""
-        self._listeners.setdefault(kind, []).append(cb)
-        # 注册后立刻推送一次当前缓存数据，避免首次 emit 早于监听器注册而丢失
-        try:
-            if kind == "conversation":
-                cb(self.get_conversation_text())
-            elif kind == "log":
-                cb(self.get_log_text_tail())
-            elif kind == "entities" and self.backend_ready:
-                cb(list(self.get_entity_rows()))
-            elif kind == "status":
-                cb(self.status)
-        except Exception:
-            pass
-
-    def _emit(self, kind: str, data: Any):
-        """Emit an event to all listeners of the given kind."""
-        for cb in self._listeners.get(kind, []):
-            try:
-                cb(data)
-            except Exception:
-                pass
 
     # ---------------------- 输入接口 ----------------------
     def feed_instruction(self, text: str):
@@ -239,7 +243,7 @@ class EGAgentSystem:
         self._log(f"Behavior tree image updated: {img_path.resolve()}")
 
         # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置告知给 IsaacsimEnv
-        self.update_cur_goal_set() 
+        self.update_cur_goal_set()
 
     # ---------------------- 模块间数据交互 -----------------------
     def update_cur_goal_set(self):

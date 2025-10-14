@@ -7,6 +7,7 @@ from pathlib import Path
 import logging
 import psutil
 import cv2
+import re
 
 import yaml
 import numpy as np
@@ -80,32 +81,18 @@ class Dualmap:
         self.rotation_threshold = cfg.rotation_threshold
 
         # pose memory
-        self.curr_pose = None
-        self.prev_pose = None
+        self.curr_pose: np.ndarray = None
+        self.prev_pose: np.ndarray = None
+        self.goal_pose: np.ndarray = None
         self.wait_count = 0
 
         # self.load_map()
 
         # --- 2. Start the file monitoring thread ---
         self.stop_thread = False  # Signal to stop the thread
-        # 创建一个线程持续监视YAML配置文件，外部程序（如vlmap_nav_ros2.py）可以通过修改这个文件来向 Dualmap 核心下达指令，例如设置导航目标、触发路径计算等。
-        self.monitor_thread = threading.Thread(
-            target=self.monitor_config_file, args=(cfg.config_file_path,)
-        )
-        self.monitor_thread.start()
-
-        # flags for monitoring
-        self.calculate_path = False  # Flag for calculating global path
-        self.reset_cal_path_flag = False  # Flag for resetting global path calculation
-        self.trigger_find_next = (
-            False  # Flag for triggering the next global path planning
-        )
-        self.reset_trigger_find_next = (
-            False  # Flag for resetting the next global path planning
-        )
 
         # Mode for Getting the Goal
-        self.get_goal_mode = GoalMode.RANDOM
+        self.get_goal_mode = GoalMode.POSE
         # The request seq for getting the goal
         self.inquiry = ""
         self.inquiry_feat = None
@@ -114,9 +101,9 @@ class Dualmap:
         self.begin_local_planning = False
 
         # Final path for agent to follow
-        self.action_path = None
-        self.curr_global_path = None
-        self.curr_local_path = None
+        self.action_path = []
+        self.curr_global_path = []
+        self.curr_local_path = []
         self.start_action_path = False
 
         # debug param: path counter
@@ -157,10 +144,6 @@ class Dualmap:
             ("Camera Intrinsics", str(self.cfg.intrinsic)),
             # ("Cmaera Extrinsics": str(self.cfg.extrinsics)},
         ]
-
-        # if has cfg.ros_dataset_config, add it to the list
-        # if 'ros_stream_config_path' in self.cfg:
-        #     cfg_items.append(("ROS Stream Config Path", self.cfg.ros_stream_config_path))
 
         # Define separator line length
         line_length = 60
@@ -399,171 +382,6 @@ class Dualmap:
             # mem_usage = self.get_total_memory_by_keyword()
             # self.detector.visualize_memory(mem_usage)
 
-        # --- 2. 计算导航路径 ---
-        # TODO：现逻辑：计算得到 全局路径 后，就重置状态，将 `calculate_path` 置 False，后续应改为 一直低频查询
-        logger.debug(f"[Core] calculate_path: {self.calculate_path}")
-        if self.calculate_path and self.global_map_manager.has_global_map():
-            logger.warning("[Core] Global Navigation enabled! Triggering functionality...")
-
-            self.global_map_manager.has_action_path = False
-
-            # calculate the inquiry sentence to clip feat
-            self.inquiry_feat = self.convert_inquiry_to_feat(self.inquiry)
-
-            # set the global inquiry sentence to global map manager
-            self.global_map_manager.inquiry = self.inquiry_feat
-
-            # Get Current layout information from detector
-            layout_pcd = self.detector.get_layout_pointcloud()
-            self.global_map_manager.set_layout_info(layout_pcd)
-
-            # calculate the path based on current global map
-            # Get 3D path point in world coordinate
-            # 计算 全局路径
-            self.curr_global_path = self.global_map_manager.calculate_global_path(
-                self.curr_pose, goal_mode=self.get_goal_mode
-            )
-
-            if self.cfg.save_all_path:
-                # Create a unique file name using the counter
-                self.path_counter += 1
-
-                save_dir = os.path.join(self.cfg.output_path, "path", "global_path")
-                if not os.path.exists(save_dir):
-                    os.makedirs(save_dir)
-
-                # build new file name with counter
-                file_name = f"{self.path_counter}.json"
-                save_path = os.path.join(save_dir, file_name)
-
-                # Write JSON file
-                with open(save_path, "w") as f:
-                    json.dump(self.curr_global_path, f, indent=4)
-
-                logger.warning(f"[Core] Global path saved to {save_path}")
-
-                # Increment path counter for next save
-
-            # make reset of the information in the yaml
-            # 计算出全局路径之后，将之前计算的路径信息清空
-            self.reset_cal_path_flag = True
-
-            # Clear the local mapping results
-            self.curr_local_path = None
-
-            # Conditional open the local path planning
-            # TODO: In future, for local avoidance, we need always local planning
-            if self.get_goal_mode == GoalMode.RANDOM or (
-                self.get_goal_mode == GoalMode.CLICK
-                and self.global_map_manager.nav_graph.snapped_goal is None
-            ):
-                self.begin_local_planning = False
-            else:
-                self.begin_local_planning = True
-
-        # Local Path Planning
-        # Local need global plan success
-        if self.begin_local_planning and self.local_map_manager.has_local_map():
-            logger.info("[Core] Local Navigation enabled! Triggering functionality...")
-            # set the global inquiry sentence to global map manager
-            self.local_map_manager.inquiry = self.inquiry_feat
-
-            # logger.info("=====================================")
-            # dt, dr = self.local_map_manager.compute_pose_difference(self.curr_pose, self.prev_pose)
-
-            # if dt is not None and dr is not None:
-            #     logger.info(f"Translation Difference: {dt}")
-            #     logger.info(f"Rotation Difference: {dr}")
-
-            #     if dt < 0.10 and dr < 0.30:
-            #         self.wait_count += 1
-            #         logger.info(f"Wait Count: {self.wait_count}")
-            #     else:
-            #         self.wait_count -= 1
-            #         if self.wait_count < 0:
-            #             self.wait_count = 0
-
-            # if self.wait_count > 10:
-            #     logger.info("We cannot find the local path and global path is finished!")
-            #     logger.info("Now start a new global path planning!")
-            #     self.begin_local_planning = False
-            #     self.wait_count = 0
-            #     # retrigger the global path planning
-            #     self.set_calculate_path(self.cfg.config_file_path)
-
-            if self.trigger_find_next:
-                self.begin_local_planning = False
-                self.reset_trigger_find_next = True
-                self.global_map_manager.lost_and_found = True
-
-            # TEMP: Now explicitly pass the goal to local map to establish the workflow
-            global_path = self.curr_global_path
-
-            start = global_path[-1]
-            x, y, z = start  # Unpack coordinates
-            start_pose = np.eye(4)  # Initialize a 4x4 identity matrix
-
-            # Set translation part
-            start_pose[0, 3] = x  # X direction translation
-            start_pose[1, 3] = y  # Y direction translation
-            start_pose[2, 3] = z  # Z direction translation
-
-            # for CLick mode, pass the click goal to local from global
-            if self.global_map_manager.nav_graph.snapped_goal is not None:
-                click_goal = self.global_map_manager.nav_graph.snapped_goal
-                self.local_map_manager.set_click_goal(click_goal)
-
-            # for Inquiry mode, pass the inquiry goal bbox to local from global
-            if self.global_map_manager.global_candidate_bbox is not None:
-                goal_bbox = self.global_map_manager.global_candidate_bbox
-                goal_score = self.global_map_manager.global_candidate_score
-                self.local_map_manager.set_global_bbox(goal_bbox)
-                self.local_map_manager.set_global_score(goal_score)
-
-                global_map = self.global_map_manager.global_map
-                self.local_map_manager.set_global_map(global_map)
-
-            # calculate the path based on current global map
-            # 计算 局部路径
-            self.curr_local_path = self.local_map_manager.calculate_local_path(
-                start_pose, goal_mode=self.get_goal_mode
-            )
-
-            if self.curr_local_path is not None:
-                logger.info("[Core] Local Navigation has finished!")
-
-                self.global_map_manager.global_candidate_score = 0.0
-                self.global_map_manager.best_candidate_name = None
-                self.global_map_manager.ignore_global_obj_list = []
-                self.wait_count = 0
-
-                self.begin_local_planning = False
-                self.start_action_path = True
-
-                self.global_map_manager.lost_and_found = False
-
-                if self.cfg.save_all_path:
-                    # Ensure the path directory exists
-                    save_dir = os.path.join(self.cfg.output_path, "path", "local_path")
-                    if not os.path.exists(save_dir):
-                        os.makedirs(save_dir)
-
-                    # build new file name with counter
-                    file_name = f"{self.path_counter}.json"
-                    save_path = os.path.join(save_dir, file_name)
-
-                    # Write JSON file
-                    with open(save_path, "w") as f:
-                        json.dump(self.curr_local_path, f, indent=4)
-
-                    logger.warning(f"[Core] Local path saved to {save_path}")
-
-            self.prev_pose = self.curr_pose
-
-        # If both global path and local path exist
-
-        self.get_action_path()
-
         # Update traversability grid for GUI display
         self.local_map_manager.update_traversability_grid()
 
@@ -618,58 +436,6 @@ class Dualmap:
             except queue.Empty:
                 continue
 
-    def get_action_path(self):
-        if self.curr_global_path is None:
-            logger.info("[Core][ActionPath] No Global Path! Action Path not available!")
-            self.action_path = None
-            self.global_map_manager.action_path = self.action_path
-            return
-
-        # Global path is definitely available here
-        if self.curr_local_path is None:
-            # then just use global path as action path
-            logger.info(
-                "[Core][ActionPath] No Local Path! Action Path Now Using Global Path!"
-            )
-            self.action_path = self.curr_global_path
-            self.global_map_manager.action_path = self.action_path
-            return
-
-        # Triggered by local path computing
-        if self.start_action_path:
-            logger.info("[Core][ActionPath] Start Action Path Calculation!")
-
-            # delete the start point
-            self.action_path = self.curr_global_path + self.curr_local_path[1:]
-
-            self.action_path = remaining_path(self.action_path, self.curr_pose)
-
-            # remove sharp returns
-            if self.cfg.use_remove_sharp_turns:
-                self.action_path = remove_sharp_turns_3d(self.action_path)
-
-            if self.cfg.save_all_path:
-                # Ensure the path directory exists
-                save_dir = os.path.join(self.cfg.output_path, "path", "action_path")
-                if not os.path.exists(save_dir):
-                    os.makedirs(save_dir)
-
-                # build new file name with counter
-                file_name = f"{self.path_counter}.json"
-                save_path = os.path.join(save_dir, file_name)
-
-                # Write JSON file
-                with open(save_path, "w") as f:
-                    json.dump(self.action_path, f, indent=4)
-
-                logger.warning(f"[Core] Action path saved to {save_path}")
-
-            self.global_map_manager.action_path = self.action_path
-
-            self.global_map_manager.has_action_path = True
-
-            self.start_action_path = False
-
     def end_process(self):
         """
         The process of ending the sequnce.
@@ -679,7 +445,7 @@ class Dualmap:
         self.stop_threading()
 
         # end duration
-        end_range = self.cfg.active_window_size + self.cfg.max_pending_count + 1
+        end_range: int = self.cfg.active_window_size + self.cfg.max_pending_count + 1
 
         for i in range(end_range):
             # Set timestamp for visualizer
@@ -718,7 +484,7 @@ class Dualmap:
         # Dualmap process timing
         if hasattr(self, "timing_results"):
             print_timing_results("Dualmap", self.timing_results)
-            system_time_path = self.cfg.map_save_path + "/../system_time.csv"
+            system_time_path = f"{self.cfg.map_save_path}/../system_time.csv"
             save_timing_results(self.timing_results, system_time_path)
 
         # Detector process timing
@@ -727,124 +493,8 @@ class Dualmap:
             detector_time_path = self.cfg.map_save_path + "/../detector_time.csv"
             save_timing_results(self.detector.timing_results, detector_time_path)
 
-    def monitor_config_file(self, config_file_path: str):
-        """
-        Monitor the configuration file at a given path and act based on its content.
-        路径规划
-            1. 当监控线程检测到配置文件（actions.yaml）中的 calculate_path 标志位变为 True 时，触发 路径规划流程
-            2. 读取配置文件（actions.yaml）中的 inquiry_sentence (例如 "a chair")，并将其转换为 CLIP 特征向量
-            3. GlobalMapManager 使用这个特征向量在全局地图中寻找最匹配的目标物体，并计算出一条全局路径 (`curr_global_path`)
-            4. 在全局路径的终点附近，激活 LocalMapManager，计算出一条更精细的局部路径 (`curr_local_path`)，以实现精准对接或避开全局路径上未发现的障碍
-            5. 通过 get_action_path 函数将全局和局部路径拼接成最终的行动路径 (`action_path`)
-        Parameters:
-        - config_file_path: Path to the configuration file.
-        """
-        config_file = Path(config_file_path)
-        logger.info(f"[Core][Monitor] Monitoring file: {config_file}")
-
-        while not self.stop_thread:
-            try:
-                if config_file.exists():
-                    # Load the configuration file
-                    config_data = Dynaconf(settings_files=str(config_file))
-
-                    # Access the field
-                    if "calculate_path" in config_data:
-                        # Check if the field needs resetting
-                        if self.reset_cal_path_flag:
-                            # Reset the flag to avoid triggering multiple times
-                            self.reset_cal_path_flag = False
-
-                            # Reset the global path calculation flag in YAML from true to false
-                            config_data.calculate_path = False
-
-                            # Save the modified configuration back to the file
-                            with open(config_file, "w") as file:
-                                yaml.dump(config_data.as_dict(), file)
-
-                        calculate_path = config_data.calculate_path
-
-                        # Check the field value and trigger functionality
-                        if calculate_path:
-                            # logger.info("Navigation enabled! Triggering functionality...")
-                            self.calculate_path = True
-
-                        else:
-                            # logger.info("Navigation disabled.")
-                            self.calculate_path = False
-
-                    if "trigger_find_next" in config_data:
-                        # Check if the field needs resetting
-                        if self.reset_trigger_find_next:
-                            # Reset the flag to avoid triggering multiple times
-                            self.reset_trigger_find_next = False
-
-                            # Reset the global path calculation flag in YAML from true to false
-                            config_data.trigger_find_next = False
-                            config_data.calculate_path = True
-
-                            # Save the modified configuration back to the file
-                            with open(config_file, "w") as file:
-                                yaml.dump(config_data.as_dict(), file)
-
-                        trigger_find_next = config_data.trigger_find_next
-
-                        # Check the field value and trigger functionality
-                        if trigger_find_next:
-                            # logger.info("Navigation enabled! Triggering functionality...")
-                            self.trigger_find_next = True
-
-                        else:
-                            # logger.info("Navigation disabled.")
-                            self.trigger_find_next = False
-
-                    # Access and handle 'get_goal_mode'
-                    if "get_goal_mode" in config_data:
-                        mode_value = config_data.get_goal_mode
-                        try:
-                            self.get_goal_mode = GoalMode(mode_value)
-                            # logger.info(f"Goal Mode set to: {self.get_goal_mode.name}")
-                        except ValueError:
-                            logger.warning(
-                                f"[Core][Monitor] Invalid mode '{mode_value}' in configuration. Defaulting to RANDOM."
-                            )
-                            self.get_goal_mode = GoalMode.RANDOM
-                            config_data.get_goal_mode = GoalMode.RANDOM.value
-                            with open(config_file, "w") as file:
-                                yaml.dump(config_data.as_dict(), file)
-                    # Access and handle 'inquiry_sentence'
-                    # Get the sentence for inqury session
-                    if "inquiry_sentence" in config_data:
-                        self.inquiry = config_data.inquiry_sentence
-
-                    # You can check and act on other fields similarly
-                else:
-                    logger.error(
-                        f"[Core][Monitor] Config file not found: {config_file}"
-                    )
-            except Exception as e:
-                logger.error(f"[Core][Monitor] Error monitoring config file: {e}")
-
-            # Wait for the specified interval before checking again
-            time.sleep(self.cfg.monitor_interval)
-
-    def set_calculate_path(self, config_file_path: str):
-        config_file = Path(config_file_path)
-        config_data = Dynaconf(settings_files=str(config_file))
-        if "calculate_path" in config_data:
-            # Reset the global path calculation flag in YAML from false to true
-            config_data.calculate_path = True
-            # config_data.trigger_find_next = False
-            # if self.trigger_find_next:
-            #     # Reset the flag to avoid triggering multiple times
-            #     self.reset_trigger_find_next = False
-
-            with open(config_file, "w") as file:
-                yaml.dump(config_data.as_dict(), file)
-
     def stop_threading(self):
         self.stop_thread = True
-        self.monitor_thread.join()
 
         if self.cfg.use_parallel:
             self.mapping_thread.join()
@@ -859,18 +509,268 @@ class Dualmap:
 
         return text_query_ft
 
+    # ===============================================
+    # Public API for navigation and querying
+    # ===============================================
+    def query_object(self, query: str):
+        # 1. 从查询（如："desk"/"RobotNear(ControlRoom)"）中提取物体名称
+        match = re.search(r'\((.*?)\)', query)
+        if match:
+            object_name = match.group(1)
+        else:
+            object_name = query  # 如果格式不匹配，则假定整个查询都是对象名
+
+        logger.info(f"[VLMapNav] [query_object] Received query '{query}', searching for object '{object_name}'.")
+
+        # 2. 检查全局地图是否存在
+        if not self.global_map_manager.has_global_map():
+            logger.warning("[VLMapNav] [query_object] Global map is empty. Cannot find object.")
+            return None
+
+        # 3. 将对象名称转换为 CLIP 特征向量并设置为查询目标
+        self.inquiry_feat = self.convert_inquiry_to_feat(object_name)
+        self.global_map_manager.inquiry = self.inquiry_feat
+
+        # 4. 调用 GlobalMapManager 的 find_best_candidate_with_inquiry 来寻找最佳匹配
+        #    这将返回 GlobalObject 实例和分数
+        best_candidate, best_similarity = self.global_map_manager.find_best_candidate_with_inquiry()
+
+        # 5. 处理结果
+        if best_candidate is not None:
+            # 提取物体边界框的中心点作为其位置
+            position = best_candidate.bbox_2d.get_center().tolist()
+            found_obj_name = self.visualizer.obj_classes.get_classes_arr()[best_candidate.class_id]
+            
+            logger.info(f"[VLMapNav] [query_object] Found best match '{found_obj_name}' for query '{object_name}' with score {best_similarity:.4f} at position {position}.")
+            return position
+        else:
+            logger.warning(f"[VLMapNav] [query_object] No object found for query '{object_name}' in the global map.")
+            return None
+
+    def compute_global_path(self, goal_pose: np.ndarray):
+        """
+        计算全局路径，存入 self.curr_global_path
+        """
+        self.goal_pose = goal_pose
+
+        if not self.global_map_manager.has_global_map():
+            logger.warning("[Core] No global map available for path planning.")
+            return None
+        logger.info(f"[Core] calculating global_path to: {goal_pose}")
+
+        self.global_map_manager.has_action_path = False
+
+        # Get Current layout information from detector
+        layout_pcd = self.detector.get_layout_pointcloud()
+        self.global_map_manager.set_layout_info(layout_pcd)
+
+        # calculate the path based on current global map
+        # Get 3D path point in world coordinate
+        # 计算 全局路径
+        self.curr_global_path = self.global_map_manager.calculate_global_path(
+            self.curr_pose, goal_mode=self.get_goal_mode, goal_position=self.goal_pose
+        )
+
+        # Clear the local mapping results
+        self.curr_local_path = None
+        self.begin_local_planning = True
+
+        if self.cfg.save_all_path:
+            # Create a unique file name using the counter
+            self.path_counter += 1
+
+            save_dir = f"{self.cfg.output_path}/path/global_path"
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+
+            # build new file name with counter
+            file_name = f"{self.path_counter}.json"
+            save_path = os.path.join(save_dir, file_name)
+
+            # Write JSON file
+            with open(save_path, "w") as f:
+                json.dump(self.curr_global_path, f, indent=4)
+
+            logger.warning(f"[Core] Global path saved to {save_path}")
+
+    def compute_local_path(self):
+        """
+        计算局部路径，存入 self.curr_local_path
+        """
+        if not self.begin_local_planning:
+            logger.warning("[Core] Local Planning not enabled because no global path available!")
+            return None
+        
+        if not self.local_map_manager.has_local_map():
+            logger.warning("[Core] No local map available for path planning.")
+            return None
+
+        # set the global inquiry sentence to global map manager
+        self.local_map_manager.inquiry = self.inquiry_feat
+
+        # logger.info("=====================================")
+        # dt, dr = self.local_map_manager.compute_pose_difference(self.curr_pose, self.prev_pose)
+
+        # if dt is not None and dr is not None:
+        #     logger.info(f"Translation Difference: {dt}")
+        #     logger.info(f"Rotation Difference: {dr}")
+
+        #     if dt < 0.10 and dr < 0.30:
+        #         self.wait_count += 1
+        #         logger.info(f"Wait Count: {self.wait_count}")
+        #     else:
+        #         self.wait_count -= 1
+        #         if self.wait_count < 0:
+        #             self.wait_count = 0
+
+        # if self.wait_count > 10:
+        #     logger.info("We cannot find the local path and global path is finished!")
+        #     logger.info("Now start a new global path planning!")
+        #     self.begin_local_planning = False
+        #     self.wait_count = 0
+        #     # retrigger the global path planning
+        #     self.set_calculate_path(self.cfg.config_file_path)
+
+        # TEMP: Now explicitly pass the goal to local map to establish the workflow
+        global_path = self.curr_global_path
+
+        start = global_path[-1]
+        x, y, z = start  # Unpack coordinates
+        start_pose = np.eye(4)  # Initialize a 4x4 identity matrix
+
+        # Set translation part
+        start_pose[0, 3] = x  # X direction translation
+        start_pose[1, 3] = y  # Y direction translation
+        start_pose[2, 3] = z  # Z direction translation
+
+        # for CLick mode, pass the click goal to local from global
+        if self.global_map_manager.nav_graph.snapped_goal:
+            click_goal = self.global_map_manager.nav_graph.snapped_goal
+            self.local_map_manager.set_click_goal(click_goal)
+
+        # for Inquiry mode, pass the inquiry goal bbox to local from global
+        if self.global_map_manager.global_candidate_bbox is not None:
+            goal_bbox = self.global_map_manager.global_candidate_bbox
+            goal_score = self.global_map_manager.global_candidate_score
+            self.local_map_manager.set_global_bbox(goal_bbox)
+            self.local_map_manager.set_global_score(goal_score)
+
+            global_map = self.global_map_manager.global_map
+            self.local_map_manager.set_global_map(global_map)
+
+        # calculate the path based on current global map
+        self.curr_local_path = self.local_map_manager.calculate_local_path(
+            start_pose, goal_mode=self.get_goal_mode, goal_position=self.goal_pose
+        )
+
+        if self.curr_local_path is not None:
+            logger.info("[Core] Local Navigation has finished!")
+
+            self.global_map_manager.global_candidate_score = 0.0
+            self.global_map_manager.best_candidate_name = None
+            self.global_map_manager.ignore_global_obj_list = []
+            self.wait_count = 0
+
+            self.begin_local_planning = False
+            self.start_action_path = True
+
+            if self.cfg.save_all_path:
+                # Ensure the path directory exists
+                save_dir = f"{self.cfg.output_path}/path/local_path"
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+
+                # build new file name with counter
+                file_name = f"{self.path_counter}.json"
+                save_path = os.path.join(save_dir, file_name)
+
+                # Write JSON file
+                with open(save_path, "w") as f:
+                    json.dump(self.curr_local_path, f, indent=4)
+
+                logger.warning(f"[Core] Local path saved to {save_path}")
+
+        self.prev_pose = self.curr_pose
+
+    def compute_action_path(self):
+        """
+        计算动作路径，存入 self.action_path
+        """
+        if self.curr_global_path is None:
+            logger.info("[Core][ActionPath] No Global Path! Action Path not available!")
+            self.action_path = self.global_map_manager.action_path = []
+            return
+
+        # Global path is definitely available here
+        if self.curr_local_path is None:
+            # then just use global path as action path
+            logger.info("[Core][ActionPath] No Local Path! Action Path Now Using Global Path!")
+            self.action_path = self.global_map_manager.action_path = self.curr_global_path
+            return
+
+        # Triggered by local path computing
+        if self.start_action_path:
+            logger.info("[Core][ActionPath] Start Action Path Calculation!")
+
+            # delete the start point
+            self.action_path = self.curr_global_path + self.curr_local_path[1:]
+
+            self.action_path = remaining_path(self.action_path, self.curr_pose)
+
+            # remove sharp returns
+            if self.cfg.use_remove_sharp_turns:
+                self.action_path = remove_sharp_turns_3d(self.action_path)
+
+            if self.cfg.save_all_path:
+                # Ensure the path directory exists
+                save_dir = f"{self.cfg.output_path}/path/action_path"
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+
+                # build new file name with counter
+                file_name = f"{self.path_counter}.json"
+                save_path = os.path.join(save_dir, file_name)
+
+                # Write JSON file
+                with open(save_path, "w") as f:
+                    json.dump(self.action_path, f, indent=4)
+
+                logger.warning(f"[Core] Action path saved to {save_path}")
+
+            self.global_map_manager.action_path = self.action_path
+
+            self.global_map_manager.has_action_path = True
+
+            self.start_action_path = False
+
+    def compute_next_waypoint(self, from_path="global"):
+        if from_path == "global":
+            cur_path = self.curr_global_path
+        elif from_path == "local":
+            cur_path = self.curr_local_path
+        elif from_path == "action":
+            cur_path = self.action_path
+        if not cur_path:
+            logger.debug("[Core] No path available for next waypoint computation.")
+            return None
+        cur_path = remaining_path(cur_path, self.curr_pose)
+        if not cur_path:
+            logger.debug("[Core] No remaining path available for next waypoint computation.")
+            return None
+        return cur_path[min(5, len(cur_path)-1)]
+
     def get_semantic_map_image(self):
         semantic_map = self.visualizer.get_semantic_map_image(self.global_map_manager)
 
         if semantic_map is not None:
-            save_dir = self.cfg.map_save_path
-            save_path = os.path.join(save_dir, "semantic_map.png")
+            save_dir = str(self.cfg.map_save_path)
+            save_path = f"{save_dir}/semantic_map.png"
             if os.path.exists(save_dir) and not os.path.exists(save_path):
                 cv2.imwrite(save_path, semantic_map)
                 print(f"[visualizer] Semantic map saved to {save_path}")
 
         return semantic_map
-
+    
     def get_traversable_map_image(self):
         return self.visualizer.get_traversable_map_image(self.local_map_manager)
 
