@@ -110,7 +110,7 @@ class EGAgentSystem:
                   f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
                   f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
         self.update_objects_from_map()
-        
+
     def update_objects_from_map(self):
         entites = self.get_entity_rows()
         if entites:
@@ -189,7 +189,7 @@ class EGAgentSystem:
             self._append_conversation(f"智能体: 无法理解指令")
             self._emit("conversation", self.get_conversation_text())
             return
-        
+
         self.bt = self.bt_generator.generate(self.goal)  # 2. goal 逻辑指令 ==> BehaviorTree 实例（如：['Walk(ControlRoom)']）
         self._log(f"[system] [feed_instruction] BT is created!")
         self._log(f"User instruction: {text}")
@@ -208,7 +208,7 @@ class EGAgentSystem:
             self._last_bt_image = np.array(Image.open(img_path).convert("RGB"))
             self._log(f"Behavior tree image updated: {img_path.resolve()}")
         else:
-            self._log(f"Behavior tree image not found: {img_path.resolve()}")            
+            self._log(f"Behavior tree image not found: {img_path.resolve()}")
 
     # ---------------------- 模块间数据交互 -----------------------
     def update_cur_goal_set(self):
@@ -292,7 +292,7 @@ class EGAgentSystem:
     def get_traversable_map_image(self) -> np.ndarray:
         """Traversable map from dualmap."""
         traversable_map = self.dm.get_traversable_map_image()
-        # TODO: 可通行地图 (not work)
+        # TODO: 可通行地图 (init version)
         if traversable_map is not None:
             return traversable_map
         return self._gen_dummy_image(260, 180, "Traversable")

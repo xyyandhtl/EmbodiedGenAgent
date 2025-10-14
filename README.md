@@ -1,6 +1,8 @@
 # EmbodiedGenAgent
 A Generative Embodied Agent that transforms open-ended instructions into behavior trees for autonomous decision-making and action execution loop
 
+## Architecture (continuing)
+![Architecture Diagram](docs/assets/Egent.png)
 
 ## Plans
 - [x] Implement the intent understanding: vlm prompt / reflective feedback to generate the first-order logic goal

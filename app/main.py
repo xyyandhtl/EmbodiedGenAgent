@@ -162,14 +162,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ----------------- Periodic Updates -----------------
     def update_fast(self):
-        # 高频: 当前视野实例分割
+        """高频: 当前视野实例分割"""
         img = self.agent_system.get_current_instance_seg_image()
         self.instanceSegLabel.setPixmap(np_to_qpix(img))
 
     def update_medium(self):
         """中频: 可通行地图 + 实体表"""
+        # 可通行地图
         self.traversableMapLabel.setPixmap(
-            np_to_qpix(self.agent_system.get_traversable_map_image()))
+            np_to_qpix(self.agent_system.get_traversable_map_image())
+        )
+        # 实体表
         self.refresh_entities()
 
     def update_slow(self):
