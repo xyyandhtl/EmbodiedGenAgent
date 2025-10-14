@@ -5,13 +5,13 @@ A Generative Embodied Agent that transforms open-ended instructions into behavio
 ![Architecture Diagram](docs/assets/Egent.png)
 
 ## Usage
-- GUI demo: [APP.md](docs/APP.md). Need EGAgentSystem as backend, which should be implemented its deployment env, check [envs](EG_agent/system/envs)
+- GUI demo: [APP.md](docs/APP.md), need EGAgentSystem as backend, which should be implemented its deployment env, check [envs](EG_agent/system/envs)
 
 - Agent introduction: [EG_agent.md](docs/EG_agent.md)
 
 - Agent module unit test: [EXAMPLES.md](docs/EXAMPLES.md)
 
-- Agent system isaacsim deployment: [SIMULATION.md](docs/SIMULATION.md), an well-explained example of the envs impl
+- Agent system isaacsim deployment: [SIMULATION.md](docs/SIMULATION.md), a detailed example of the env implementation
 
 
 ## Plans

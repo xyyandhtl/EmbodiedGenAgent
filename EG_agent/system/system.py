@@ -112,6 +112,7 @@ class EGAgentSystem:
         if self.vlmap_backend is not None:
             self._log("Backend already created.")
             return True
+        self._conv("智能体: 正在创建后台，请稍候...")
         self._log("Creating backend...")
         self.vlmap_backend = VLMapNav()
         self.env.set_vlmap_backend(self.vlmap_backend)
@@ -134,6 +135,7 @@ class EGAgentSystem:
         self._is_finished = False
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
+        self._emit("status", self.status)
 
     def stop(self):
         """Request stop and close environment safely."""
@@ -143,6 +145,7 @@ class EGAgentSystem:
         self._log("Agent system stop requested.")
         self._stop_event.set()
         self._running = False
+        self._emit("status", self.status)
         self.env.close()
 
     def save(self, map_path: str | None = None):
@@ -184,8 +187,7 @@ class EGAgentSystem:
             self._log(f"已设置原子动作: \n{[action.name for action in self.bt_generator.planner.actions]}")
             chinese_objs = self.goal_generator.ask_question(
                 f"请用中文列出以下英文目标集合：{self.bt_objects}", use_system_prompt=False)
-            self._append_conversation(f"智能体: 可以参考的任务对象有 {chinese_objs}")
-            self._emit("conversation", self.get_conversation_text())
+            self._conv(f"智能体: 可以参考的任务对象有 {chinese_objs}")
 
     def _run_loop(self):
         """Main loop: step environment, propagate events, and check completion."""
@@ -253,8 +255,7 @@ class EGAgentSystem:
         self.env.bind_bt(self.bt)
         if not self.backend_ready:
             self._log("[system] Backend not created, cannot query object positions.")
-            self._append_conversation("智能体: 后台未创建，无法查询目标位置，请先点击右侧“创建后台”。")
-            self._emit("conversation", self.get_conversation_text())
+            self._conv("智能体: 后台未创建，无法查询目标位置，请先点击右侧“创建后台”。")
             return
 
         # (2) 调用 vlmap 查询目标
@@ -270,8 +271,7 @@ class EGAgentSystem:
         if cur_goal_places:
             self.env.set_object_places(cur_goal_places)
             self._log(f"[system] [update_cur_goal_set] set cur_goal_places to env: {cur_goal_places}")
-            self._append_conversation(f"智能体: 已更新当前目标位置为 \n{cur_goal_places}")
-            self._emit("conversation", self.get_conversation_text())
+            self._conv(f"智能体: 已更新当前目标位置为 \n{cur_goal_places}")
 
     # ---------------------- 数据获取占位接口 ----------------------
     def get_conversation_text(self) -> str:
@@ -357,6 +357,11 @@ class EGAgentSystem:
         self._conversation.append(line)
         if len(self._conversation) > 2000:
             self._conversation = self._conversation[-1000:]
+
+    def _conv(self, line: str):
+        """Append a line to the conversation buffer with trimming."""
+        self._append_conversation(line)
+        self._emit("conversation", self.get_conversation_text())
 
     def _log(self, line: str):
         """Append a timestamped line to logs and emit 'log' event."""

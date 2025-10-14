@@ -3,6 +3,7 @@ import os
 import numpy as np
 from PyQt5 import QtWidgets, QtCore, QtGui, uic
 from zoom_widget import ZoomableImageWidget
+import threading
 
 # 正式运行
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -35,6 +36,8 @@ class MainWindow(QtWidgets.QMainWindow):
     convSignal = QtCore.pyqtSignal(str)
     entitiesSignal = QtCore.pyqtSignal(list)   # list of (name, info)
     statusSignal = QtCore.pyqtSignal(bool)
+    # 新增：通用任务完成信号（desc, ok, err）
+    taskFinished = QtCore.pyqtSignal(str, bool, str)
 
     def __init__(self):
         super().__init__()
@@ -52,6 +55,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.convSignal.connect(self._on_conv_update)
         self.entitiesSignal.connect(self._on_entities_update)
         self.statusSignal.connect(self._on_status_update)
+        # 新增：任务完成通知
+        self.taskFinished.connect(self._on_task_finished)
 
         # 按钮绑定
         self.startBtn.clicked.connect(self.on_start)
@@ -128,16 +133,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.behaviorTreeWidget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
     def on_create_backend(self):
-        ok = False
-        try:
-            ok = self.agent_system.create_backend()
-        except Exception as e:
-            self.statusbar.showMessage(f"后台创建失败: {e}", 4000)
-            ok = False
-        if ok:
-            self._set_controls_enabled(True)  # 仅启用右侧四个按钮
-            self.update_statusbar()
-            self.statusbar.showMessage("后台创建成功", 2000)
+        # 改为后台执行，避免阻塞 UI
+        self._run_in_background("创建后台", self.agent_system.create_backend)
 
     def _set_controls_enabled(self, enabled: bool):
         # 仅控制右侧四个按钮变灰/启用
@@ -152,29 +149,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.update_statusbar()
 
     def on_stop(self):
-        self.agent_system.stop()
-        self.update_statusbar()
+        # 可能涉及资源关闭，异步更安全
+        self._run_in_background("停止智能体", self.agent_system.stop)
 
     def on_send_instruction(self):
         # 允许未创建后台时发送指令；后端逻辑会提示无法查询目标位置
         text = self.instructionEdit.text().strip()
         if not text:
             return
-        self.agent_system.feed_instruction(text)  # 将用户的自然语言指令 发送给 EGAgentSystem，并执行后续操作
         self.instructionEdit.clear()
+        # 改为后台执行，避免 BT 生成/IO 阻塞 UI
+        self._run_in_background("规划/执行指令", lambda: self.agent_system.feed_instruction(text))
 
     def on_save_map(self):
         # 默认目录：cfg.map_save_path
         default_dir = getattr(self.agent_system.vlmap_backend.cfg, "map_save_path", "") or ""
-        # if not default_dir:
-        #     default_dir = os.path.expanduser("~")
-        # path = QtWidgets.QFileDialog.getExistingDirectory(self, "选择地图保存文件夹", default_dir)
-        # if not path:
-        #     return
-        # TODO: 现在Dualmap只能保存到预设目录，因为每个obj在创建时给定了预设目录+文件名，以后改掉这限制
-        path = default_dir
-        self.agent_system.save(map_path=path)
-        self.statusbar.showMessage(f"地图已保存至: {path}", 3000)
+        # Dualmap 目前只能保存到预设目录，这里仍然调用后台保存
+        self._run_in_background("保存地图", lambda: self.agent_system.save(map_path=default_dir))
 
     def on_load_map(self):
         # 默认目录：cfg.preload_path
@@ -184,8 +175,7 @@ class MainWindow(QtWidgets.QMainWindow):
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "选择地图载入文件夹", default_dir)
         if not path:
             return
-        self.agent_system.load(map_path=path)
-        self.statusbar.showMessage(f"已载入地图: {path}", 3000)
+        self._run_in_background("载入地图", lambda: self.agent_system.load(map_path=path))
 
     # ----------------- Periodic Updates -----------------
     def update_fast(self):
@@ -673,6 +663,44 @@ class MainWindow(QtWidgets.QMainWindow):
             dlg.exec_()
         else:
             QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(path))
+
+    # --- 新增：后台任务执行与状态回调 ---
+    def _set_busy(self, busy: bool, msg: str | None = None):
+        if msg:
+            # 让状态文字立刻可见
+            self.statusbar.showMessage(msg, 0)
+            QtWidgets.QApplication.processEvents(QtCore.QEventLoop.AllEvents, 50)
+        if busy:
+            self._set_controls_enabled(False)
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        else:
+            QtWidgets.QApplication.restoreOverrideCursor()
+            self._set_controls_enabled(self.agent_system.backend_ready)
+
+    def _run_in_background(self, desc: str, func):
+        # 显示即时状态并切换忙碌指针
+        self._set_busy(True, f"{desc}中...")
+        # 在后台线程里执行 func，并在结束时发射完成信号
+        def worker():
+            ok, err = True, ""
+            try:
+                func()
+            except Exception as e:
+                ok, err = False, str(e)
+            finally:
+                # 通知主线程结束
+                self.taskFinished.emit(desc, ok, err)
+        threading.Thread(target=worker, daemon=True).start()
+
+    @QtCore.pyqtSlot(str, bool, str)
+    def _on_task_finished(self, desc: str, ok: bool, err: str):
+        self._set_busy(False)
+        if ok:
+            self.statusbar.showMessage(f"{desc}完成", 3000)
+        else:
+            self.statusbar.showMessage(f"{desc}失败: {err}", 5000)
+        # 状态栏状态同步
+        self.update_statusbar()
 
     # ----------------- Close -----------------
     def closeEvent(self, event: QtGui.QCloseEvent):
