@@ -257,6 +257,8 @@ class ReRunVisualizer:
         height = int((map_size[1]) / resolution * scale_factor) + padding
         image = np.full((height, width, 3), 255, dtype=np.uint8)
 
+        placed_label_boxes = [] # List to store bounding boxes of placed labels
+
         # Draw each object
         for obj in global_map_manager.global_map:
             points = np.asarray(obj.pcd_2d.points)
@@ -276,16 +278,61 @@ class ReRunVisualizer:
             # Draw the points on the image
             for p in points_img:
                 # Use a slightly larger radius due to upscaling
-                cv2.circle(image, (p[0], p[1]), radius=int(2 * (scale_factor)-1), color=color_bgr_int, thickness=-1)
+                cv2.circle(image, (p[0], p[1]), radius=int(2 * (scale_factor - 1)), color=color_bgr_int, thickness=-1)
 
-            # Add the object name as text
-            label_pos = np.mean(points_img, axis=0).astype(int)
-            if 0 <= label_pos[0] < width and 0 <= label_pos[1] < height:
-                cv2.putText(image, obj_name, tuple(label_pos),
-                            cv2.FONT_HERSHEY_DUPLEX,
-                            0.3 * (scale_factor / 2),
-                            (0, 0, 0),
-                            1, cv2.LINE_AA)
+            # Get object bbox and text size
+            obj_x_min, obj_y_min = np.min(points_img, axis=0)
+            obj_x_max, obj_y_max = np.max(points_img, axis=0)
+            centroid = np.mean(points_img, axis=0).astype(int)
+
+            font_face = cv2.FONT_HERSHEY_DUPLEX
+            font_scale = 0.3 * (scale_factor / 2)
+            font_thickness = 1
+            (text_w, text_h), baseline = cv2.getTextSize(obj_name, font_face, font_scale, font_thickness)
+
+            # Define candidate positions (bottom-left corner of text)
+            candidates = [
+                (centroid[0] - text_w // 2, centroid[1] - text_h // 2 - 3),  # Center
+                (obj_x_min + (obj_x_max - obj_x_min) // 2 - text_w // 2, obj_y_min - text_h), # Top-center
+                (obj_x_max + 1, obj_y_min + text_h // 2), # Top-right
+                (obj_x_min - text_w - 1, obj_y_min + text_h // 2), # Top-left
+                (obj_x_max + 1, obj_y_max), # Bottom-right
+                (obj_x_min - text_w - 1, obj_y_max), # Bottom-left
+            ]
+
+            final_pos = None
+
+            # Find a non-colliding position
+            for pos in candidates:
+                # Calculate label bounding box
+                lx, ly = pos[0], pos[1]
+                label_box = (lx, ly - text_h, text_w, text_h + baseline)
+
+                # Check for collision with image boundaries
+                if not (lx >= 0 and ly >= 0 and lx + label_box[2] < width and ly + label_box[3] < height):
+                    continue
+
+                # Check for collision with other labels
+                is_colliding = False
+                for placed_box in placed_label_boxes:
+                    if not (label_box[0] > placed_box[0] + placed_box[2] or \
+                            label_box[0] + label_box[2] < placed_box[0] or \
+                            label_box[1] > placed_box[1] + placed_box[3] or \
+                            label_box[1] + label_box[3] < placed_box[1]):
+                        is_colliding = True
+                        break
+                
+                if not is_colliding:
+                    final_pos = pos
+                    placed_label_boxes.append(label_box)
+                    break
+            
+            # If no good position is found, fall back to the default (top-right)
+            if final_pos is None:
+                final_pos = candidates[0]
+
+            # Draw the text at the final position
+            cv2.putText(image, obj_name, final_pos, font_face, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)
 
         return image
 
