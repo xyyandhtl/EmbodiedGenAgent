@@ -196,6 +196,8 @@ class EGAgentSystem:
             time.sleep(0.1)
             # 地图/导航处理（需后端已创建）
             if self.backend_ready:
+                # (1) 检查 synced_data_queue 中的最新帧是否为 关键帧
+                # (2) dualmap.parallel_process 处理该关键帧（Detector 对图像生成物体观测结果；更新地图并计算导航路径（全局+局部））
                 self.vlmap_backend.run_once(lambda: time.time())
             # 环境 step（如启用）：is_finished = self.env.step()
             self.env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
@@ -213,9 +215,8 @@ class EGAgentSystem:
     def feed_instruction(self, text: str):
         """Plan a behavior tree from instruction, draw it, and update UI caches."""
         # text = "请前往拍摄车辆"   ＃ for test
-        self.goal = self.goal_generator.generate_single(text)  
-        
         # 1. 用户指令 ==> goal 逻辑指令（如：请前往控制室 转换为 RobotNear_ControlRoom）
+        self.goal = self.goal_generator.generate_single(text)
         # self.goal = "RobotNear_Equipment"  # 调试测试
         self._log(f"[system] [feed_instruction] goal is: {self.goal}")
 
@@ -248,6 +249,7 @@ class EGAgentSystem:
     # ---------------------- 模块间数据交互 -----------------------
     def update_cur_goal_set(self):
         """After feed_instruction, bind bt to env, query the target object positions"""
+        # (1) 将 BT 与 IsaacsimEnv环境交互层 绑定
         self.env.bind_bt(self.bt)
         if not self.backend_ready:
             self._log("[system] Backend not created, cannot query object positions.")
