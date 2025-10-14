@@ -16,8 +16,6 @@ class RealEnv(BaseAgentEnv):
 
     def __init__(self):
         super().__init__()
-        self.action_callbacks_dict = {}
-
         # Assume rclpy.init() was called elsewhere in the process.
         # Create node and publishers directly; let exceptions propagate if rclpy not initialized.
         self.ros_node = Node("isaacsim_env_node")
@@ -38,11 +36,6 @@ class RealEnv(BaseAgentEnv):
           - 'nav_pose': list/tuple/ndarray of 7 floats -> [x,y,z,qw,qx,qy,qz]
           - 'enum'/'enum_command': int or iterable of ints -> publish each Int32
         """
-        # priority to registered callbacks
-        if action_type in self.action_callbacks_dict:
-            self.action_callbacks_dict[action_type](action)
-            return
-
         # ensure node/publishers exist
         if self.ros_node is None:
             raise RuntimeError("ROS node not initialized; cannot publish actions.")

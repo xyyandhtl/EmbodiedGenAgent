@@ -106,7 +106,6 @@ QLabel#titleLabel {
         <layout class="QHBoxLayout" name="hboxInput">
          <item>
           <widget class="QLineEdit" name="instructionEdit">
-           <!-- 预设默认文本 -->
            <property name="text">
             <string>请前往拍摄车辆</string>
            </property>
@@ -135,7 +134,68 @@ QLabel#titleLabel {
        <enum>Qt::Horizontal</enum>
       </property>
 
-      <!-- 左列：上 图像浏览 / 下 报告浏览 -->
+      <!-- 右列（语义/实体）移动到左侧 -->
+      <widget class="QSplitter" name="splitRightCol">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+
+       <!-- 语义实体地图（保持原对象名与结构） -->
+       <widget class="QGroupBox" name="groupSemantic">
+        <property name="title">
+         <string>语义实体地图和导航路径可视化</string>
+        </property>
+        <layout class="QVBoxLayout" name="vboxSemantic">
+         <item>
+          <widget class="QLabel" name="semanticMapLabel">
+           <property name="minimumSize">
+            <size><width>400</width><height>200</height></size>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+           <property name="text">
+            <string>Semantic / Path Map</string>
+           </property>
+           <property name="scaledContents"><bool>false</bool></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+
+       <!-- 实体信息列表（保持原对象名与结构） -->
+       <widget class="QGroupBox" name="groupEntitiesTop">
+        <property name="title">
+         <string>实体信息列表</string>
+        </property>
+        <layout class="QVBoxLayout" name="vboxEntitiesTop">
+         <item>
+          <widget class="QTableWidget" name="entityTable">
+           <!-- Make the first column wider by increasing default section size -->
+           <attribute name="horizontalHeaderDefaultSectionSize">
+            <number>300</number>
+           </attribute>
+           <!-- Stretch the last column to fill remaining space -->
+           <attribute name="horizontalHeaderStretchLastSection">
+            <bool>true</bool>
+           </attribute>
+           <column>
+            <property name="text">
+             <string>实体</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>信息</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </widget>
+
+      <!-- 左列（采集图像/报告）移动到右侧 -->
       <widget class="QSplitter" name="splitLeftCol">
        <property name="orientation">
         <enum>Qt::Vertical</enum>
@@ -257,67 +317,6 @@ QLabel#titleLabel {
         </layout>
        </widget>
       </widget>
-
-      <!-- 右列：上 语义/路径地图 / 下 实体信息表 -->
-      <widget class="QSplitter" name="splitRightCol">
-       <property name="orientation">
-        <enum>Qt::Vertical</enum>
-       </property>
-
-       <!-- 语义实体地图（保持原对象名与结构） -->
-       <widget class="QGroupBox" name="groupSemantic">
-        <property name="title">
-         <string>语义实体地图和导航路径可视化</string>
-        </property>
-        <layout class="QVBoxLayout" name="vboxSemantic">
-         <item>
-          <widget class="QLabel" name="semanticMapLabel">
-           <property name="minimumSize">
-            <size><width>400</width><height>200</height></size>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignCenter</set>
-           </property>
-           <property name="text">
-            <string>Semantic / Path Map</string>
-           </property>
-           <property name="scaledContents"><bool>false</bool></property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-
-       <!-- 实体信息列表（保持原对象名与结构） -->
-       <widget class="QGroupBox" name="groupEntitiesTop">
-        <property name="title">
-         <string>实体信息列表</string>
-        </property>
-        <layout class="QVBoxLayout" name="vboxEntitiesTop">
-         <item>
-          <widget class="QTableWidget" name="entityTable">
-           <!-- Make the first column wider by increasing default section size -->
-           <attribute name="horizontalHeaderDefaultSectionSize">
-            <number>300</number>
-           </attribute>
-           <!-- Stretch the last column to fill remaining space -->
-           <attribute name="horizontalHeaderStretchLastSection">
-            <bool>true</bool>
-           </attribute>
-           <column>
-            <property name="text">
-             <string>实体</string>
-            </property>
-           </column>
-           <column>
-            <property name="text">
-             <string>信息</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </widget>
      </widget>
     </item>
 
@@ -425,52 +424,55 @@ QLabel#titleLabel {
      </widget>
     </item>
 
-    <!-- 右侧按钮 -->
+    <!-- 替换右侧按钮区域：在最后一列用垂直分割，顶部是“后台”，底部是“控制” -->
     <item row="1" column="4" rowspan="3">
-     <widget class="QGroupBox" name="groupControl">
-      <property name="title">
-       <string>控制</string>
-      </property>
-      <layout class="QVBoxLayout" name="vboxCtrl">
-       <item>
-        <widget class="QPushButton" name="startBtn">
-         <property name="text">
-          <string>启动智能体</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="stopBtn">
-         <property name="text">
-          <string>关闭智能体</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="saveMapBtn">
-         <property name="text">
-          <string>保存地图</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="loadMapBtn">
-         <property name="text">
-          <string>载入地图</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacer">
-         <property name="orientation">
-          <enum>Qt::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size><width>20</width><height>200</height></size>
-         </property>
-        </spacer>
-       </item>
-      </layout>
+     <widget class="QSplitter" name="splitRightBar">
+      <property name="orientation"><enum>Qt::Vertical</enum></property>
+
+      <!-- 顶部：后台 -->
+      <widget class="QGroupBox" name="groupBackend">
+       <property name="title"><string>后台</string></property>
+       <layout class="QVBoxLayout" name="vboxBackend">
+        <item>
+         <widget class="QPushButton" name="createBackendBtn">
+          <property name="text"><string>创建后台</string></property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+
+      <!-- 底部：控制（保持原有内容不变） -->
+      <widget class="QGroupBox" name="groupControl">
+       <property name="title"><string>控制</string></property>
+       <layout class="QVBoxLayout" name="vboxCtrl">
+        <item>
+         <widget class="QPushButton" name="startBtn">
+          <property name="text"><string>启动智能体</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="stopBtn">
+          <property name="text"><string>关闭智能体</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="saveMapBtn">
+          <property name="text"><string>保存地图</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="loadMapBtn">
+          <property name="text"><string>载入地图</string></property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="verticalSpacer">
+          <property name="orientation"><enum>Qt::Vertical</enum></property>
+          <property name="sizeHint" stdset="0"><size><width>20</width><height>200</height></size></property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
      </widget>
     </item>
 

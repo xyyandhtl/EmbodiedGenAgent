@@ -43,6 +43,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.agent_system = EGAgentSystem()
 
+        # 绑定“创建后台”按钮
+        if hasattr(self, "createBackendBtn"):
+            self.createBackendBtn.clicked.connect(self.on_create_backend)
+
         # 连接信号到槽 (主线程更新 UI)
         self.logSignal.connect(self._on_log_update)
         self.convSignal.connect(self._on_conv_update)
@@ -57,6 +61,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # 新增：保存/载入地图
         self.saveMapBtn.clicked.connect(self.on_save_map)
         self.loadMapBtn.clicked.connect(self.on_load_map)
+
+        # 初始化时禁用控制（仅右侧四个按钮）
+        self._set_controls_enabled(False)
 
         # Timers (差异化更新频率)
         self.timer_fast = QtCore.QTimer(self)      # 200ms
@@ -75,6 +82,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer_bt.timeout.connect(self.update_bt)
         self.timer_bt.start(5000)
 
+        # --- 新增：聊天视图初始化（替换对话文本框为聊天气泡） ---
+        self._conv_msg_seen = 0  # 改为按消息计数，而不是按行
+        self._init_chat_view()
+
         # 替换原直接更新 UI 的监听器 -> 仅发射信号
         self.agent_system.add_listener("log", lambda data: self.logSignal.emit(data))
         self.agent_system.add_listener("conversation", lambda data: self.convSignal.emit(data))
@@ -91,10 +102,6 @@ class MainWindow(QtWidgets.QMainWindow):
         # --- 新增：初始化图像与报告浏览器 ---
         self._setup_image_browser()
         self._setup_report_browser()
-
-        # --- 新增：聊天视图初始化（替换对话文本框为聊天气泡） ---
-        self._conv_msg_seen = 0  # 改为按消息计数，而不是按行
-        self._init_chat_view()
 
         # --- 新增：将 semanticMapLabel ==> semanticMapWidget，以实现用鼠标左键拖拽和滚轮平移 ---
         self.semanticMapWidget = ZoomableImageWidget()
@@ -120,6 +127,25 @@ class MainWindow(QtWidgets.QMainWindow):
             bt_layout.insertWidget(bt_index, self.behaviorTreeWidget)
             self.behaviorTreeWidget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
+    def on_create_backend(self):
+        ok = False
+        try:
+            ok = self.agent_system.create_backend()
+        except Exception as e:
+            self.statusbar.showMessage(f"后台创建失败: {e}", 4000)
+            ok = False
+        if ok:
+            self._set_controls_enabled(True)  # 仅启用右侧四个按钮
+            self.update_statusbar()
+            self.statusbar.showMessage("后台创建成功", 2000)
+
+    def _set_controls_enabled(self, enabled: bool):
+        # 仅控制右侧四个按钮变灰/启用
+        for name in ("startBtn", "stopBtn", "saveMapBtn", "loadMapBtn"):
+            w = getattr(self, name, None)
+            if w is not None:
+                w.setEnabled(enabled)
+
     # ----------------- UI Events -----------------
     def on_start(self):
         self.agent_system.start()  # 启动 EGAgentSystem 的主线程 _run_loop
@@ -130,6 +156,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.update_statusbar()
 
     def on_send_instruction(self):
+        # 允许未创建后台时发送指令；后端逻辑会提示无法查询目标位置
         text = self.instructionEdit.text().strip()
         if not text:
             return
@@ -162,11 +189,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ----------------- Periodic Updates -----------------
     def update_fast(self):
+        if not self.agent_system.backend_ready:
+            return
         """高频: 当前视野实例分割"""
         img = self.agent_system.get_current_instance_seg_image()
         self.instanceSegLabel.setPixmap(np_to_qpix(img))
 
     def update_medium(self):
+        if not self.agent_system.backend_ready:
+            return
         """中频: 可通行地图 + 实体表"""
         # 可通行地图
         self.traversableMapLabel.setPixmap(
@@ -176,6 +207,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.refresh_entities()
 
     def update_slow(self):
+        if not self.agent_system.backend_ready:
+            return
         """低频: 3D实例 + 语义/路径地图"""
         # 3D实例
         self.instance3DLabel.setPixmap(
@@ -187,6 +220,8 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
     def update_bt(self):
+        if not self.agent_system.backend_ready:
+            return
         # 行为树更新 -> ZoomableImageWidget
         if hasattr(self, "behaviorTreeWidget"):
             self.behaviorTreeWidget.setPixmap(
@@ -389,6 +424,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._on_entities_update(rows)
 
     def update_statusbar(self):
+        if not hasattr(self, "statusbar"):
+            return
+        if not self.agent_system.backend_ready:
+            self.statusbar.showMessage("智能体状态: 未创建后台")
+            return
         state = "运行中" if self.agent_system.status else "已停止"
         self.statusbar.showMessage(f"智能体状态: {state}")
 

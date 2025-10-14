@@ -11,6 +11,7 @@ from EG_agent.reasoning.logic_goal import LogicGoalGenerator
 from EG_agent.planning.bt_planner import BTGenerator
 from EG_agent.planning.btpg import BehaviorTree
 from EG_agent.vlmap.vlmap import VLMapNav
+from EG_agent.vlmap.dualmap.core import Dualmap
 from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
 from EG_agent.system.module_path import AGENT_SYSTEM_PATH
 
@@ -46,14 +47,9 @@ class EGAgentSystem:
         cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
         self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
 
-        # VLM 语义地图导航后端
-        # 创建 VLMapNav 并挂到 IsaacsimEnv，避免 env 内部发布计时器过早触发
-        self.vlmap_backend = VLMapNav()
-        self.env.set_vlmap_backend(self.vlmap_backend)
-        self.dm = self.vlmap_backend.dualmap    # a reference for fast access
-
-        # 再配置 ROS（内部会创建订阅与可选的发布计时器）
-        self.env.configure_ros(self.cfg)
+        # VLM 语义地图导航后端 -> 延迟创建，由 GUI 按钮触发
+        self.vlmap_backend: VLMapNav = None
+        self.dm: Dualmap = None
 
         # 运行控制
         self._running = False
@@ -61,15 +57,34 @@ class EGAgentSystem:
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
-        # QT监听器: kind -> list[callback(data)]
+        # QT监听器与缓存
         self._listeners: Dict[str, List[Callable[[Any], None]]] = {}
-
-        # QT 缓存/占位数据
-        self._conversation: List[str] = []
+        self._conversation: List[str] = ["智能体: 请先创建后台"]
         self._logs: List[str] = []
-        # self._entity_info: List[dict] = []   # each: {"name":..., "info":...}
         self._last_bt_image: np.ndarray = self._gen_dummy_image(300, 400, "Behavior Tree")
         self._placeholder_counter = 0
+
+        self._emit("conversation", self.get_conversation_text())
+
+    # 新增：创建后端（由 GUI 按钮触发）
+    def create_backend(self) -> bool:
+        if self.vlmap_backend is not None:
+            self._log("Backend already created.")
+            return True
+        self._log("Creating backend...")
+        self.vlmap_backend = VLMapNav()
+        self.env.set_vlmap_backend(self.vlmap_backend)
+        # dualmap reference, set after backend is created
+        self.dm = self.vlmap_backend.dualmap
+        # 再配置 ROS（内部会创建订阅与可选的发布计时器）
+        self._log("Configuring ROS...")
+        self.env.configure_ros(self.cfg)
+        self._log("Backend created successfully.")
+        return True
+
+    @property
+    def backend_ready(self) -> bool:
+        return self.vlmap_backend is not None and self.dm is not None
 
     # ---------------------- 控制接口 ----------------------
     def start(self):
@@ -96,6 +111,9 @@ class EGAgentSystem:
 
     def save(self, map_path: str | None = None):
         """Save the current global map to the given path or default cfg.map_save_path."""
+        if not self.backend_ready:
+            self._log("Backend not created, cannot save map.")
+            return
         path = map_path or getattr(self.vlmap_backend.cfg, "map_save_path", None)
         self._log(f"Saving current global map to: {path}")
         self.dm.save_map(map_path=path)
@@ -103,6 +121,9 @@ class EGAgentSystem:
 
     def load(self, map_path: str | None = None):
         """Load the global map from the given path or default cfg.preload_path."""
+        if not self.backend_ready:
+            self._log("Backend not created, cannot load map.")
+            return
         path = map_path or getattr(self.vlmap_backend.cfg, "preload_path", None)
         self._log(f"Loading global map from: {path}")
         self.dm.load_map(map_path=path)
@@ -111,14 +132,15 @@ class EGAgentSystem:
                   f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
         self.update_objects_from_map()
 
+
     def update_objects_from_map(self):
+        if not self.backend_ready:
+            return
         entites = self.get_entity_rows()
         if entites:
-            # 取所有 entity 的 name 并首字母大写组成 object_set
             self.bt_objects = {name.split('/', 1)[1].capitalize() for name, _ in entites if name.startswith("global/")}
             self._log(f"Prepared goal generator from loaded map with the following "
                       f"{len(self.bt_objects)} objects: \n{self.bt_objects} .")
-            # 用这些地图 objects 更新 goal_generator 和 bt_generator 的 key_objects
             self.goal_generator.prepare_prompt(self.bt_objects)
             self.bt_generator.set_key_objects(list(self.bt_objects))
             self._log(f"已设置原子动作: \n{[action.name for action in self.bt_generator.planner.actions]}")
@@ -129,23 +151,19 @@ class EGAgentSystem:
 
     def _run_loop(self):
         """Main loop: step environment, propagate events, and check completion."""
-        # 主执行循环 (简化)
         self.env.reset()
         self._log("Environment reset.")
         is_finished = False
         while not self._stop_event.is_set() and not is_finished:
             time.sleep(0.1)
+            # 地图/导航处理（需后端已创建）
+            if self.backend_ready:
+                self.vlmap_backend.run_once(lambda: time.time())
+            # 环境 step（如启用）：is_finished = self.env.step()
 
-            # 后端地图/导航处理一次
-            # (1) 检查 synced_data_queue 中的最新帧是否为 关键帧
-            # (2) dualmap.parallel_process 处理该关键帧（Detector 对图像生成物体观测结果；更新地图并计算导航路径（全局+局部））
-            self.vlmap_backend.run_once(lambda: time.time())
-
-            # 环境 step，行为树 agent 执行动作，和部署环境通信
-            # is_finished = self.env.step()
-
-        self.dm.end_process()
-        self.vlmap_backend.shutdown_requested = True
+        if self.backend_ready:
+            self.dm.end_process()
+            self.vlmap_backend.shutdown_requested = True
 
         self._is_finished = True
         self._running = False
@@ -164,8 +182,20 @@ class EGAgentSystem:
 
     # ---------------------- 监听/事件 ----------------------
     def add_listener(self, kind: str, cb: Callable[[Any], None]):
-        """Register an event listener for a given kind."""
+        """Register an event listener for a given kind and immediately replay latest cached state."""
         self._listeners.setdefault(kind, []).append(cb)
+        # 注册后立刻推送一次当前缓存数据，避免首次 emit 早于监听器注册而丢失
+        try:
+            if kind == "conversation":
+                cb(self.get_conversation_text())
+            elif kind == "log":
+                cb(self.get_log_text_tail())
+            elif kind == "entities" and self.backend_ready:
+                cb(list(self.get_entity_rows()))
+            elif kind == "status":
+                cb(self.status)
+        except Exception:
+            pass
 
     def _emit(self, kind: str, data: Any):
         """Emit an event to all listeners of the given kind."""
@@ -179,7 +209,9 @@ class EGAgentSystem:
     def feed_instruction(self, text: str):
         """Plan a behavior tree from instruction, draw it, and update UI caches."""
         # text = "请前往拍摄车辆"   ＃ for test
-        self.goal = self.goal_generator.generate_single(text)  # 1. 用户指令 ==> goal 逻辑指令（如：请前往控制室 转换为 RobotNear_ControlRoom）
+        self.goal = self.goal_generator.generate_single(text)  
+        
+        # 1. 用户指令 ==> goal 逻辑指令（如：请前往控制室 转换为 RobotNear_ControlRoom）
         # self.goal = "RobotNear_Equipment"  # 调试测试
         self._log(f"[system] [feed_instruction] goal is: {self.goal}")
 
@@ -190,33 +222,36 @@ class EGAgentSystem:
             self._emit("conversation", self.get_conversation_text())
             return
 
-        self.bt = self.bt_generator.generate(self.goal)  # 2. goal 逻辑指令 ==> BehaviorTree 实例（如：['Walk(ControlRoom)']）
+        # 2. goal 逻辑指令 ==> BehaviorTree 实例（如：['Walk(ControlRoom)']）
+        self.bt = self.bt_generator.generate(self.goal)
         self._log(f"[system] [feed_instruction] BT is created!")
         self._log(f"User instruction: {text}")
         self._append_conversation(f"用户: {text}")
         self._append_conversation(f"智能体: 准备执行行为树指令 {self.goal}")
         self._emit("conversation", self.get_conversation_text())
-        self.goal_set = self.bt_generator.goal_set
-
-        self.update_cur_goal_set()  # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置发送给 IsaacsimEnv，并刷新可视性
+        self.goal_set = {goal.split("_")[-1] for goal in self.bt_generator.goal_set}
 
         # save behavior_tree.png to the current work dir to visualize in gui
         self.bt.draw(png_only=True, file_name=self.bt_name)
         # load the saved behavior tree image into memory for GUI
         img_path = Path(self.bt_name + ".png")
-        if img_path.exists():
-            self._last_bt_image = np.array(Image.open(img_path).convert("RGB"))
-            self._log(f"Behavior tree image updated: {img_path.resolve()}")
-        else:
-            self._log(f"Behavior tree image not found: {img_path.resolve()}")
+        self._last_bt_image = np.array(Image.open(img_path).convert("RGB"))
+        self._log(f"Behavior tree image updated: {img_path.resolve()}")
+
+        # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置告知给 IsaacsimEnv
+        self.update_cur_goal_set() 
 
     # ---------------------- 模块间数据交互 -----------------------
     def update_cur_goal_set(self):
-        """After feed_instruction, bind bt to self.env, query the target object positions"""
-        # (1) 将 BT 与 IsaacsimEnv环境交互层 绑定
+        """After feed_instruction, bind bt to env, query the target object positions"""
         self.env.bind_bt(self.bt)
+        if not self.backend_ready:
+            self._log("[system] Backend not created, cannot query object positions.")
+            self._append_conversation("智能体: 后台未创建，无法查询目标位置，请先点击右侧“创建后台”。")
+            self._emit("conversation", self.get_conversation_text())
+            return
 
-        # (2) 调用 vlmap，查询每个目标在地图中的具体坐标
+        # (2) 调用 vlmap 查询目标
         self._log(f"[system] [update_cur_goal_set] self.goal_set: {self.goal_set}")
         cur_goal_places = {}
         for obj in self.goal_set:
@@ -339,6 +374,7 @@ class EGAgentSystem:
 
 if __name__ == "__main__":
     agent_system = EGAgentSystem()
+    agent_system.create_backend()  # 新增：测试时先创建后台
     agent_system.start()
     time.sleep(2)
     agent_system.feed_instruction("测试指令")
