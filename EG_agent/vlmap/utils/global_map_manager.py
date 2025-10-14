@@ -34,11 +34,11 @@ class GlobalMapManager(BaseMapManager):
         GlobalObject.initialize_config(cfg)
 
         # For navigation --> NavigationGraph
-        self.nav_graph = None
+        self.nav_graph: NavigationGraph = None
         self.inquiry = ''
-        self.action_path = None
+        self.action_path = []
         self.has_action_path = False
-        self.lost_and_found = False
+
         # layout information --> LayoutMap
         layout_resolution = self.cfg.layout_voxel_size * 2
         self.layout_map = LayoutMap(cfg, resolution=layout_resolution, percentile=90, min_area=5, kernel_size=3)
@@ -529,8 +529,8 @@ class GlobalMapManager(BaseMapManager):
         pass
 
     def calculate_global_path(
-        self, curr_pose, goal_mode=GoalMode.RANDOM, resolution=0.03
-    ):
+        self, curr_pose, goal_mode=GoalMode.POSE, resolution=0.03, goal_position=None
+    ) -> List:
         # calculate global path
 
         import open3d as o3d
@@ -560,7 +560,8 @@ class GlobalMapManager(BaseMapManager):
         start_position = nav_graph.calculate_pos_2d(curr_position)
 
         # Select and process goal based on mode
-        goal_position = self.get_goal_position(nav_graph, start_position, goal_mode)
+        if goal_mode is not GoalMode.POSE:
+            goal_position = self.get_goal_position(nav_graph, start_position, goal_mode)
 
         # Find shortest path
         if goal_position is not None:
@@ -570,10 +571,10 @@ class GlobalMapManager(BaseMapManager):
                 return nav_graph.pos_path
             else:
                 logger.info("[GlobalMap][Path] Failed to generate a valid path.")
-                return None
+                return []
         else:
             logger.info("[GlobalMap][Path] No valid goal position provided.")
-            return None
+            return []
 
     def get_goal_position(self, nav_graph, start_position, goal_mode):
         """

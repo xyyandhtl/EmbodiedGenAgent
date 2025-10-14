@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 # --- ROS2 相关导入 ---
 import rclpy
 from rclpy.node import Node
+from rclpy.publisher import Publisher
 from rclpy.executors import MultiThreadedExecutor
 from geometry_msgs.msg import Twist, PoseStamped
 from std_msgs.msg import Int32
@@ -48,9 +49,9 @@ class IsaacsimEnv(BaseAgentEnv):
         super().__init__()
         # Defer ROS init to configure_ros
         self.ros_node: Node | None = None
-        self.cmd_vel_pub = None
-        self.nav_pose_pub = None
-        self.enum_pub = None
+        self.cmd_vel_pub: Publisher = None
+        self.nav_pose_pub: Publisher = None
+        self.enum_pub: Publisher = None
 
         # Subscribers and sync
         self._rgb_sub = None
@@ -60,7 +61,7 @@ class IsaacsimEnv(BaseAgentEnv):
         self._bridge = CvBridge()
 
         # ROS spinning
-        self._ros_executor: MultiThreadedExecutor | None = None
+        self._ros_executor: MultiThreadedExecutor = None
         self._ros_thread = None
         self._ros_spin_stop = None
         self._ros_init_owner = False
@@ -72,12 +73,13 @@ class IsaacsimEnv(BaseAgentEnv):
 
         # --- 新增: VLMap 后端引用 + 发布器资源 ---
         self._vlmap_backend: VLMapNav = None
-        self._ros_publisher: ROSPublisher | None = None
-        self._ros_pub_executor: ThreadPoolExecutor | None = None
+        self._ros_publisher: ROSPublisher = None
+        self._ros_pub_executor: ThreadPoolExecutor = None
         self._ros_pub_timer = None
 
         self._cur_path = []
         self._cur_cmd_vel = (0.0, 0.0, 0.0)  # vx, vy, wz
+        self._action_count = 0
 
     def configure_ros(self, cfg) -> None:
         """创建 ROS 节点、发布/订阅与同步器，并在后台线程 spin。"""
@@ -204,8 +206,7 @@ class IsaacsimEnv(BaseAgentEnv):
 
         # Recompute real-time visibility using cam_pose_w
         self._update_goal_inview()
-        self._cur_path = self._vlmap_backend.get_nav_path()
-        self._cur_cmd_vel = self._vlmap_backend.get_cmd_vel(self._cur_path)
+        self._cur_cmd_vel = self._vlmap_backend.get_cmd_vel()
 
     def set_object_places(self, places: dict[str, list[float]]):
         """设置/更新目标位置，并更新可视性（每个目标是否在当前相机的视锥内）"""
@@ -236,6 +237,8 @@ class IsaacsimEnv(BaseAgentEnv):
           - 'nav_pose': [x,y,z,qw,qx,qy,qz]
           - 'enum'/'enum_command': 单个或多个 Int32
         """
+        verbose = verbose and self._action_count % 10 == 0
+        self._action_count += 1
         # ensure node/publishers exist
         if self.ros_node is None:
             raise RuntimeError("ROS node not initialized; cannot publish actions.")
