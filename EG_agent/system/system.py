@@ -292,7 +292,7 @@ class EGAgentSystem:
     def get_traversable_map_image(self) -> np.ndarray:
         """Traversable map from dualmap."""
         traversable_map = self.dm.get_traversable_map_image()
-        # TODO: 可通行地图 (not work)
+        # TODO: 可通行地图 (init version)
         if traversable_map is not None:
             return traversable_map
         return self._gen_dummy_image(260, 180, "Traversable")
