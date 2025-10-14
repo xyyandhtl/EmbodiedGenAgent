@@ -4,6 +4,16 @@ A Generative Embodied Agent that transforms open-ended instructions into behavio
 ## Architecture (continuing)
 ![Architecture Diagram](docs/assets/Egent.png)
 
+## Usage
+- GUI demo: [APP.md](docs/APP.md). Need EGAgentSystem as backend, which should be implemented its deployment env, check [envs](EG_agent/system/envs)
+
+- Agent introduction: [EG_agent.md](docs/EG_agent.md)
+
+- Agent module unit test: [EXAMPLES.md](docs/EXAMPLES.md)
+
+- Agent system isaacsim deployment: [SIMULATION.md](docs/SIMULATION.md), an well-explained example of the envs impl
+
+
 ## Plans
 - [x] Implement the intent understanding: vlm prompt / reflective feedback to generate the first-order logic goal
 - [x] Wrap the bt tree generator to generate executable bt from the first-order logic goal
@@ -28,16 +38,6 @@ to deploy and test EG_agent in simulation:
 - Python >= 3.11 (use a ZMQ ros bridge to connect with EG_agent)
 - [IsaacSim](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/installation/install_python.html) == 5.0.0
 - [IsaacLab](https://isaac-sim.github.io/IsaacLab/v2.2.1/source/setup/installation/pip_installation.html) == 2.2.1
-
-
-## Usage
-- GUI demo: [APP.md](docs/APP.md). Need EGAgentSystem as backend, which should be implemented its deployment env, check [envs](EG_agent/system/envs)
-
-- Agent introduction: [EG_agent.md](docs/EG_agent.md)
-
-- Agent module unit test: [EXAMPLES.md](docs/EXAMPLES.md)
-
-- Agent system isaacsim deployment: [SIMULATION.md](docs/SIMULATION.md), an well-explained example of the envs impl
 
 
 ## Acknowledgments

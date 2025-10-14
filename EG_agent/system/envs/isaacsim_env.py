@@ -19,6 +19,9 @@ from EG_agent.system.envs.base_env import BaseAgentEnv
 from EG_agent.system.module_path import AGENT_ENV_PATH
 from EG_agent.vlmap.ros_runner.ros_publisher import ROSPublisher
 
+import typing
+if typing.TYPE_CHECKING:
+    from EG_agent.vlmap.vlmap import VLMapNav
 
 class IsaacsimEnv(BaseAgentEnv):
     agent_num = 1
@@ -68,12 +71,13 @@ class IsaacsimEnv(BaseAgentEnv):
         self._last_obs_time: float | None = None
 
         # --- 新增: VLMap 后端引用 + 发布器资源 ---
-        self._vlmap_backend = None
+        self._vlmap_backend: VLMapNav = None
         self._ros_publisher: ROSPublisher | None = None
         self._ros_pub_executor: ThreadPoolExecutor | None = None
         self._ros_pub_timer = None
 
-        self.action_callbacks_dict = {}  # ensure callbacks dict exists
+        self._cur_path = []
+        self._cur_cmd_vel = (0.0, 0.0, 0.0)  # vx, vy, wz
 
     def configure_ros(self, cfg) -> None:
         """创建 ROS 节点、发布/订阅与同步器，并在后台线程 spin。"""
@@ -200,6 +204,8 @@ class IsaacsimEnv(BaseAgentEnv):
 
         # Recompute real-time visibility using cam_pose_w
         self._update_goal_inview()
+        self._cur_path = self._vlmap_backend.get_nav_path()
+        self._cur_cmd_vel = self._vlmap_backend.get_cmd_vel(self._cur_path)
 
     def set_object_places(self, places: dict[str, list[float]]):
         """设置/更新目标位置，并更新可视性（每个目标是否在当前相机的视锥内）"""
@@ -230,11 +236,6 @@ class IsaacsimEnv(BaseAgentEnv):
           - 'nav_pose': [x,y,z,qw,qx,qy,qz]
           - 'enum'/'enum_command': 单个或多个 Int32
         """
-        # priority to registered callbacks
-        if action_type in self.action_callbacks_dict:
-            self.action_callbacks_dict[action_type](action)
-            return
-
         # ensure node/publishers exist
         if self.ros_node is None:
             raise RuntimeError("ROS node not initialized; cannot publish actions.")
