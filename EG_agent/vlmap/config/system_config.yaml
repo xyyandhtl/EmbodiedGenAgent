@@ -152,6 +152,9 @@ use_end_process: True
 # Use parallel processing (False = sequential)
 use_parallel: True
 
+### Resolution of NavigationGraph in [GlobalManager, LocalManager, show_semantic_map]
+resolution: 0.03
+
 
 # ============================================================
 # SYSTEM MAPPING CONFIG

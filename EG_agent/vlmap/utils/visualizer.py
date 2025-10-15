@@ -231,9 +231,10 @@ class ReRunVisualizer:
 
         return image
 
-    def get_semantic_map_image(self, global_map_manager, current_pose=None, nav_path=None) -> None | np.ndarray:
+    def get_semantic_map_image(self, global_map_manager, resolution=0.03, curr_pose=None, nav_path=None) -> None | np.ndarray:
         """
         Generates a top-down 2D image of the global semantic map, including the navigation path and current robot position.
+            * resolution = 0.03 m/pix (same as the resolution of the NavGraph in calculate_global/local_path())
         """
         from PIL import Image, ImageDraw, ImageFont
 
@@ -251,7 +252,6 @@ class ReRunVisualizer:
         max_coords = np.max(all_points[:, :2], axis=0)
         map_size = max_coords - min_coords  # the size of the image
 
-        resolution = 0.05  # meters per pixel
         scale_factor = 6.0
         padding = 100  # pixels
         width = int((map_size[0]) / resolution * scale_factor) + padding
@@ -360,9 +360,9 @@ class ReRunVisualizer:
                 draw.line(path_points_img, fill=(0, 255, 0), width=6) # Green line
 
         # 3. Draw current pose as an arrow
-        if current_pose is not None:
-            pos = current_pose[:3, 3]
-            rot_matrix = current_pose[:3, :3]
+        if curr_pose is not None:
+            pos = curr_pose[:3, 3]
+            rot_matrix = curr_pose[:3, :3]
             
             # Forward vector in ROS is +Z
             fwd_vec_local = np.array([0, 0, 1])

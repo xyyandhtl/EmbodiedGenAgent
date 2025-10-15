@@ -568,7 +568,7 @@ class Dualmap:
         # Get 3D path point in world coordinate
         # 计算 全局路径
         self.curr_global_path = self.global_map_manager.calculate_global_path(
-            self.curr_pose, goal_mode=self.get_goal_mode, goal_position=self.goal_pose
+            self.curr_pose, goal_mode=self.get_goal_mode, resolution=self.cfg.resolution, goal_position=self.goal_pose
         )
 
         # Clear the local mapping results
@@ -660,7 +660,7 @@ class Dualmap:
 
         # calculate the path based on current global map
         self.curr_local_path = self.local_map_manager.calculate_local_path(
-            start_pose, goal_mode=self.get_goal_mode, goal_position=self.goal_pose
+            start_pose, goal_mode=self.get_goal_mode, resolution=self.cfg.resolution, goal_position=self.goal_pose
         )
 
         if self.curr_local_path is not None:
@@ -760,7 +760,12 @@ class Dualmap:
         return cur_path[min(5, len(cur_path)-1)]
 
     def get_semantic_map_image(self):
-        semantic_map = self.visualizer.get_semantic_map_image(self.global_map_manager, self.curr_pose, self.curr_global_path)  # TODO: 后续更改为 self.action_path，或者传入 global_path 和 local_path，以不同颜色显示
+        semantic_map = self.visualizer.get_semantic_map_image(
+            self.global_map_manager,
+            resolution=self.cfg.resolution,
+            curr_pose=self.curr_pose,
+            nav_path=self.curr_global_path  # TODO: 后续更改为 self.action_path，或者传入 global_path 和 local_path，以不同颜色显示
+        )
 
         if semantic_map is not None:
             save_dir = str(self.cfg.map_save_path)
