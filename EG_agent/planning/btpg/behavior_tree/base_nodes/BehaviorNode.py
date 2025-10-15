@@ -3,7 +3,6 @@ from typing import Any
 import enum
 from py_trees.common import Status
 
-
 # base_nodes Behavior
 class BahaviorNode(ptree.behaviour.Behaviour):
     is_composite = False
@@ -13,7 +12,9 @@ class BahaviorNode(ptree.behaviour.Behaviour):
         None
         '''
     # agent = None
-    env = None
+    # env = None
+    # Now the agent and env are merged into agent_env for simplicity
+    agent_env = None
     print_name_prefix = ""
 
 

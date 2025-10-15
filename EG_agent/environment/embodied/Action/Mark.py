@@ -1,4 +1,4 @@
-from EG_agent.environment.embodied._base.gen_action import EmbodiedAction
+from EG_agent.environment.embodied._base.action import EmbodiedAction
 
 class Mark(EmbodiedAction):
     can_be_expanded = True
@@ -28,4 +28,4 @@ class Mark(EmbodiedAction):
         }
 
     def change_condition_set(self):
-        self.agent.condition_set |= (self.info["add"])
+        self.agent_env.condition_set |= (self.info["add"])

@@ -43,7 +43,7 @@ class EGAgentSystem:
         # Agent 载体部署环境
         # 组成：通过 bint_bt 动态绑定行为树，定义 run_action 实现交互逻辑，通过 ROS2 与部署环境信息收发
         # 运行：行为树叶节点在被 tick 时，通过调用其绑定的 env 的 run_action 实现智能体到部署环境交互的 action
-        self.env = IsaacsimEnv()
+        self.agent_env = IsaacsimEnv()
         cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
         self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
 
@@ -115,14 +115,14 @@ class EGAgentSystem:
         self._conv("智能体: 正在创建后台，请稍候...")
         self._log("Creating backend...")
         self.vlmap_backend = VLMapNav()
-        self.env.set_vlmap_backend(self.vlmap_backend)
+        self.agent_env.set_vlmap_backend(self.vlmap_backend)
         # dualmap reference, set after backend is created
         self.dm = self.vlmap_backend.dualmap
         # 再配置 ROS（内部会创建订阅与可选的发布计时器）
         self._log("Configuring ROS...")
-        self.env.configure_ros(self.cfg)
+        self.agent_env.configure_ros(self.cfg)
         self._log("Backend created successfully.")
-        self.env.run_action("mark", (4, 5, 0))    # for test
+        self.agent_env.run_action("mark", (4, 5, 0))    # for test
         return True
     
     def start(self):
@@ -190,7 +190,7 @@ class EGAgentSystem:
 
     def _run_loop(self):
         """Main loop: step environment, propagate events, and check completion."""
-        self.env.reset()
+        self.agent_env.reset()
         self._log("Environment reset.")
         is_finished = False
         while not self._stop_event.is_set() and not is_finished:
@@ -200,8 +200,8 @@ class EGAgentSystem:
                 # (1) 检查 synced_data_queue 中的最新帧是否为 关键帧
                 # (2) dualmap.parallel_process 处理该关键帧（Detector 对图像生成物体观测结果；更新地图并计算导航路径（全局+局部））
                 self.vlmap_backend.run_once(lambda: time.time())
-            # 环境 step（如启用）：is_finished = self.env.step()
-            self.env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
+            # 环境 step（如启用）：is_finished = self.agent_env.step()
+            self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
 
         if self.backend_ready:
             self.dm.end_process()
@@ -246,13 +246,13 @@ class EGAgentSystem:
 
         # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置告知给 IsaacsimEnv
         self.update_cur_goal_set()
-        self.env.run_action("mark", None)  # for test
+        self.agent_env.run_action("mark", None)  # for test
 
     # ---------------------- 模块间数据交互 -----------------------
     def update_cur_goal_set(self):
         """After feed_instruction, bind bt to env, query the target object positions"""
         # (1) 将 BT 与 IsaacsimEnv环境交互层 绑定
-        self.env.bind_bt(self.bt)
+        self.agent_env.bind_bt(self.bt)
         if not self.backend_ready:
             self._log("[system] Backend not created, cannot query object positions.")
             self._conv("智能体: 后台未创建，无法查询目标位置，请先点击右侧“创建后台”。")
@@ -269,7 +269,7 @@ class EGAgentSystem:
 
         # (3) 将 目标位置 传递给 IsaacsimEnv，并更新可视性（每个目标是否在当前相机的视锥内）
         if cur_goal_places:
-            self.env.set_object_places(cur_goal_places)
+            self.agent_env.set_object_places(cur_goal_places)
             self._log(f"[system] [update_cur_goal_set] set cur_goal_places to env: {cur_goal_places}")
             self._conv(f"智能体: 已更新当前目标位置为 \n{cur_goal_places}")
 

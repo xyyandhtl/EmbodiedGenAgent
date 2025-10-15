@@ -1,0 +1,43 @@
+给我根据图片场景，定义yolov8-world的开放语义object英文list，每个语义一行，我后面要放进txt中。
+然后再在这些语义中分类为高移动性和低移动性。其中高移动性仅包含人、动物、车、垃圾桶等这些极容易移动的object，不确定的都归入低移动性。
+不要包含表示地面相关的语义，比如floor, ground, street等等，但像人行道这种附着在地面的类似语义是需要的。
+参考以下格式：
+
+```txt
+# low mobility examples
+lm_examples:
+  - "stool"
+  - "cabinet"
+  - "couch"
+  - "shelf"
+  - "armchair"
+  - "bathtub"
+  - "chair"
+  - "sofa"
+  - "table"
+  - "rack"
+  - "bathroom-vanity"
+  - "bed"
+
+# high mobility examples
+hm_examples:
+  - "backpack"
+  - "box"
+  - "clothes"
+  - "cup"
+  - "cushion"
+  - "lamp"
+  - "door"
+  - "pillow"
+  - "bowl"
+  - "microwave"
+  - "indoor-plant"
+  - "carpet"
+  - "rug"
+
+# Extra descriptions for low mobility examples
+lm_descriptions:
+  - "furniture that is not often moved"
+  - "furniture that is used for sitting"
+  - "furniture that is used for placing things"
+```txt

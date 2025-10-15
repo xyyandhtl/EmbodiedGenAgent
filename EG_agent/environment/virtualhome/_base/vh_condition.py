@@ -6,7 +6,7 @@ class VHCondition(Condition):
     num_args = 1
 
     def update(self) -> Status:
-        if self.name in self.agent.condition_set:
+        if self.name in self.agent_env.condition_set:
             return Status.SUCCESS
         else:
             return Status.FAILURE

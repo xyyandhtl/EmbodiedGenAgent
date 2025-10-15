@@ -20,6 +20,6 @@ class Watch(VHAction):
         return info
 
     def change_condition_set(self):
-        self.agent.condition_set |= (self.info["add"])
-        self.agent.condition_set -= self.info["del_set"]
-        # self.agent.condition_set.add(f"IsWatching(self,{self.args[0]})")
+        self.agent_env.condition_set |= (self.info["add"])
+        self.agent_env.condition_set -= self.info["del_set"]
+        # self.agent_env.condition_set.add(f"IsWatching(self,{self.args[0]})")

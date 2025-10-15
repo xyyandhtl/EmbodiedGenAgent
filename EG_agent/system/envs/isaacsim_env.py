@@ -198,7 +198,7 @@ class IsaacsimEnv(BaseAgentEnv):
         self._last_obs_time = timestamp
 
         # Optionally update env state for FOV checks
-        self.env_update({
+        self.agent_env_update({
             "cam_pose_w": [t[0], t[1], t[2], qw, qx, qy, qz],
             "cam_fov_x_deg": self.cam_fov_x_deg,
             "cam_aspect": self.cam_aspect,
@@ -213,7 +213,7 @@ class IsaacsimEnv(BaseAgentEnv):
     # ==========================================
     # 环境状态与目标管理（状态更新、目标位置、完成判定）
     # ==========================================
-    def env_update(self, env_data: dict):
+    def agent_env_update(self, env_data: dict):
         """更新环境态并实时刷新目标可视性。"""
         self.cur_agent_states = {**env_data}
         # Read camera parameters from env_data

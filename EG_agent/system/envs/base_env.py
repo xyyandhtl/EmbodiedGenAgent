@@ -6,7 +6,7 @@ from EG_agent.planning.btpg import BehaviorTree
 
 # Merged Agent and Env for simplicity
 # If hard to work or clarify the logic, separate them into two classes
-class BaseAgentEnv(object):
+class BaseAgentEnv:
     # Env attributes
     agent_num = 1
     behavior_lib_path = None
@@ -20,7 +20,6 @@ class BaseAgentEnv(object):
     def __init__(self):
         self.time = 0
         self.start_time = time.time()
-        self.env = self  # so code expecting agent.env keeps working
         self.condition_set = set()  # moved from Agent
         self.bt: BehaviorTree = None  # type: ignore
 
@@ -62,7 +61,7 @@ class BaseAgentEnv(object):
                     print("\n")
                     self.last_tick_output = bt_output
 
-        # self.env_step()
+        # self.agent_env_step()
         self.last_step_time = self.time
         return self.task_finished()
 

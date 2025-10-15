@@ -3,14 +3,14 @@ import math
 from EG_agent.planning.btpg.behavior_tree.base_nodes import Action
 from EG_agent.planning.btpg.behavior_tree import Status
 from EG_agent.prompts.default_objects import *
-# from EG_agent.system.envs.base_env import BaseAgentEnv
-from EG_agent.system.envs.isaacsim_env import IsaacsimEnv   # for debug convenience
+
+from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
 
 class EmbodiedAction(Action):
     can_be_expanded = True
     num_args = 1
 
-    env: IsaacsimEnv = None  # type: ignore
+    agent_env: IsaacsimEnv = None  # type: ignore
 
     # TODO: 不再区分 NAV_POINTS 和 CAPTUREABLE 等等了，所有 TARGETS 一律地位相同
     # use shared sets from object_sets.py
@@ -33,7 +33,7 @@ class EmbodiedAction(Action):
         return self.__class__.__name__
 
     def change_condition_set(self):
-        pass
+        raise NotImplementedError
 
     def update(self) -> Status:
         # 在这里执行具体的动作逻辑，比如移动、拍照等
@@ -43,20 +43,20 @@ class EmbodiedAction(Action):
         cur_action_done = False
 
         if cur_action == "walk":
-            cur_goal_place = self.env.cur_goal_places[self.args[0].lower()]
-            cur_cmd_vel = self.env.cur_agent_states.get("cmd_vel", (0,0,0))
-            self.env.run_action("cmd_vel", cur_cmd_vel)
+            cur_goal_place = self.agent_env.cur_goal_places[self.args[0].lower()]
+            cur_cmd_vel = self.agent_env.cur_agent_states.get("cmd_vel", (0,0,0))
+            self.agent_env.run_action("cmd_vel", cur_cmd_vel)
             # If current target has entered camera FOV, consider walk complete
-            # if getattr(self.env, "goal_inview", {}).get(self.args[0].lower(), False):
-            if self.env.goal_inview[self.args[0].lower()]:
+            # if getattr(self.agent_env, "goal_inview", {}).get(self.args[0].lower(), False):
+            if self.agent_env.goal_inview[self.args[0].lower()]:
                 cur_action_done = True
         elif cur_action == "mark":
-            self.env.run_action("mark", None)
+            self.agent_env.run_action("mark", None)
         elif cur_action == "capture":
-            self.env.run_action("enum_command", (0,))
+            self.agent_env.run_action("enum_command", (0,))
             cur_action_done = True
         elif cur_action == "report":
-            self.env.run_action("enum_command", (1,))
+            self.agent_env.run_action("enum_command", (1,))
             cur_action_done = True
         else:
             raise ValueError(f"Unknown action type: {cur_action}")

@@ -27,6 +27,6 @@ class RightPutIn(PutIn):
 
 
     def change_condition_set(self):
-        self.agent.condition_set |= (self.info["add"])
-        self.agent.condition_set -= self.info["del_set"]
+        self.agent_env.condition_set |= (self.info["add"])
+        self.agent_env.condition_set -= self.info["del_set"]
 
