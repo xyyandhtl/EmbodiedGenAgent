@@ -8,7 +8,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.publisher import Publisher
 from rclpy.executors import MultiThreadedExecutor
-from geometry_msgs.msg import Twist, PoseStamped
+from geometry_msgs.msg import Twist, PoseStamped, PointStamped
 from std_msgs.msg import Int32
 from sensor_msgs.msg import Image, CompressedImage, CameraInfo
 from nav_msgs.msg import Odometry
@@ -52,6 +52,7 @@ class IsaacsimEnv(BaseAgentEnv):
         self.cmd_vel_pub: Publisher = None
         self.nav_pose_pub: Publisher = None
         self.enum_pub: Publisher = None
+        self.mark_pub: Publisher = None
 
         # Subscribers and sync
         self._rgb_sub = None
@@ -80,6 +81,21 @@ class IsaacsimEnv(BaseAgentEnv):
         self._cur_path = []
         self._cur_cmd_vel = (0.0, 0.0, 0.0)  # vx, vy, wz
         self._action_count = 0
+        # 新增：可扩展动作分发表（运行时绑定）
+        self._action_dispatch = {
+            "cmd_vel": self._handle_cmd_vel,
+            "cmdvel": self._handle_cmd_vel,
+            "cmd-vel": self._handle_cmd_vel,
+            "nav_pose": self._handle_nav_pose,
+            "goal_pose": self._handle_nav_pose,
+            "pose": self._handle_nav_pose,
+            "enum": self._handle_enum,
+            "enum_command": self._handle_enum,
+            "command_enum": self._handle_enum,
+            "mark": self._handle_mark,
+            "mark_point": self._handle_mark,
+            "place_flag": self._handle_mark,
+        }
 
     def configure_ros(self, cfg) -> None:
         """创建 ROS 节点、发布/订阅与同步器，并在后台线程 spin。"""
@@ -100,6 +116,8 @@ class IsaacsimEnv(BaseAgentEnv):
         self.cmd_vel_pub = self.ros_node.create_publisher(Twist, cfg.ros.pubs.cmd_vel, 10)
         self.nav_pose_pub = self.ros_node.create_publisher(PoseStamped, cfg.ros.pubs.nav_pose, 10)
         self.enum_pub = self.ros_node.create_publisher(Int32, cfg.ros.pubs.enum_cmd, 10)
+        # 合并：统一使用 /mark_point (PointStamped)
+        self.mark_pub = self.ros_node.create_publisher(PointStamped, "/mark_point", 10)
 
         # Subs + sync
         if self.use_compressed_topic:
@@ -228,76 +246,105 @@ class IsaacsimEnv(BaseAgentEnv):
         return self.cur_goal_set and self.cur_goal_set <= self.condition_set
 
     # ==========================================
-    # 动作发布与执行（cmd_vel、nav_pose、枚举命令）
+    # 动作发布与执行（cmd_vel、nav_pose、枚举命令、mark）
     # ==========================================
-    def run_action(self, action_type: str, action: tuple, verbose=True):
+    def run_action(self, action_type: str, action: tuple | None, verbose=True):
         """
         严格动作格式：
           - 'cmd_vel': [vx, vy, wz]
           - 'nav_pose': [x,y,z,qw,qx,qy,qz]
           - 'enum'/'enum_command': 单个或多个 Int32
+          - 'mark': () 或 [x,y,z]（空表示在机器人前方插旗；否则在指定坐标插旗）
         """
-        verbose = verbose and self._action_count % 10 == 0
+        # verbose = verbose and self._action_count % 10 == 0
         self._action_count += 1
-        # ensure node/publishers exist
         if self.ros_node is None:
             raise RuntimeError("ROS node not initialized; cannot publish actions.")
 
-        # cmd_vel: expect exactly 3 elements [vx, vy, wz]
-        if action_type in ("cmd_vel", "cmdvel", "cmd-vel"):
-            if not isinstance(action, (list, tuple, _np.ndarray)) or len(action) != 3:
-                raise ValueError("cmd_vel action must be a list/tuple/ndarray of 3 elements: [vx, vy, wz].")
-            vx, vy, wz = float(action[0]), float(action[1]), float(action[2])
-            twist = Twist()
-            twist.linear.x = vx
-            twist.linear.y = vy
-            twist.linear.z = 0.0
-            twist.angular.x = 0.0
-            twist.angular.y = 0.0
-            twist.angular.z = wz
-            self.cmd_vel_pub.publish(twist)
+        key = str(action_type).lower().strip()
+        handler = self._action_dispatch[key]
+        if handler is None:
+            raise ValueError(f"Action type {action_type} not registered and not a known ROS-publishable command.")
+        handler(action, verbose)
+
+    # 具体动作处理器（更易扩展）
+    def _handle_cmd_vel(self, action, verbose: bool):
+        if not isinstance(action, (list, tuple, _np.ndarray)) or len(action) != 3:
+            raise ValueError("cmd_vel action must be a list/tuple/ndarray of 3 elements: [vx, vy, wz].")
+        vx, vy, wz = float(action[0]), float(action[1]), float(action[2])
+        twist = Twist()
+        twist.linear.x = vx
+        twist.linear.y = vy
+        twist.linear.z = 0.0
+        twist.angular.x = 0.0
+        twist.angular.y = 0.0
+        twist.angular.z = wz
+        self.cmd_vel_pub.publish(twist)
+        if verbose:
+            print(f"[IsaacsimEnv] Published cmd_vel: vx={vx}, vy={vy}, wz={wz}")
+
+    def _handle_nav_pose(self, action, verbose: bool):
+        if not isinstance(action, (list, tuple, _np.ndarray)) or len(action) != 7:
+            raise ValueError("nav_pose action must be a list/tuple/ndarray of 7 elements: [x,y,z,qw,qx,qy,qz].")
+        x, y, z = float(action[0]), float(action[1]), float(action[2])
+        qw, qx, qy, qz = float(action[3]), float(action[4]), float(action[5]), float(action[6])
+        ps = PoseStamped()
+        ps.header.stamp = self.ros_node.get_clock().now().to_msg()
+        ps.header.frame_id = "map"
+        ps.pose.position.x = x
+        ps.pose.position.y = y
+        ps.pose.position.z = z
+        ps.pose.orientation.w = qw
+        ps.pose.orientation.x = qx
+        ps.pose.orientation.y = qy
+        ps.pose.orientation.z = qz
+        self.nav_pose_pub.publish(ps)
+        if verbose:
+            print(f"[IsaacsimEnv] Published nav_pose: pos=({x},{y},{z}) quat=({qw},{qx},{qy},{qz})")
+
+    def _handle_enum(self, action, verbose: bool):
+        to_publish = []
+        if isinstance(action, (list, tuple, _np.ndarray)):
+            to_publish = [int(x) for x in action]
+        else:
+            to_publish = [int(action)]
+        for cmd in to_publish:
+            msg = Int32()
+            msg.data = int(cmd)
+            self.enum_pub.publish(msg)
             if verbose:
-                print(f"[IsaacsimEnv] Published cmd_vel: vx={vx}, vy={vy}, wz={wz}")
-            return
+                print(f"[IsaacsimEnv] Published enum command: {cmd}")
 
-        # nav_pose: expect exactly 7 elements [x,y,z,qw,qx,qy,qz]
-        if action_type in ("nav_pose", "goal_pose", "pose"):
-            if not isinstance(action, (list, tuple, _np.ndarray)) or len(action) != 7:
-                raise ValueError("nav_pose action must be a list/tuple/ndarray of 7 elements: [x,y,z,qw,qx,qy,qz].")
-            x, y, z = float(action[0]), float(action[1]), float(action[2])
-            qw, qx, qy, qz = float(action[3]), float(action[4]), float(action[5]), float(action[6])
-            ps = PoseStamped()
-            ps.header.stamp = self.ros_node.get_clock().now().to_msg()
-            ps.header.frame_id = "map"
-            ps.pose.position.x = x
-            ps.pose.position.y = y
-            ps.pose.position.z = z
-            ps.pose.orientation.w = qw
-            ps.pose.orientation.x = qx
-            ps.pose.orientation.y = qy
-            ps.pose.orientation.z = qz
-            self.nav_pose_pub.publish(ps)
+    def _handle_mark(self, action, verbose: bool):
+        """
+        'mark' 动作：
+          - action == () / [] / None / 长度==0: 发布默认 mark（PointStamped.x/y/z = NaN）
+          - action 为长度3: 在 [x,y,z] 插旗（/mark_point, PointStamped）
+        """
+        pt = PointStamped()
+        pt.header.stamp = self.ros_node.get_clock().now().to_msg()
+        pt.header.frame_id = "map"
+
+        # 默认：空参数 -> 用 NaN 作为哨兵
+        if not action:
+            pt.point.x = math.nan
+            pt.point.y = math.nan
+            pt.point.z = math.nan
+            self.mark_pub.publish(pt)
             if verbose:
-                print(f"[IsaacsimEnv] Published nav_pose: pos=({x},{y},{z}) quat=({qw},{qx},{qy},{qz})")
+                print("[IsaacsimEnv] Published mark (default via NaN).")
             return
 
-        # enum: accept single int or iterable of ints; publish one Int32 per command
-        if action_type in ("enum", "enum_command", "command_enum"):
-            to_publish = []
-            if isinstance(action, (list, tuple, _np.ndarray)):
-                to_publish = [int(x) for x in action]
-            else:
-                to_publish = [int(action)]
-            for cmd in to_publish:
-                msg = Int32()
-                msg.data = int(cmd)
-                self.enum_pub.publish(msg)
-                if verbose:
-                    print(f"[IsaacsimEnv] Published enum command: {cmd}")
-            return
-
-        # unknown action
-        raise ValueError(f"Action type {action_type} not registered and not a known ROS-publishable command.")
+        # # 显式坐标
+        # if not isinstance(action, (list, tuple, _np.ndarray)) or len(action) != 3:
+        #     raise ValueError("mark action must be empty () or a 3-element [x,y,z] coordinate.")
+        x, y, z = float(action[0]), float(action[1]), float(action[2])
+        pt.point.x = x
+        pt.point.y = y
+        pt.point.z = z
+        self.mark_pub.publish(pt)
+        if verbose:
+            print(f"[IsaacsimEnv] Published mark point at: ({x}, {y}, {z})")
 
     # ==========================================
     # 相机几何与可视性辅助（旋转、视锥检测）

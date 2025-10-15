@@ -19,7 +19,8 @@ class ZMQBridge:
         {
             "cmd_vel": np.float32[6],  # [lin.x, lin.y, lin.z, ang.x, ang.y, ang.z]
             "nav_pose": (pos_np(shape=(3,)), quat_wxyz_np(shape=(4,))),
-            "enum": int
+            "enum": int,
+            "mark": None or np.ndarray(shape=(3,))  # None means default mark, array means [x,y,z]
         }
     """
     def __init__(self, pub_port: int = 5555, sub_port: int = 5556):
@@ -48,6 +49,8 @@ class ZMQBridge:
         self.latest_cmd_vel = None  # (lin_x, ang_z)
         self.nav_pose = None        # (pos_np, quat_np_wxyz)
         self.enum_cmd = None        # int
+        # 新增：mark 请求（每 tick 重置；收到则为 {"pos": None|np.ndarray})
+        self.mark_pos = None
 
     def publish_data(self, data):
         # try:
@@ -61,6 +64,7 @@ class ZMQBridge:
         self.latest_cmd_vel = None
         self.enum_cmd = None
         self.nav_pose = None
+        self.mark_pos = None
         events = dict(self.poller.poll(0))
         if self.sub in events:
             try:
@@ -76,6 +80,12 @@ class ZMQBridge:
                         self.nav_pose = (pos_np, quat_np_wxyz)
                     if "enum" in cmd_data:
                         self.enum_cmd = int(cmd_data["enum"])
+                    # 新增：解析 mark
+                    if "mark" in cmd_data:
+                        # print(f"[ZMQ Bridge] Received mark: {cmd_data['mark']}")
+                        val = cmd_data["mark"]
+                        self.mark_pos = (float(val[0]), float(val[1]), float(val[2]))
+                        # print(f"[ZMQ Bridge] Parsed mark position: {self.mark_pos}")
             except zmq.Again:
                 pass
             except Exception:

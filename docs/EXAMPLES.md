@@ -97,13 +97,14 @@ INFO:EG_agent.vlmap.utils.time_utils:+-------------------------------+----------
 +-------------------------------+----------------+-----------------------+
 ```
 
-### test simulation env receiving ROS2 command topics
+### test simulation env receiving ROS2 predefined command topics
 Publish cmd_vel (10 Hz), then stop:
 ```shell
 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 2.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: -1.0}}" -r 10
 # stop
 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" --once
 ```
+
 Publish nav_pose (PoseStamped) once
 ```shell
 ros2 topic pub /nav_pose geometry_msgs/msg/PoseStamped "{
@@ -114,14 +115,23 @@ ros2 topic pub /nav_pose geometry_msgs/msg/PoseStamped "{
   }
 }" --once
 ```
-Publish enum_cmd (0: Capture, 1: Mark, 2: Report):
+
+Publish mark_point (PointStamped) once
+```shell
+# Mark point at NaN (default mark in front of robot)
+ros2 topic pub -1 /mark_point geometry_msgs/msg/PointStamped "{header: {frame_id: map}, point: {x: .nan, y: .nan, z: .nan}}"
+# Mark point at specific position
+ros2 topic pub -1 /mark_point geometry_msgs/msg/PointStamped "{header: {frame_id: map}, point: {x: 1.0, y: 2.0, z: 0.0}}"
+```
+
+Publish enum_cmd (0: Capture, 1: Report):
 ```shell
 # Capture
 ros2 topic pub /enum_cmd std_msgs/msg/Int32 "{data: 0}" --once
-# Mark
-ros2 topic pub /enum_cmd std_msgs/msg/Int32 "{data: 1}" --once
 # Report
-ros2 topic pub /enum_cmd std_msgs/msg/Int32 "{data: 2}" --once
+ros2 topic pub /enum_cmd std_msgs/msg/Int32 "{data: 1}" --once
 ```
-- Mark action would place a flag in front of the robot:
+
+- Mark action would place a flag in front of the robot or at the specified position:
 ![alt text](assets/mark.jpg)
+- Capture and Report actions would export the captured images and reports into [captured](../app/captured) and [reports](../app/reports).

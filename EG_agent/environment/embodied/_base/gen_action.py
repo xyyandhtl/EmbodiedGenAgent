@@ -1,3 +1,5 @@
+import math
+
 from EG_agent.planning.btpg.behavior_tree.base_nodes import Action
 from EG_agent.planning.btpg.behavior_tree import Status
 from EG_agent.prompts.default_objects import *
@@ -48,14 +50,13 @@ class EmbodiedAction(Action):
             # if getattr(self.env, "goal_inview", {}).get(self.args[0].lower(), False):
             if self.env.goal_inview[self.args[0].lower()]:
                 cur_action_done = True
+        elif cur_action == "mark":
+            self.env.run_action("mark", None)
         elif cur_action == "capture":
             self.env.run_action("enum_command", (0,))
             cur_action_done = True
-        elif cur_action == "mark":
-            self.env.run_action("enum_command", (1,))
-            cur_action_done = True
         elif cur_action == "report":
-            self.env.run_action("enum_command", (2,))
+            self.env.run_action("enum_command", (1,))
             cur_action_done = True
         else:
             raise ValueError(f"Unknown action type: {cur_action}")

@@ -8,8 +8,10 @@ outputs/
 dataset/
 captured/
 reports/
-
 usd/
 
 simulation/data/terrains/*
 *.pt
+
+behavior_tree.png
+tree.btml

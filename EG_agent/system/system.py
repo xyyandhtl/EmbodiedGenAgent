@@ -122,6 +122,7 @@ class EGAgentSystem:
         self._log("Configuring ROS...")
         self.env.configure_ros(self.cfg)
         self._log("Backend created successfully.")
+        self.env.run_action("mark", (4, 5, 0))    # for test
         return True
     
     def start(self):
@@ -146,7 +147,6 @@ class EGAgentSystem:
         self._stop_event.set()
         self._running = False
         self._emit("status", self.status)
-        self.env.close()
 
     def save(self, map_path: str | None = None):
         """Save the current global map to the given path or default cfg.map_save_path."""
@@ -172,7 +172,6 @@ class EGAgentSystem:
         self.update_objects_from_map()
         # For quick test, directly set a goal pose
         self.vlmap_backend.get_global_path(goal_pose=np.array([4.0, 5.0]))
-
 
     def update_objects_from_map(self):
         if not self.backend_ready:
@@ -247,6 +246,7 @@ class EGAgentSystem:
 
         # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置告知给 IsaacsimEnv
         self.update_cur_goal_set()
+        self.env.run_action("mark", None)  # for test
 
     # ---------------------- 模块间数据交互 -----------------------
     def update_cur_goal_set(self):
