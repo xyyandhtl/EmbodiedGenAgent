@@ -42,7 +42,7 @@ class EGAgentSystem:
 
         # Agent 载体部署环境
         # 组成：通过 bint_bt 动态绑定行为树，定义 run_action 实现交互逻辑，通过 ROS2 与部署环境信息收发
-        # 运行：行为树叶节点在被 tick 时，通过调用其绑定的 env 的 run_action 实现智能体到部署环境交互的 action
+        # 运行：行为树叶节点在被 tick 时，通过调用其绑定的 agent_env.run_action 实现智能体到部署环境交互的 action
         self.agent_env = IsaacsimEnv()
         cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
         self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
@@ -172,6 +172,7 @@ class EGAgentSystem:
         self.update_objects_from_map()
         # For quick test, directly set a goal pose
         self.vlmap_backend.get_global_path(goal_pose=np.array([4.0, 5.0]))
+        self._log(f"Computed global_path: {self.dm.curr_global_path}")
 
     def update_objects_from_map(self):
         if not self.backend_ready:
@@ -201,7 +202,7 @@ class EGAgentSystem:
                 # (2) dualmap.parallel_process 处理该关键帧（Detector 对图像生成物体观测结果；更新地图并计算导航路径（全局+局部））
                 self.vlmap_backend.run_once(lambda: time.time())
             # 环境 step（如启用）：is_finished = self.agent_env.step()
-            self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
+            # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
 
         if self.backend_ready:
             self.dm.end_process()
@@ -327,6 +328,7 @@ class EGAgentSystem:
         semantic_map = self.dm.get_semantic_map_image()
         # TODO: 语义实体地图 + 导航路径 (not at all)
         if semantic_map is not None:
+            self.update_objects_from_map()
             return semantic_map
         return self._gen_dummy_image(400, 300, "Semantic+Path")
 

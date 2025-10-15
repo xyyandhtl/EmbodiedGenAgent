@@ -2,8 +2,7 @@
 {AllCondition}
 
 [Object]
-<NAV_POINTS>={NAV_POINTS}
-<TARGETS>={TARGETS}
+{AllObject}
 
 [Examples]
 - 指令: "请前往控制室。"

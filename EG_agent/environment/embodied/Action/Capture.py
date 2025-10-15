@@ -3,7 +3,7 @@ from EG_agent.environment.embodied._base.action import EmbodiedAction
 class Capture(EmbodiedAction):
     can_be_expanded = True
     num_args = 1
-    valid_args = EmbodiedAction.CAPTUREABLE
+    valid_args = EmbodiedAction.AllObject
 
     def __init__(self, *args):
         super().__init__(*args)

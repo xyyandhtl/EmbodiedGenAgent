@@ -78,4 +78,4 @@ lm_descriptions:
   - "furniture that is not often moved"
   - "furniture that is used for sitting"
   - "furniture that is used for placing things"
-```txt
+```
