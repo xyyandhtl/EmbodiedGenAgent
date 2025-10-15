@@ -185,9 +185,10 @@ class EGAgentSystem:
             self.goal_generator.prepare_prompt(self.bt_objects)
             self.bt_generator.set_key_objects(list(self.bt_objects))
             self._log(f"已设置原子动作: \n{[action.name for action in self.bt_generator.planner.actions]}")
-            chinese_objs = self.goal_generator.ask_question(
-                f"请用中文列出以下英文目标集合：{self.bt_objects}", use_system_prompt=False)
-            self._conv(f"智能体: 可以参考的任务对象有 {chinese_objs}")
+            if self.cfg['caring_mode']:
+                chinese_objs = self.goal_generator.ask_question(
+                    f"请用中文列出以下英文目标集合：{self.bt_objects}", use_system_prompt=False)
+                self._conv(f"智能体: 可以参考的任务对象有 {chinese_objs}")
 
     def _run_loop(self):
         """Main loop: step environment, propagate events, and check completion."""
@@ -196,13 +197,23 @@ class EGAgentSystem:
         is_finished = False
         while not self._stop_event.is_set() and not is_finished:
             time.sleep(0.1)
+
             # 地图/导航处理（需后端已创建）
-            if self.backend_ready:
-                # (1) 检查 synced_data_queue 中的最新帧是否为 关键帧
-                # (2) dualmap.parallel_process 处理该关键帧（Detector 对图像生成物体观测结果；更新地图并计算导航路径（全局+局部））
-                self.vlmap_backend.run_once(lambda: time.time())
-            # 环境 step（如启用）：is_finished = self.agent_env.step()
+            # (1) 检查 synced_data_queue 中的最新帧是否为 关键帧
+            # (2) dualmap.parallel_process 处理该关键帧（Detector 对图像生成物体观测结果；更新地图并计算导航路径（全局+局部））
+            self.vlmap_backend.run_once(lambda: time.time())
+
+            # 检查是否有行为树目标在视野内
+            inview_goals = self.agent_env.get_inview_goals()
+            if inview_goals:
+                self._log(f"Goal in view: {inview_goals}")
+
+            # 简单导航测试
             # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
+
+            # 最终行为树执行测试
+            # is_finished = self.agent_env.step()
+            # self._log(f"当前行为树执行节点：{self.agent_env.last_tick_output}")
 
         if self.backend_ready:
             self.dm.end_process()
@@ -246,14 +257,13 @@ class EGAgentSystem:
         self._log(f"Behavior tree image updated: {img_path.resolve()}")
 
         # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置告知给 IsaacsimEnv
+        self.agent_env.bind_bt(self.bt)
         self.update_cur_goal_set()
         self.agent_env.run_action("mark", None)  # for test
 
     # ---------------------- 模块间数据交互 -----------------------
     def update_cur_goal_set(self):
-        """After feed_instruction, bind bt to env, query the target object positions"""
-        # (1) 将 BT 与 IsaacsimEnv环境交互层 绑定
-        self.agent_env.bind_bt(self.bt)
+        """After feed_instruction, bind bt to env, query the target object positions"""        
         if not self.backend_ready:
             self._log("[system] Backend not created, cannot query object positions.")
             self._conv("智能体: 后台未创建，无法查询目标位置，请先点击右侧“创建后台”。")
