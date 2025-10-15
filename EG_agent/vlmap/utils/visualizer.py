@@ -256,7 +256,7 @@ class ReRunVisualizer:
         padding = 100  # pixels
         width = int((map_size[0]) / resolution * scale_factor) + padding
         height = int((map_size[1]) / resolution * scale_factor) + padding
-        
+
         pil_img = Image.new('RGB', (width, height), (255, 255, 255))
         draw = ImageDraw.Draw(pil_img)
 
@@ -347,22 +347,19 @@ class ReRunVisualizer:
 
         # 2. Draw navigation path
         if nav_path and len(nav_path) > 1:
-            print(f"nav_path: {nav_path}")
+            # print(f"[DEBUG] nav_path: {nav_path}")
             path_points_img = []
             for point in nav_path:
-                if isinstance(point, dict) and 'pose' in point and 'position' in point['pose']:
-                    pos = point['pose']['position']
-                    p = np.array([pos['x'], pos['y'], pos['z']])
-                elif isinstance(point, (list, np.ndarray)) and len(point) >= 2:
+                if isinstance(point, (list, tuple, np.ndarray)) and len(point) >= 2:
                     p = np.array(point)
                 else:
                     continue
                 path_point_img = world_to_img(p)
                 path_points_img.append(path_point_img)
             if len(path_points_img) > 1:
-                draw.line(path_points_img, fill=(0, 255, 0), width=3) # Green line
+                draw.line(path_points_img, fill=(0, 255, 0), width=6) # Green line
 
-        # Draw current pose as an arrow
+        # 3. Draw current pose as an arrow
         if current_pose is not None:
             pos = current_pose[:3, 3]
             rot_matrix = current_pose[:3, :3]
