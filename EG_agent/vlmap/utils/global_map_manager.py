@@ -557,15 +557,14 @@ class GlobalMapManager(BaseMapManager):
         # Step 2: Set Start point and goal point
         # transform curr pose to 2d coordinate
         curr_position = curr_pose[:3, 3]
-        start_position = nav_graph.calculate_pos_2d(curr_position)
+        start_position_grid = nav_graph.calculate_pos_2d(curr_position)
 
         # Select and process goal based on mode
-        if goal_mode is not GoalMode.POSE:
-            goal_position = self.get_goal_position(nav_graph, start_position, goal_mode)
+        goal_position_grid = self.get_goal_position(nav_graph, start_position_grid, goal_position, goal_mode)
 
         # Find shortest path
-        if goal_position is not None:
-            path = nav_graph.find_shortest_path(start_position, goal_position)
+        if goal_position_grid is not None:
+            path = nav_graph.find_shortest_path(start_position_grid, goal_position_grid)
             if path:
                 logger.info("[GlobalMap][Path] Path successfully generated.")
                 return nav_graph.pos_path
@@ -576,7 +575,7 @@ class GlobalMapManager(BaseMapManager):
             logger.info("[GlobalMap][Path] No valid goal position provided.")
             return []
 
-    def get_goal_position(self, nav_graph, start_position, goal_mode):
+    def get_goal_position(self, nav_graph, start_position_grid, goal_position_world, goal_mode):
         """
         Get the goal position based on the specified mode.
 
@@ -594,7 +593,14 @@ class GlobalMapManager(BaseMapManager):
 
         if goal_mode == GoalMode.CLICK:
             logger.info("[GlobalMap][Path] Goal mode: CLICK")
-            return nav_graph.visualize_start_and_select_goal(start_position)
+            return nav_graph.visualize_start_and_select_goal(start_position_grid)
+
+        if goal_mode == GoalMode.POSE:
+            logger.info("[GlobalMap][Path] Goal mode: POSE")
+            if goal_position_world is not None:
+                return nav_graph.calculate_pos_2d(goal_position_world)
+            else:
+                return None
 
         if goal_mode == GoalMode.INQUIRY:
             logger.info("[GlobalMap][Path] Goal mode: INQUIRY")
@@ -623,11 +629,11 @@ class GlobalMapManager(BaseMapManager):
             goal_2d = nav_graph.calculate_pos_2d(goal_3d)
             # check if is in free space, actually the goal is not
             if not nav_graph.free_space_check(goal_2d) is False:
-                snapped_goal = nav_graph.snap_to_free_space_directional(goal_2d, start_position, nav_graph.free_space)
+                snapped_goal = nav_graph.snap_to_free_space_directional(goal_2d, start_position_grid, nav_graph.free_space)
                 # nearest_node = nav_graph.find_nearest_node(goal_2d)
 
                 if self.cfg.use_directional_path:
-                    nearest_node = nav_graph.find_nearest_node(snapped_goal, start_position)
+                    nearest_node = nav_graph.find_nearest_node(snapped_goal, start_position_grid)
                 else:
                     nearest_node = nav_graph.find_nearest_node(goal_2d)
 
