@@ -11,6 +11,7 @@ import re
 
 import yaml
 import numpy as np
+from collections import deque
 from scipy.spatial.transform import Rotation as R
 from dynaconf import Dynaconf, LazySettings
 
@@ -108,6 +109,9 @@ class Dualmap:
 
         # debug param: path counter
         self.path_counter = 0
+
+        # History of agent's actual traversed path
+        self.traversed_path = deque(maxlen=30)
 
         # Parallel for mapping thread
         if self.cfg.use_parallel:
@@ -322,6 +326,10 @@ class Dualmap:
 
         # Get current pose
         self.curr_pose = data_input.pose
+
+        # Record the traversed path
+        if self.curr_pose is not None:
+            self.traversed_path.append(self.curr_pose[:3, 3].copy())
 
         # --- 1. Detection process ---
         start_time = time.time()
@@ -764,6 +772,7 @@ class Dualmap:
             self.global_map_manager,
             resolution=self.cfg.resolution,
             curr_pose=self.curr_pose,
+            traj_path=self.traversed_path,
             nav_path=self.curr_global_path  # TODO: 后续更改为 self.action_path，或者传入 global_path 和 local_path，以不同颜色显示
         )
 

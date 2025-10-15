@@ -231,7 +231,7 @@ class ReRunVisualizer:
 
         return image
 
-    def get_semantic_map_image(self, global_map_manager, resolution=0.03, curr_pose=None, nav_path=None) -> None | np.ndarray:
+    def get_semantic_map_image(self, global_map_manager, resolution=0.03, curr_pose=None, traj_path=None, nav_path=None) -> None | np.ndarray:
         """
         Generates a top-down 2D image of the global semantic map, including the navigation path and current robot position.
             * resolution = 0.03 m/pix (same as the resolution of the NavGraph in calculate_global/local_path())
@@ -359,7 +359,20 @@ class ReRunVisualizer:
             if len(path_points_img) > 1:
                 draw.line(path_points_img, fill=(0, 255, 0), width=6) # Green line
 
-        # 3. Draw current pose as an arrow
+        # 3. Draw trajectory
+        if traj_path and len(traj_path) > 1:
+            traj_path_points_img = []
+            for point in traj_path:
+                if isinstance(point, (list, tuple, np.ndarray)) and len(point) >= 2:
+                    p = np.array(point)
+                else:
+                    continue
+                traj_path_point_img = world_to_img(p)
+                traj_path_points_img.append(traj_path_point_img)
+            if len(traj_path_points_img) > 1:
+                draw.line(traj_path_points_img, fill=(0, 0, 255), width=4)  # Blue line
+
+        # 4. Draw current pose as an arrow
         if curr_pose is not None:
             pos = curr_pose[:3, 3]
             rot_matrix = curr_pose[:3, :3]
