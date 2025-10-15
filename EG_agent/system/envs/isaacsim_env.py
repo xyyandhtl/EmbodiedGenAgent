@@ -29,10 +29,6 @@ class IsaacsimEnv(BaseAgentEnv):
 
     behavior_lib_path = f"{AGENT_ENV_PATH}/embodied"
 
-    cur_goal_set = set()
-    cur_goal_places = {}
-    cur_agent_states = {}
-
     # Camera model defaults and tracking
     cam_fov_x_deg = 90.0
     cam_aspect = 4.0 / 3.0
@@ -156,6 +152,10 @@ class IsaacsimEnv(BaseAgentEnv):
         """Attach VLMap backend so ROSPublisher can publish dualmap outputs."""
         self._vlmap_backend = backend
 
+    def find_path(self, goal_pose):
+        """调用 VLMap 后端计算路径"""
+        return self._vlmap_backend.get_global_path(goal_pose)
+
     def _synced_callback(self, rgb_msg, depth_msg, odom_msg):
         """RGB/Depth/Odom 同步回调：解码 -> 位姿矩阵 -> 推送到 VLMap 后端 -> 更新可视状态"""
         # Timestamp
@@ -216,6 +216,10 @@ class IsaacsimEnv(BaseAgentEnv):
         # Recompute real-time visibility using cam_pose_w
         self._update_goal_inview()
         self._cur_cmd_vel = self._vlmap_backend.get_cmd_vel()
+
+    def get_inview_goals(self) -> list[str]:
+        """返回当前在相机视锥内的目标名称列表）。"""
+        return [name for name, inview in self.goal_inview.items() if inview]
 
     def set_object_places(self, places: dict[str, list[float]]):
         """设置/更新目标位置，并更新可视性（每个目标是否在当前相机的视锥内）"""

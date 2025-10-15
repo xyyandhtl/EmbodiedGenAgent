@@ -1,17 +1,19 @@
 # Notice:
-# It is just a example of how to implement a new environment.
+# It is just a example of how to implement a new environment, it is not a complete implementation.
 # The VHEnv scripts and simulators can be referred to https://github.com/DIDS-EI/BTPG.git.
 import subprocess
 import time
 
-from EG_agent.system.envs.base_env import BaseEnv
+from EG_agent.system.envs.base_env import BaseAgentEnv
 # from EG_agent.system.envs.virtualhome.simulation.unity_simulator import UnityCommunication
 from EG_agent.planning.btpg.utils import ROOT_PATH
 
 import atexit
 
-class VHEnv(BaseEnv):
+class VHEnv(BaseAgentEnv):
     agent_num = 1
+
+    headless = True
 
     # launch simulator
     # simulator_path = f'{ROOT_PATH}/../simulators/virtualhome/windows/VirtualHome.exe'

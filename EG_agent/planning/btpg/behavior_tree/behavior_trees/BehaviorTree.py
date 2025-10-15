@@ -1,6 +1,3 @@
-# from EG_agent.planning.btpg.behavior_tree.scene.scene import Scene
-# from EG_agent.planning.btpg.behavior_tree.behavior_tree.btml.btmlCompiler import load
-
 import os
 import py_trees as ptree
 from EG_agent.planning.btpg.behavior_tree.utils.visitor import StatusVisitor
@@ -54,9 +51,11 @@ class BehaviorTree(ptree.trees.BehaviourTree):
 
     def bind_agent(self, agent):
         def func(node):
-            node.agent = agent
-            node.env = agent.env
-            node.scene = agent.scene
+            # node.agent = agent
+            # node.env = agent.env
+            # node.scene = agent.scene
+            # Now they are all merged into agent_env for simplicity
+            node.agent_env = agent.agent_env
 
         traverse_and_modify_tree(self.root, func)
 
