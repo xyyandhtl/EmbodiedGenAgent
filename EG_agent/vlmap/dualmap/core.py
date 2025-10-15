@@ -760,7 +760,7 @@ class Dualmap:
         return cur_path[min(5, len(cur_path)-1)]
 
     def get_semantic_map_image(self):
-        semantic_map = self.visualizer.get_semantic_map_image(self.global_map_manager)
+        semantic_map = self.visualizer.get_semantic_map_image(self.global_map_manager, self.curr_pose, self.curr_global_path)  # TODO: 后续更改为 self.action_path，或者传入 global_path 和 local_path，以不同颜色显示
 
         if semantic_map is not None:
             save_dir = str(self.cfg.map_save_path)

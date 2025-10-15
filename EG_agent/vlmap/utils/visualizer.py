@@ -231,10 +231,12 @@ class ReRunVisualizer:
 
         return image
 
-    def get_semantic_map_image(self, global_map_manager) -> None | np.ndarray:
+    def get_semantic_map_image(self, global_map_manager, current_pose=None, nav_path=None) -> None | np.ndarray:
         """
-        Generates a top-down 2D image of the global semantic map.
+        Generates a top-down 2D image of the global semantic map, including the navigation path and current robot position.
         """
+        from PIL import Image, ImageDraw, ImageFont
+
         if not global_map_manager.has_global_map():
             return None
 
@@ -244,96 +246,166 @@ class ReRunVisualizer:
         if all_points.size == 0:
             return None
 
-        # Determine the bounding box of all points
+        # Determine the bounding box of whole pcd
         min_coords = np.min(all_points[:, :2], axis=0)
         max_coords = np.max(all_points[:, :2], axis=0)
-
         map_size = max_coords - min_coords  # the size of the image
 
         resolution = 0.05  # meters per pixel
-        scale_factor = 3.0
+        scale_factor = 6.0
         padding = 100  # pixels
         width = int((map_size[0]) / resolution * scale_factor) + padding
         height = int((map_size[1]) / resolution * scale_factor) + padding
-        image = np.full((height, width, 3), 255, dtype=np.uint8)
+        
+        pil_img = Image.new('RGB', (width, height), (255, 255, 255))
+        draw = ImageDraw.Draw(pil_img)
+
+        try:
+            # Use a common, often pre-installed, anti-aliased font.
+            # If not found, PIL will fall back to a default bitmap font.
+            font = ImageFont.truetype("DejaVuSans.ttf", size=int(12 * (scale_factor / 3)))
+            coord_font = ImageFont.truetype("DejaVuSans.ttf", size=int(10 * (scale_factor / 3)))
+        except IOError:
+            logger.warning("[Visualizer] DejaVuSans.ttf not found. Falling back to default font.")
+            font = ImageFont.load_default()
+            coord_font = ImageFont.load_default()
+
+        # Transform points to image coordinates (with scaling)
+        def world_to_img(point):
+            point_img = ((point[:2] - min_coords) / resolution * scale_factor).astype(int)
+            point_img[0] += padding // 2
+            point_img[1] = height - point_img[1] - (padding // 2)  # flip Y axis
+            return tuple(point_img)
 
         placed_label_boxes = [] # List to store bounding boxes of placed labels
 
-        # Draw each object
+        # 1. Draw each object
         for obj in global_map_manager.global_map:
             points = np.asarray(obj.pcd_2d.points)
             points = points[np.isfinite(points).all(axis=1)]
             if points.shape[0] == 0:
                 continue
-
-            # Transform points to image coordinates (with scaling)
-            points_img = ((points[:, :2] - min_coords) / resolution * scale_factor).astype(int)
-            points_img[:, 1] = height - points_img[:, 1] - 1  # flip Y axis
-            
+            # (1) Draw the points with class color on the image
             # Get the color for the object
             obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
             color_rgb = self.obj_classes.get_class_color(obj_name)  # float RGB color (0-1 range)
-            color_bgr_int = tuple(int(c * 255) for c in (color_rgb[2], color_rgb[1], color_rgb[0]))  # convert to integer BGR color (0-255 range)
+            color_rgb_int = tuple(int(c * 255) for c in color_rgb)  # (0-255 range)
 
-            # Draw the points on the image
-            for p in points_img:
-                # Use a slightly larger radius due to upscaling
-                cv2.circle(image, (p[0], p[1]), radius=int(2 * (scale_factor - 1)), color=color_bgr_int, thickness=-1)
+            # Transform points to image coordinates (with scaling)
+            points_img = np.array([world_to_img(p) for p in points])
 
-            # Get object bbox and text size
+            radius = int(2 * (scale_factor / 3))
+            for p_img in points_img:
+                draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=color_rgb_int)
+
+            # (2) Draw the class text on the image (with collision detection)
+            # Get object bbox in image coords and text size
             obj_x_min, obj_y_min = np.min(points_img, axis=0)
             obj_x_max, obj_y_max = np.max(points_img, axis=0)
-            centroid = np.mean(points_img, axis=0).astype(int)
+            centroid_img = np.mean(points_img, axis=0).astype(int)
 
-            font_face = cv2.FONT_HERSHEY_DUPLEX
-            font_scale = 0.3 * (scale_factor / 2)
-            font_thickness = 1
-            (text_w, text_h), baseline = cv2.getTextSize(obj_name, font_face, font_scale, font_thickness)
+            text_bbox = draw.textbbox((0, 0), obj_name, font=font)
+            text_w, text_h = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
 
-            # Define candidate positions (bottom-left corner of text)
+            # text_bbox candidate positions
             candidates = [
-                (centroid[0] - text_w // 2, centroid[1] - text_h // 2 - 3),  # Center
-                (obj_x_min + (obj_x_max - obj_x_min) // 2 - text_w // 2, obj_y_min - text_h), # Top-center
-                (obj_x_max + 1, obj_y_min + text_h // 2), # Top-right
-                (obj_x_min - text_w - 1, obj_y_min + text_h // 2), # Top-left
-                (obj_x_max + 1, obj_y_max), # Bottom-right
-                (obj_x_min - text_w - 1, obj_y_max), # Bottom-left
+                (centroid_img[0] - text_w // 2, centroid_img[1] - text_h // 2 - 5),  # Center
+                (obj_x_min + (obj_x_max - obj_x_min) // 2 - text_w // 2, obj_y_min - text_h),  # Top-center
+                (obj_x_max + 1, obj_y_min + text_h // 2),  # Top-right
+                (obj_x_min - text_w - 1, obj_y_min + text_h // 2),  # Top-left
+                (obj_x_max + 1, obj_y_max),  # Bottom-right
+                (obj_x_min - text_w - 1, obj_y_max),  # Bottom-left
             ]
 
             final_pos = None
-
             # Find a non-colliding position
             for pos in candidates:
-                # Calculate label bounding box
-                lx, ly = pos[0], pos[1]
-                label_box = (lx, ly - text_h, text_w, text_h + baseline)
+                lx, ly = pos
+                label_box = (lx, ly, lx + text_w, ly + text_h)
 
                 # Check for collision with image boundaries
-                if not (lx >= 0 and ly >= 0 and lx + label_box[2] < width and ly + label_box[3] < height):
+                if not (label_box[0] >= 0 and label_box[1] >= 0 and label_box[2] < width and label_box[3] < height):
                     continue
 
                 # Check for collision with other labels
                 is_colliding = False
                 for placed_box in placed_label_boxes:
-                    if not (label_box[0] > placed_box[0] + placed_box[2] or \
-                            label_box[0] + label_box[2] < placed_box[0] or \
-                            label_box[1] > placed_box[1] + placed_box[3] or \
-                            label_box[1] + label_box[3] < placed_box[1]):
+                    if not (label_box[2] < placed_box[0] or \
+                            label_box[0] > placed_box[2] or \
+                            label_box[3] < placed_box[1] or \
+                            label_box[1] > placed_box[3]):
                         is_colliding = True
                         break
-                
                 if not is_colliding:
                     final_pos = pos
                     placed_label_boxes.append(label_box)
                     break
-            
-            # If no good position is found, fall back to the default (top-right)
+            # If no good position is found, fall back to the center
             if final_pos is None:
                 final_pos = candidates[0]
+            draw.text(final_pos, obj_name, font=font, fill=(0, 0, 0))
 
-            # Draw the text at the final position
-            cv2.putText(image, obj_name, final_pos, font_face, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)
+        # 2. Draw navigation path
+        if nav_path and len(nav_path) > 1:
+            print(f"nav_path: {nav_path}")
+            path_points_img = []
+            for point in nav_path:
+                if isinstance(point, dict) and 'pose' in point and 'position' in point['pose']:
+                    pos = point['pose']['position']
+                    p = np.array([pos['x'], pos['y'], pos['z']])
+                elif isinstance(point, (list, np.ndarray)) and len(point) >= 2:
+                    p = np.array(point)
+                else:
+                    continue
+                path_point_img = world_to_img(p)
+                path_points_img.append(path_point_img)
+            if len(path_points_img) > 1:
+                draw.line(path_points_img, fill=(0, 255, 0), width=3) # Green line
 
+        # Draw current pose as an arrow
+        if current_pose is not None:
+            pos = current_pose[:3, 3]
+            rot_matrix = current_pose[:3, :3]
+            
+            # Forward vector in ROS is +Z
+            fwd_vec_local = np.array([0, 0, 1])
+            fwd_vec_world = rot_matrix @ fwd_vec_local
+            
+            pos_img = world_to_img(pos)
+
+            # Arrow properties
+            arrow_length = 16 * (scale_factor / 3)
+            arrow_color = (255, 0, 0) # Red
+
+            # Calculate arrow tip
+            # We only care about the 2D direction on the map (X, Y)
+            # The Y-axis is flipped in the image, so we subtract the y-component of the direction
+            fwd_vec_2d = fwd_vec_world[:2]
+            fwd_vec_2d_normalized = fwd_vec_2d / (np.linalg.norm(fwd_vec_2d) + 1e-6)
+
+            tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
+            tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1] # Subtract because Y is flipped
+
+            # Define triangle points for the arrow
+            # Perpendicular vector for arrow base
+            perp_vec_2d = np.array([-fwd_vec_2d_normalized[1], fwd_vec_2d_normalized[0]])
+            base_width = 8 * (scale_factor / 3)
+            
+            base_center_x = pos_img[0] - 0.5 * arrow_length * fwd_vec_2d_normalized[0]
+            base_center_y = pos_img[1] + 0.5 * arrow_length * fwd_vec_2d_normalized[1]
+
+            p1 = (tip_x, tip_y)
+            p2 = (base_center_x + base_width * perp_vec_2d[0], base_center_y - base_width * perp_vec_2d[1])
+            p3 = (base_center_x - base_width * perp_vec_2d[0], base_center_y + base_width * perp_vec_2d[1])
+
+            draw.polygon([p1, p2, p3], fill=arrow_color)
+            # Add coordinates text
+            coord_text = f"({pos[0]:.2f}, {pos[1]:.2f})"
+            text_pos = (pos_img[0] + 15, pos_img[1])
+            draw.text(text_pos, coord_text, font=coord_font, fill=(0, 0, 0)) # Black text
+
+        # Convert PIL (RGB) image to numpy array (BGR) for OpenCV
+        image = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
         return image
 
     def get_traversable_map_image(self, local_map_manager) -> None | np.ndarray:
