@@ -520,6 +520,13 @@ class Dualmap:
     # ===============================================
     # Public API for navigation and querying
     # ===============================================
+    def reset_query_and_navigation(self):
+        """重置导航状态，包括清除全局地图查询和重置路径规划器。"""
+        self.inquiry_feat = None
+        self.action_path = None
+        self.curr_global_path = None
+        self.curr_local_path = None
+
     def query_object(self, query: str):
         # 1. 从查询（如："desk"/"RobotNear(ControlRoom)"）中提取物体名称
         match = re.search(r'\((.*?)\)', query)

@@ -39,8 +39,7 @@ class IsaacsimEnv(BaseAgentEnv):
     cam_forward_axis = "z"  # hardcoded: camera's +Z faces forward
     # Real-time visibility state: {goal_name_lower: bool}
     goal_inview = {}
-    # 新增：可视距离阀值（米）
-    near_dist = 12.0
+    near_dist = 2.0
 
     # =========================================================
     # 构造与配置（初始化、ROS 话题与发布者/订阅者配置）
@@ -153,7 +152,6 @@ class IsaacsimEnv(BaseAgentEnv):
         period = 1.0 / float(cfg.ros.ros_rate)
         self._ros_pub_timer = self.ros_node.create_timer(period, self._ros_pub_tick)
 
-    # 新增: 供上层注入 VLMap 后端（用于 ROSPublisher 发布 dualmap）
     def set_vlmap_backend(self, backend) -> None:
         """Attach VLMap backend so ROSPublisher can publish dualmap outputs."""
         self._vlmap_backend = backend
@@ -200,11 +198,9 @@ class IsaacsimEnv(BaseAgentEnv):
         # Optionally update env state for FOV checks
         self.agent_env_update({
             "cam_pose_w": [t[0], t[1], t[2], qw, qx, qy, qz],
-            "cam_fov_x_deg": self.cam_fov_x_deg,
-            "cam_aspect": self.cam_aspect,
+            # TODO: if need more status updates
         })
 
-    # 新增: 发布器定时回调
     def _ros_pub_tick(self):
         """Timer tick to publish all visualizations via ROSPublisher."""
         # Guard against early timer firing before backend/publisher ready
@@ -216,11 +212,6 @@ class IsaacsimEnv(BaseAgentEnv):
     def agent_env_update(self, env_data: dict):
         """更新环境态并实时刷新目标可视性。"""
         self.cur_agent_states = {**env_data}
-        # Read camera parameters from env_data
-        if "cam_fov_x_deg" in self.cur_agent_states:
-            self.cam_fov_x_deg = float(self.cur_agent_states["cam_fov_x_deg"])
-        if "cam_aspect" in self.cur_agent_states:
-            self.cam_aspect = float(self.cur_agent_states["cam_aspect"])
 
         # Recompute real-time visibility using cam_pose_w
         self._update_goal_inview()
@@ -256,7 +247,7 @@ class IsaacsimEnv(BaseAgentEnv):
           - 'enum'/'enum_command': 单个或多个 Int32
           - 'mark': () 或 [x,y,z]（空表示在机器人前方插旗；否则在指定坐标插旗）
         """
-        # verbose = verbose and self._action_count % 10 == 0
+        verbose = verbose and self._action_count % 10 == 0
         self._action_count += 1
         if self.ros_node is None:
             raise RuntimeError("ROS node not initialized; cannot publish actions.")
@@ -331,8 +322,8 @@ class IsaacsimEnv(BaseAgentEnv):
             pt.point.y = math.nan
             pt.point.z = math.nan
             self.mark_pub.publish(pt)
-            if verbose:
-                print("[IsaacsimEnv] Published mark (default via NaN).")
+            # if verbose:
+            print("[IsaacsimEnv] Published mark (default via NaN).")
             return
 
         # # 显式坐标
@@ -343,8 +334,8 @@ class IsaacsimEnv(BaseAgentEnv):
         pt.point.y = y
         pt.point.z = z
         self.mark_pub.publish(pt)
-        if verbose:
-            print(f"[IsaacsimEnv] Published mark point at: ({x}, {y}, {z})")
+        # if verbose:
+        print(f"[IsaacsimEnv] Published mark point at: ({x}, {y}, {z})")
 
     # ==========================================
     # 相机几何与可视性辅助（旋转、视锥检测）
