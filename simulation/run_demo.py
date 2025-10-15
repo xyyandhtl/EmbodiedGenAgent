@@ -40,6 +40,7 @@ from simulation.utils import (
     camera_follow,
     get_current_stage,
     handle_enum_action,
+    handle_mark_action,
     LabGo2WEnvHistoryWrapper,
     IsaacLabSensorHandler,
     CamDataMonitor,
@@ -156,7 +157,7 @@ def main():
                 velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
                 # Update observation with the new velocity command
                 obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)
-            # 2) Handle enum actions (capture/mark/report)
+            # 2) Handle enum actions (capture/report)
             if zmq.enum_cmd is not None:
                 handle_enum_action(
                     enum_cmd=zmq.enum_cmd,
@@ -166,8 +167,16 @@ def main():
                     captured_dir=CAPTURED_DIR,
                     reports_dir=REPORTS_DIR,
                     marks=marks,
-                )            
-            
+                )
+            # 新增：处理独立的 mark 动作
+            if zmq.mark_pos is not None:
+                handle_mark_action(
+                    mark_pos_or_none=zmq.mark_pos,
+                    pose_tuple=sensor_handler.get_camera_pose(),
+                    stage=stage,
+                    marks=marks,
+                )
+
             actions = policy(obs)
             obs, _, _, _ = env.step(actions)
 

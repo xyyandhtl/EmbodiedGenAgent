@@ -7,9 +7,12 @@
   </property>
   <property name="styleSheet">
    <string notr="true">
+/* Base window */
 QMainWindow {
     background:#2b2f38;
 }
+
+/* Groups */
 QGroupBox {
     font:12px "Microsoft YaHei";
     color:#e0e0e0;
@@ -23,11 +26,50 @@ QGroupBox::title {
     left:8px; top:2px;
     padding:0 4px;
 }
+
+/* Text areas and tables */
 QTextEdit, QTableWidget {
     background:#1f242c;
     color:#d8d8d8;
     border:1px solid #555;
+    selection-background-color:#3d7cff;
+    selection-color:white;
 }
+
+/* Inputs */
+QLineEdit {
+    background:#1f242c;
+    color:#e6e6e6;
+    border:1px solid #555;
+    border-radius:4px;
+    padding:4px 6px;
+    selection-background-color:#3d7cff;
+    selection-color:white;
+}
+
+/* Lists (image/report/conversation) */
+QListWidget {
+    background:#1f242c;
+    color:#d8d8d8;
+    border:1px solid #555;
+    selection-background-color:#2d68dd;
+    selection-color:white;
+}
+
+/* Table header + items */
+QHeaderView::section {
+    background:#2a2f38;
+    color:#cfd6e6;
+    padding:4px 6px;
+    border:1px solid #444;
+}
+QTableWidget::item { padding:2px 4px; }
+QTableWidget::item:selected {
+    background:#2d68dd;
+    color:white;
+}
+
+/* Buttons */
 QPushButton {
     background:#3d7cff;
     color:white;
@@ -36,6 +78,12 @@ QPushButton {
 }
 QPushButton:hover { background:#5b93ff; }
 QPushButton:pressed { background:#2d68dd; }
+QPushButton:disabled {
+    background:#3d7cff55;
+    color:#dddddd88;
+}
+
+/* Labels */
 QLabel#titleLabel {
     font:16px "Microsoft YaHei";
     font-weight:600;
@@ -44,6 +92,29 @@ QLabel#titleLabel {
     border:1px solid #444;
     border-radius:4px;
     padding:6px;
+}
+
+/* Splitters */
+QSplitter::handle {
+    background:#2a2f38;
+}
+QSplitter::handle:horizontal { width:6px; }
+QSplitter::handle:vertical { height:6px; }
+QSplitter::handle:hover { background:#3a3f4b; }
+
+/* Status bar: brighter text for readability */
+QStatusBar {
+    background:#1d2229;
+    color:#f3f3f3;
+    border-top:1px solid #444;
+}
+QStatusBar::item {
+    border:0;
+    padding:0 6px;
+    margin:0;
+}
+QStatusBar QLabel {
+    color:#f3f3f3;
 }
    </string>
   </property>

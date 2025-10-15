@@ -10,6 +10,7 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import Int32
 from cv_bridge import CvBridge
 from tf2_ros import TransformBroadcaster
+from geometry_msgs.msg import PointStamped
 
 class ROSBridge(Node):
     """
@@ -23,6 +24,7 @@ class ROSBridge(Node):
           "cmd_vel": np.float32[6]
           "nav_pose": (pos_np(3,), quat_wxyz_np(4,))
           "enum": int
+          "mark": None or np.ndarray(3,)  # default mark (NaN sentinel) or explicit [x,y,z]
     Ports must be different: one for sensor stream (SUB), one for commands (PUB).
     """
     def __init__(self, camera_params, zmq_port: int = 5555, command_port: int = 5556):
@@ -62,6 +64,8 @@ class ROSBridge(Node):
         self.create_subscription(Twist, "/cmd_vel", self._cmd_vel_callback, 10)
         self.create_subscription(PoseStamped, "/nav_pose", self._nav_pose_callback, 10)
         self.create_subscription(Int32, "/enum_cmd", self._enum_command_callback, 10)
+        # 订阅 /mark_point (PointStamped)；NaN -> 默认 mark
+        self.create_subscription(PointStamped, "/mark_point", self._mark_point_callback, 10)
 
         # --- Timer to poll ZMQ and publish to ROS ---
         # Use a small period for low latency without busy-wait
@@ -190,6 +194,15 @@ class ROSBridge(Node):
             self.cmd_pub_socket.send(pickle.dumps(data))
         except Exception as e:
             self.get_logger().error(f"Error forwarding enum command: {e}")
+
+    # 合并后的 mark 回调：NaN 表示默认
+    def _mark_point_callback(self, msg: PointStamped):
+        try:
+            pos = np.array([msg.point.x, msg.point.y, msg.point.z], dtype=np.float32)
+            data = {"mark": pos}
+            self.cmd_pub_socket.send(pickle.dumps(data))
+        except Exception as e:
+            self.get_logger().error(f"Error forwarding mark point: {e}")
 
     def destroy_node(self):
         # Clean shutdown of ZMQ sockets
