@@ -1,1 +1,1 @@
-convert image.png -quality 80 mark.jpg
+convert Egent.png -quality 80 Agent.jpg

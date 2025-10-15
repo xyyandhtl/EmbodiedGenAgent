@@ -3,6 +3,7 @@
 
 __pycache__/
 
+# folders
 output/
 outputs/
 dataset/
@@ -10,8 +11,13 @@ captured/
 reports/
 usd/
 
+# specific paths
+EG_agent/vlmap/config/class_list/*.json
 simulation/data/terrains/*
+
+# specific file types
 *.pt
 
+# specific files
 behavior_tree.png
 tree.btml

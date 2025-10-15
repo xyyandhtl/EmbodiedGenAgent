@@ -79,7 +79,7 @@ class VHAction(Action):
             script = [f'<char0> [{self.action_class_name.lower()}] <{self.args[0].lower()}> (1) <{self.args[1].lower()}> (1)']
 
 
-        self.env.run_script(script,verbose=True,camera_mode="PERSON_FROM_BACK") # FIRST_PERSON
+        self.agent_env.run_script(script,verbose=True,camera_mode="PERSON_FROM_BACK") # FIRST_PERSON
         print("script: ",script)
         self.change_condition_set()
 

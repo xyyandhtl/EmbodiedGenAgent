@@ -4,10 +4,10 @@ class Action(BahaviorNode):
     print_name_prefix = "Action "
     type = 'Action'
 
-    def __init__(self,*args):
+    def __init__(self, *args):
         super().__init__(*args)
-        self.info = self.get_info(*args)
+        self.info: dict = self.get_info(*args)
 
     @classmethod
-    def get_info(self,*arg):
+    def get_info(self, *arg):
         return None

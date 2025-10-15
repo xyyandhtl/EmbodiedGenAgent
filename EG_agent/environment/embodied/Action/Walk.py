@@ -1,9 +1,8 @@
-from EG_agent.environment.embodied._base.gen_action import EmbodiedAction
+from EG_agent.environment.embodied._base.action import EmbodiedAction
 
 class Walk(EmbodiedAction):
     can_be_expanded = True
     num_args = 1
-    # allow walking to any nav point or CAPTUREABLE target
     valid_args = EmbodiedAction.AllObject
 
     def __init__(self, *args):
@@ -28,5 +27,5 @@ class Walk(EmbodiedAction):
         return info
 
     def change_condition_set(self):
-        self.agent.condition_set |= (self.info["add"])
-        self.agent.condition_set -= self.info["del_set"]
+        self.agent_env.condition_set |= (self.info["add"])
+        self.agent_env.condition_set -= self.info["del_set"]

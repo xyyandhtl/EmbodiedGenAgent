@@ -210,8 +210,8 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
     def update_bt(self):
-        if not self.agent_system.backend_ready:
-            return
+        # if not self.agent_system.backend_ready:
+        #     return
         # 行为树更新 -> ZoomableImageWidget
         if hasattr(self, "behaviorTreeWidget"):
             self.behaviorTreeWidget.setPixmap(

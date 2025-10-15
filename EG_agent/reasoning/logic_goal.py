@@ -32,14 +32,10 @@ class LogicGoalGenerator:
         all_cond_str = default_objects.AllCondition
         if object_set is None:
             # 预定义 object sets 时用这个
-            nav_list = sorted(list(default_objects.NAV_POINTS))
-            targ_list = sorted(list(default_objects.TARGETS))
-            nav_str = json.dumps(nav_list, ensure_ascii=False)
-            targ_str = json.dumps(targ_list, ensure_ascii=False)
-            # format template (placeholders: {NAV_POINTS}, {TARGETS}, {AllCondition})
+            object_list = sorted(list(default_objects.AllObject))
+            object_str = json.dumps(object_list, ensure_ascii=False)
             self.prompt_scene = self.prompt_scene_template.format(
-                NAV_POINTS=nav_str,
-                TARGETS=targ_str,
+                AllObject=object_str,
                 AllCondition=all_cond_str
             )
         else:
@@ -47,8 +43,7 @@ class LogicGoalGenerator:
             objects_list = sorted(list(object_set))
             objects = json.dumps(objects_list, ensure_ascii=False)
             self.prompt_scene = self.prompt_scene_template.format(
-                NAV_POINTS=objects,
-                TARGETS=objects,
+                AllObject=objects,
                 AllCondition=all_cond_str
             )
         self.prompt = self.prompt_scene + self.prompt_goal
