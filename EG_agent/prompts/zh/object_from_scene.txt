@@ -4,6 +4,44 @@
 参考以下格式：
 
 ```txt
+building
+apartment
+window
+balcony
+door
+awning
+air-conditioner
+signboard
+billboard
+shop
+restaurant
+cafe
+stairs
+gate
+fence
+sidewalk
+crosswalk
+streetlight
+electric-pole
+fire-hydrant
+traffic-light
+traffic-sign
+bus-stop
+traffic-cone
+traffic-barrier
+construction-sign
+tree
+bush
+bench
+flowerpot
+trash-bin
+mailbox
+car
+truck
+bicycle
+motorcycle
+person
+
 # low mobility examples
 lm_examples:
   - "stool"
