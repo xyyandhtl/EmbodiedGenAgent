@@ -171,7 +171,7 @@ class EGAgentSystem:
                   f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
         self.update_objects_from_map()
         # For quick test, directly set a goal pose
-        self.vlmap_backend.get_global_path(goal_pose=np.array([4.0, 5.0]))
+        self.vlmap_backend.get_global_path(goal_pose=np.array([4.0, 5.0, 0.0]))
         self._log(f"Computed global_path: {self.dm.curr_global_path}")
 
     def update_objects_from_map(self):

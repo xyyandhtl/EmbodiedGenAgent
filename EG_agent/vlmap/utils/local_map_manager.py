@@ -1023,28 +1023,34 @@ class LocalMapManager(BaseMapManager):
 
         # Get start and goal position
         curr_position = curr_pose[:3, 3]
-        start_position = nav_graph.calculate_pos_2d(curr_position)
+        start_position_grid = nav_graph.calculate_pos_2d(curr_position)
 
-        if goal_mode is not GoalMode.POSE:
-            goal_position = self.get_goal_position(nav_graph, start_position, goal_mode)
+        goal_position_grid = self.get_goal_position(nav_graph, start_position_grid, goal_position, goal_mode)
 
-        if goal_position is None:
+        if goal_position_grid is None:
             logger.warning("[LocalMap][Path] No goal position found!")
-            return None
+            return []
 
         # Step 2: Calculate path
-        rrt_path = nav_graph.find_rrt_path(start_position, goal_position)
+        rrt_path = nav_graph.find_rrt_path(start_position_grid, goal_position_grid)
 
         if len(rrt_path) == 0:
             logger.warning("[LocalMap][Path] No path found!")
-            return None
+            return []
         else:
             return rrt_path
 
-    def get_goal_position(self, nav_graph, start_position, goal_mode):
+    def get_goal_position(self, nav_graph, start_position_grid, goal_position_world, goal_mode):
         if goal_mode == GoalMode.CLICK:
             logger.info("[LocalMap][Path] Local Goal mode: CLICK")
             return nav_graph.calculate_pos_2d(self.click_goal)
+
+        if goal_mode == GoalMode.POSE:
+            logger.info("[LocalMap][Path] Local Goal mode: POSE")
+            if goal_position_world is not None:
+                return nav_graph.calculate_pos_2d(goal_position_world)
+            else:
+                return None
 
         if goal_mode == GoalMode.INQUIRY:
             logger.info("[LocalMap][Path] Local Goal mode: INQUIRY")

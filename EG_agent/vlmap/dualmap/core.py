@@ -11,6 +11,7 @@ import re
 
 import yaml
 import numpy as np
+from collections import deque
 from scipy.spatial.transform import Rotation as R
 from dynaconf import Dynaconf, LazySettings
 
@@ -108,6 +109,9 @@ class Dualmap:
 
         # debug param: path counter
         self.path_counter = 0
+
+        # History of agent's actual traversed path
+        self.traversed_path = deque(maxlen=30)
 
         # Parallel for mapping thread
         if self.cfg.use_parallel:
@@ -322,6 +326,10 @@ class Dualmap:
 
         # Get current pose
         self.curr_pose = data_input.pose
+
+        # Record the traversed path
+        if self.curr_pose is not None:
+            self.traversed_path.append(self.curr_pose[:3, 3].copy())
 
         # --- 1. Detection process ---
         start_time = time.time()
@@ -568,7 +576,7 @@ class Dualmap:
         # Get 3D path point in world coordinate
         # 计算 全局路径
         self.curr_global_path = self.global_map_manager.calculate_global_path(
-            self.curr_pose, goal_mode=self.get_goal_mode, goal_position=self.goal_pose
+            self.curr_pose, goal_mode=self.get_goal_mode, resolution=self.cfg.resolution, goal_position=self.goal_pose
         )
 
         # Clear the local mapping results
@@ -660,7 +668,7 @@ class Dualmap:
 
         # calculate the path based on current global map
         self.curr_local_path = self.local_map_manager.calculate_local_path(
-            start_pose, goal_mode=self.get_goal_mode, goal_position=self.goal_pose
+            start_pose, goal_mode=self.get_goal_mode, resolution=self.cfg.resolution, goal_position=self.goal_pose
         )
 
         if self.curr_local_path is not None:
@@ -760,7 +768,13 @@ class Dualmap:
         return cur_path[min(5, len(cur_path)-1)]
 
     def get_semantic_map_image(self):
-        semantic_map = self.visualizer.get_semantic_map_image(self.global_map_manager)
+        semantic_map = self.visualizer.get_semantic_map_image(
+            self.global_map_manager,
+            resolution=self.cfg.resolution,
+            curr_pose=self.curr_pose,
+            traj_path=self.traversed_path,
+            nav_path=self.curr_global_path  # TODO: 后续更改为 self.action_path，或者传入 global_path 和 local_path，以不同颜色显示
+        )
 
         if semantic_map is not None:
             save_dir = str(self.cfg.map_save_path)
