@@ -21,12 +21,12 @@ from EG_agent.vlmap.utils.types import Observation
 logger = logging.getLogger(__name__)
 
 class LocalObjStatus(Enum):
-    UPDATING = "updating"
-    PENDING = "pending for updating"
-    ELIMINATION = "elimination"
-    LM_ELIMINATION = "elimination for low mobility"
-    HM_ELIMINATION = "elimination for high mpbility"
-    WAITING = "waiting for stable obj process"
+    UPDATING = "updating"  # 对象仍在活跃窗口内，持续更新中
+    PENDING = "pending for updating"  # 对象已不在活跃窗口内，但尚未稳定
+    ELIMINATION = "elimination"  # 对象需要被删除
+    LM_ELIMINATION = "elimination for low mobility"  # 低移动性对象的删除状态
+    HM_ELIMINATION = "elimination for high mpbility"  # 高移动性对象的删除状态
+    WAITING = "waiting for stable obj process"  # 对象已稳定，等待进一步处理
 
 class BaseObject:
     
@@ -216,10 +216,10 @@ class LocalObject(BaseObject):
         self.spatial_stable_info: Optional[list] = []
 
         # status
-        self.status = LocalObjStatus.UPDATING
-        self.is_stable = False
-        self.pending_count = 0
-        self.waiting_count = 0
+        self.status = LocalObjStatus.UPDATING  # 默认状态为 UPDATING
+        self.is_stable = False  #  对象是否稳定
+        self.pending_count = 0  # 对象处于 PENDING 状态的 次数
+        self.waiting_count = 0  # 对象处于 WAITING 状态的 次数
 
         # # bayesian stable
         self.num_classes = self._cfg.yolo.num_classes
@@ -574,7 +574,7 @@ class LocalObject(BaseObject):
         # 1. if the object is in inside the sliding window, status will be UPDATING
         # No matter what previous status is, the object will always be UPDATING if in the window
         if last_obs.idx <= self._curr_idx and last_obs.idx >= max(self._curr_idx - self._cfg.active_window_size, 0):
-            self.status = LocalObjStatus.UPDATING
+            self.status = LocalObjStatus.UPDATING  # 对象仍在活跃窗口内，持续更新中
             self.pending_count = 0
             self.waiting_count = 0
             return
@@ -586,19 +586,19 @@ class LocalObject(BaseObject):
 
         # if not stable, pending for next update, set status to PENDING
         if self.is_stable == False:
-            self.status = LocalObjStatus.PENDING
+            self.status = LocalObjStatus.PENDING  # 对象已不在活跃窗口内，但尚未稳定
             self.pending_count += 1
 
             # if pending count is large, status set as ELIMINATION
             if self.pending_count > self._cfg.max_pending_count:
-                self.status = LocalObjStatus.ELIMINATION
+                self.status = LocalObjStatus.ELIMINATION  # 对象需要被删除
                 return
 
             return
 
         # 3. if the object is stable, waiting first
         # and now the obj is set as stable
-        self.status = LocalObjStatus.WAITING
+        self.status = LocalObjStatus.WAITING  # 对象已稳定，等待进一步处理
         self.waiting_count += 1
 
         if self.waiting_count < self._cfg.max_pending_count:
@@ -607,10 +607,10 @@ class LocalObject(BaseObject):
             
         # if waiting enough, then judge next step by lm status
         if self.is_low_mobility:
-            self.status = LocalObjStatus.LM_ELIMINATION
+            self.status = LocalObjStatus.LM_ELIMINATION  # 低移动性对象的删除状态
             return
         else:
-            self.status = LocalObjStatus.HM_ELIMINATION
+            self.status = LocalObjStatus.HM_ELIMINATION  # 高移动性对象的删除状态
             return
 
     def stability_check(

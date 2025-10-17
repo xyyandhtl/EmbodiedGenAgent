@@ -54,9 +54,11 @@ class LayoutMap:
         x_min, y_min = np.min(xy_points, axis=0)
         x_max, y_max = np.max(xy_points, axis=0)
 
+        # 使用二维直方图创建占用地图
         occ_map, x_edges, y_edges = np.histogram2d(
-            xy_points[:, 0],
-            xy_points[:, 1],
+            xy_points[:, 0],  # x坐标
+            xy_points[:, 1],  # y坐标
+            # x,y方向上的 grid_cell 个数
             bins=(int((x_max - x_min) / self.resolution), int((y_max - y_min) / self.resolution))
         )
         return occ_map, x_edges, y_edges
@@ -68,7 +70,7 @@ class LayoutMap:
         Args:
             method: Threshold calculation method, options: "mean", "median", or "percentile".
         """
-        non_zero_values = self.occ_map[self.occ_map > 0]
+        non_zero_values = self.occ_map[self.occ_map > 0]  # 占用地图中 grid_cell 中的 非零值
         if method == "mean":
             return np.mean(non_zero_values)
         elif method == "median":
@@ -163,12 +165,15 @@ class LayoutMap:
         Convert wall grid cells in the binary map to 3D point cloud.
         """
         wall_points_3d = []
+        # x和y方向上网格单元的中心坐标
         x_centers = (self.x_edges[:-1] + self.x_edges[1:]) / 2
         y_centers = (self.y_edges[:-1] + self.y_edges[1:]) / 2
 
+        # 遍历二值地图中的每个网格单元
         for i in range(binary_map.shape[0]):
             for j in range(binary_map.shape[1]):
-                if binary_map[i, j] == 1:
+                if binary_map[i, j] == 1:  # 当前网格单元被占据（值为1，即点云个数 > 阈值）
+                    # 当前网格内 随机生成 10个点的x,y坐标
                     x_samples = np.random.uniform(
                         self.x_edges[i], self.x_edges[i + 1], num_samples_per_grid
                     )
@@ -176,6 +181,7 @@ class LayoutMap:
                         self.y_edges[j], self.y_edges[j + 1], num_samples_per_grid
                     )
                     z_samples = np.full_like(x_samples, z_value)
+                    # 组合
                     grid_points = np.stack((x_samples, y_samples, z_samples), axis=1)
                     wall_points_3d.append(grid_points)
 
@@ -465,17 +471,17 @@ class NavigationGraph:
         # self.visualize_occupancy_map(free_space)
 
     def get_occupancy_map(self):
-        # Initialize an empty grid map with all cells marked as unoccupied (0)
+        # 1. Initialize an empty grid map with all cells marked as unoccupied (0)
         occupancy_grid_map = np.zeros(self.grid_size[::-1], dtype=int)
 
-        # Handle point cloud with negative values
+        # 2. Handle point cloud with negative values
         point_cloud = np.asarray(self.pcd.points)  # Get the point cloud as a numpy array
 
         # Adjust only x and y coordinates to positive values
         point_cloud[:, 0] -= self.pcd_min[0]  # Adjust x-coordinate
         point_cloud[:, 1] -= self.pcd_min[1]  # Adjust y-coordinate
 
-        # Iterate through the point cloud and mark the corresponding cells as occupied (1)
+        # 3. Iterate through the point cloud and mark the corresponding cells as occupied (1)
         x_cells = np.floor(point_cloud[:, 0] / self.cell_size).astype(int)
         y_cells = np.floor(point_cloud[:, 1] / self.cell_size).astype(int)
 
@@ -484,7 +490,7 @@ class NavigationGraph:
 
         # self.visualize_occupancy_map(occupancy_grid_map)
 
-        # Make the occupancy places with a dilation operation
+        # 4. Make the occupancy places with a dilation operation
         dilation_radius = 10
 
         if dilation_radius > 0:
@@ -498,7 +504,7 @@ class NavigationGraph:
 
         self.occupancy_grid_map = occupancy_grid_map
 
-        # get largest free space
+        # 5. get largest free space
         # Now, we need to find the largest free space (value 0) using connected components
         # Invert the map so that free space is marked with 1 and occupied space with 0
         free_space_map = (occupancy_grid_map == 0).astype(np.uint8)
@@ -506,7 +512,7 @@ class NavigationGraph:
         # Find all connected components (regions of free space)
         num_labels, labels = cv2.connectedComponents(free_space_map)
 
-        # Find the largest connected component (ignore the background label 0)
+        # 6. Find the largest connected component (ignore the background label 0)
         largest_component = 0
         largest_size = 0
 

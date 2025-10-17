@@ -166,6 +166,7 @@ class LocalMapManager(BaseMapManager):
             return
 
         # if not first, then do the matching
+        # 1. 当前帧检测与局部地图匹配
         logger.debug("[LocalMap] Matching")
         self.tracker.set_current_frame(curr_observations)
 
@@ -176,7 +177,7 @@ class LocalMapManager(BaseMapManager):
         # After matching map, current frame information will be updated
         curr_observations = self.tracker.get_current_frame()
 
-        # Update local map
+        # 2. Update local map
         self.update_local_map(curr_observations)
 
     def init_from_observation(
@@ -197,7 +198,7 @@ class LocalMapManager(BaseMapManager):
         self,
         curr_obs: List[Observation]
     ) -> None:
-        # update the local map with the lateset observation
+        # 1. update the local map with the lateset observation
         for obs in curr_obs:
             if obs.matched_obj_idx == -1:
                 # Add new local object
@@ -214,19 +215,19 @@ class LocalMapManager(BaseMapManager):
                 matched_obj.add_observation(obs)
                 matched_obj.update_info()
 
-        # traverse through the local map
+        # 2. traverse through the local map
         # split the local obj with the split marker
         # Solve couch + pillow problem
         for obj in self.local_map:
             if obj.should_split:
                 self.split_local_object(obj)
 
-        # update the graph and map for insertion and elimination
+        # 3. update the graph and map for insertion and elimination
         self.update_map_and_graph()
 
-        # traverse through the local map
-        # 1. check stability and update status
-        # 2. do actions based on objects status
+        # 4. traverse through the local map
+        # (1) check stability and update status
+        # (2) do actions based on objects status
         for obj in self.local_map:
             # Update the status of the current local object
             obj.update_status()
@@ -234,7 +235,7 @@ class LocalMapManager(BaseMapManager):
             # do actions based on objects status
             self.status_actions(obj)
 
-        # update the graph and map for insertion and elimination
+        # 5. update the graph and map for insertion and elimination
         self.update_map_and_graph()
 
         logger.info("[LocalMap] Current we have Global Observations num: " + str(len(self.global_observations)))

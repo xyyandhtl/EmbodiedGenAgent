@@ -577,6 +577,8 @@ class Dualmap:
 
         # Get Current layout information from detector
         layout_pcd = self.detector.get_layout_pointcloud()
+        # (1) 将 点云数据 设置给 GlobalMapManager.layout_map
+        # (2) 如果没有墙壁点云，则提取墙壁点云
         self.global_map_manager.set_layout_info(layout_pcd)
 
         # calculate the path based on current global map
