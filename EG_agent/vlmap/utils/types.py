@@ -62,14 +62,15 @@ class LocalObservation(Observation):
 @dataclass
 class GlobalObservation(Observation):
     uid: uuid.UUID = field(default_factory=uuid.uuid4)
+    # 体素点云，其3D坐标：每个体素中的点云的x,y坐标均值、高度为设置的 floor_height；其颜色为：颜色均值
     pcd_2d: o3d.geometry.PointCloud = field(default_factory=o3d.geometry.PointCloud)
     bbox_2d: o3d.geometry.AxisAlignedBoundingBox = field(default_factory=o3d.geometry.AxisAlignedBoundingBox)
     # related objs
     # Current we "only save clip feats" <-- PAY Attention!
-    related_objs: list = field(default_factory=list)
+    related_objs: list = field(default_factory=list)  # 相关对象的 CLIP 特征 列表
     # only for better demo
-    related_bbox: list = field(default_factory=list)
-    related_color: list = field(default_factory=list)
+    related_bbox: list = field(default_factory=list)  # 相关对象的 bbox 列表
+    related_color: list = field(default_factory=list)  # 相关对象的 class_id 列表
 
 
 class ObjectClasses:

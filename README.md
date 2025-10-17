@@ -1,9 +1,6 @@
 # EmbodiedGenAgent
 A Generative Embodied Agent that transforms open-ended instructions into behavior trees for autonomous decision-making and action execution loop
 
-## Architecture (continuing)
-![Architecture Diagram](docs/assets/Egent.png)
-
 ## Usage
 - GUI demo: [APP.md](docs/APP.md), need EGAgentSystem as backend, which should be implemented its deployment env, check [envs](EG_agent/system/envs)
 
