@@ -64,6 +64,11 @@ class GlobalMapManager(BaseMapManager):
         if self.layout_map.wall_pcd is None:
             self.layout_map.extract_wall_pcd(num_samples_per_grid=10, z_value=self.cfg.floor_height)
 
+    def get_traversability_grid(self):
+        if self.nav_graph and hasattr(self.nav_graph, 'free_space'):
+            return self.nav_graph.free_space
+        return None
+
     def process_observations(
         self,
         curr_observations: List[Observation]
@@ -528,31 +533,53 @@ class GlobalMapManager(BaseMapManager):
 
         pass
 
-    def calculate_global_path(
-        self, curr_pose, goal_mode=GoalMode.POSE, resolution=0.03, goal_position=None
-    ) -> List:
-        # calculate global path
+    def create_nav_graph(self, curr_pose, resolution=0.03) -> None:
+        """
+            Generates the NavigationGraph based on the current global map.
+            (A computationally intensive operation)
+        """
+        logger.info("[GlobalMapManager] [create_nav_graph] Creating navigation graph...")
 
         import open3d as o3d
 
-        # Get all pcd from global map
+        # 1. Get all objects' pcd from global map
         total_pcd = o3d.geometry.PointCloud()
         for obj in self.global_map:
             total_pcd += obj.pcd_2d
 
-        # Add current pose into the total pcd
+        # 2. Add current pose into the total pcd
         curr_point_coords = curr_pose[:3, 3]
         curr_point = o3d.geometry.PointCloud()
         curr_point.points = o3d.utility.Vector3dVector([curr_point_coords])
         total_pcd += curr_point
 
-        # Add layout wall inforin to the total pcd
+        # 3. Add layout wall to the total pcd
         total_pcd += self.layout_map.wall_pcd
 
-        # Step 1: Constucting 2D occupancy map
-        nav_graph = NavigationGraph(self.cfg, total_pcd, resolution)
-        self.nav_graph = nav_graph
-        nav_graph.get_graph()
+        if not total_pcd.has_points():
+            logger.warning("[GlobalMapManager] [create_nav_graph] No points in map to create navigation graph.")
+            self.nav_graph = None
+            return
+
+        # 4. Construct NavigationGraph and 2D occupancy map
+        try:
+            nav_graph = NavigationGraph(self.cfg, total_pcd, cell_size=resolution)
+            self.nav_graph = nav_graph
+
+            nav_graph.get_graph()
+        except Exception as e:
+            logger.error(f"[GlobalMapManager] [create_nav_graph] Failed to create navigation graph: {e}")
+            self.nav_graph = None
+
+    def calculate_global_path(
+        self, curr_pose, goal_mode=GoalMode.POSE, resolution=0.03, goal_position=None
+    ) -> List:
+        # Step 1: Construct NavigationGraph and 2D occupancy map
+        self.create_nav_graph(curr_pose, resolution)
+        if self.nav_graph is None:
+            logger.warning("[LocalMapManager] [calculate_local_path] Navigation graph not available. Skipping local_path calculation.")
+            return []
+        nav_graph = self.nav_graph
 
         # Step 2: Set Start point and goal point
         # transform curr pose to 2d coordinate
@@ -562,7 +589,7 @@ class GlobalMapManager(BaseMapManager):
         # Select and process goal based on mode
         goal_position_grid = self.get_goal_position(nav_graph, start_position_grid, goal_position, goal_mode)
 
-        # Find shortest path
+        # Step 3: Find shortest path
         if goal_position_grid is not None:
             path = nav_graph.find_shortest_path(start_position_grid, goal_position_grid)
             if path:
