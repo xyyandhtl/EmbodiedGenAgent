@@ -5,6 +5,7 @@ from typing import Callable, Dict, List, Any, Iterable
 from pathlib import Path
 from PIL import Image
 from dynaconf import Dynaconf
+import traceback
 
 from EG_agent.prompts.default_objects import AllObject
 from EG_agent.reasoning.logic_goal import LogicGoalGenerator
@@ -109,27 +110,27 @@ class EGAgentSystem:
     def create_backend(self) -> bool:
         """Create the VLMapNav backend and configure ROS subscriptions."""
         if self.vlmap_backend is not None:
-            self._log("Backend already created.")
+            self._log_warn("Backend already created.")
             return True
         self._conv("智能体: 正在创建后台，请稍候...")
-        self._log("Creating backend...")
+        self._log_info("Creating backend...")
         self.vlmap_backend = VLMapNav()
         self.agent_env.set_vlmap_backend(self.vlmap_backend)
         # dualmap reference, set after backend is created
         self.dm = self.vlmap_backend.dualmap
         # 再配置 ROS（内部会创建订阅与可选的发布计时器）
-        self._log("Configuring ROS...")
+        self._log_info("Configuring ROS...")
         self.agent_env.configure_ros(self.cfg)
-        self._log("Backend created successfully.")
-        self.agent_env.run_action("mark", (4, 5, 0))    # for test
+        self._log_info("Backend created successfully.")
+        self._conv_info("后台创建成功，请启动智能体。")
         return True
     
     def start(self):
         """Start the agent loop in a background thread."""
         if self._running:
-            self._log("Agent system already running.")
+            self._log_warn("Agent system already running.")
             return
-        self._log("Agent system started.")
+        self._log_info("Agent system started.")
         self._stop_event.clear()
         self._running = True
         self._is_finished = False
@@ -140,9 +141,9 @@ class EGAgentSystem:
     def stop(self):
         """Request stop and close environment safely."""
         if not self._running:
-            self._log("Agent system not running.")
+            self._log_warn("Agent system not running.")
             return
-        self._log("Agent system stop requested.")
+        self._log_info("Agent system stop requested.")
         self._stop_event.set()
         self._running = False
         self._emit("status", self.status)
@@ -150,79 +151,72 @@ class EGAgentSystem:
     def save(self, map_path: str | None = None):
         """Save the current global map to the given path or default cfg.map_save_path."""
         if not self.backend_ready:
-            self._log("Backend not created, cannot save map.")
+            self._log_warn("Backend not created, cannot save map.")
             return
         path = map_path or getattr(self.vlmap_backend.cfg, "map_save_path", None)
-        self._log(f"Saving current global map to: {path}")
+        self._log_info(f"Saving current global map to: {path}")
         self.dm.save_map(map_path=path)
-        self._log("Map saved.")
+        self._log_info("Map saved.")
 
     def load(self, map_path: str | None = None):
         """Load the global map from the given path or default cfg.preload_path."""
         if not self.backend_ready:
-            self._log("Backend not created, cannot load map.")
+            self._log_warn("Backend not created, cannot load map.")
             return
         path = map_path or getattr(self.vlmap_backend.cfg, "preload_path", None)
-        self._log(f"Loading global map from: {path}")
+        self._log_info(f"Loading global map from: {path}")
         self.dm.load_map(map_path=path)
-        self._log(f"Map loaded with {len(self.dm.global_map_manager.global_map)} objects and "
-                  f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
-                  f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
+        self._log_info(f"Map loaded with {len(self.dm.global_map_manager.global_map)} objects and "
+                       f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
+                       f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
         self.update_objects_from_map()
         # For quick test, directly set a goal pose
-        self.vlmap_backend.get_global_path(goal_pose=np.array([4.0, 5.0, 0.0]))
-        self._log(f"Computed global_path: {self.dm.curr_global_path}")
+        # self.vlmap_backend.get_global_path(goal_pose=np.array([4.0, 5.0, 0.0]))
+        # self._log(f"Computed global_path: {self.dm.curr_global_path}")
 
-    def update_objects_from_map(self):
-        if not self.backend_ready:
-            return
-        entites = self.get_entity_rows()
-        if entites:
-            self.bt_objects = {name.split('/', 1)[1].capitalize() for name, _ in entites if name.startswith("global/")}
-            # self._log(f"Prepared goal generator from loaded map with the following "
-            #           f"{len(self.bt_objects)} objects: \n{self.bt_objects} .")
-            self.goal_generator.prepare_prompt(self.bt_objects)
-            self._log(f"Updated goal_generator with scene_prompt: {self.goal_generator.prompt_scene}")
-            # self.bt_generator.set_key_objects(list(self.bt_objects))
-            self._log(f"已设置原子动作: \n{[action.name for action in self.bt_generator.planner.actions]}")
-            if self.cfg['caring_mode']:
-                chinese_objs = self.goal_generator.ask_question(
-                    f"请用中文列出以下英文目标集合：{self.bt_objects}", use_system_prompt=False)
-                self._conv(f"智能体: 可以参考的任务对象有 {chinese_objs}")
+    def get_last_tick_output(self) -> str:
+        return self.agent_env.last_tick_output or ""
+
+    def get_goal_inview(self) -> dict:
+        return self.agent_env.goal_inview
 
     def _run_loop(self):
         """Main loop: step environment, propagate events, and check completion."""
-        self.agent_env.reset()
-        self._log("Environment reset.")
-        is_finished = False
-        while not self._stop_event.is_set() and not is_finished:
-            time.sleep(0.1)
+        try:
+            self.agent_env.reset()
+            self._log_info("Environment reset.")
+            is_finished = False
+            while not self._stop_event.is_set() and not is_finished:
+                time.sleep(0.1)
 
-            # 地图/导航处理（需后端已创建）
-            # (1) 检查 synced_data_queue 中的最新帧是否为 关键帧
-            # (2) dualmap.parallel_process 处理该关键帧（Detector 对图像生成物体观测结果；更新地图并计算导航路径（全局+局部））
-            self.vlmap_backend.run_once(lambda: time.time())
+                # 地图/导航处理（需后端已创建）
+                # (1) 检查 synced_data_queue 中的最新帧是否为 关键帧
+                # (2) dualmap.parallel_process 处理该关键帧（Detector 对图像生成物体观测结果；更新地图并计算导航路径（全局+局部））
+                self.vlmap_backend.run_once(lambda: time.time())
 
-            # 检查是否有行为树目标在视野内
-            inview_goals = self.agent_env.get_inview_goals()
-            if inview_goals:
-                self._log(f"Goal in view: {inview_goals}")
+                # 简单导航测试
+                # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
 
-            # 简单导航测试
-            # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
-
-            # 最终行为树执行测试
-            is_finished = self.agent_env.step()
-            # self._log(f"当前行为树执行节点：{self.agent_env.last_tick_output}")
-
-        if self.backend_ready:
-            self.dm.end_process()
-            self.vlmap_backend.shutdown_requested = True
-
-        self._is_finished = True
-        self._running = False
-        self._log("Agent loop stopped.")
-        self._emit("status", self.status)
+                # 最终行为树执行测试
+                is_finished = self.agent_env.step()
+        except Exception as e:
+            tb = traceback.format_exc()
+            self._log_error(f"Run loop exception: {e}")
+            # 将完整堆栈打印到日志窗口
+            self._log(tb)
+            # 对话窗口给出简短提示（会以错误样式显示）
+            self._conv_err("运行循环异常，已停止。请查看日志窗口。")
+        finally:
+            if self.backend_ready:
+                try:
+                    self.dm.end_process()
+                    self.vlmap_backend.shutdown_requested = True
+                except Exception:
+                    pass
+            self._is_finished = True
+            self._running = False
+            self._log_info("Agent loop stopped.")
+            self._emit("status", self.status)
 
     # ---------------------- 输入接口 ----------------------
     def feed_instruction(self, text: str):
@@ -232,8 +226,8 @@ class EGAgentSystem:
         self._conv(f"用户: {text}")
         self.goal = self.goal_generator.generate_single(text)
         # self.goal = "RobotNear_Equipment"  # 调试测试
-        self._log(f"User instruction: {text}")
-        self._log(f"[system] [feed_instruction] goal is: {self.goal}")
+        self._log_info(f"User instruction: {text}")
+        self._log_info(f"[system] [feed_instruction] goal is: {self.goal}")
         self._conv(f"智能体: 已解析指令为逻辑目标: {self.goal}")
         if not self.goal:
             self._conv_err("无法理解指令，已中断指令下发")
@@ -242,14 +236,14 @@ class EGAgentSystem:
         # 2. goal 逻辑指令 ==> BehaviorTree 实例
         self.bt_generator.set_goal(self.goal)
         goal_set = self.bt_generator.goal_set
-        self._log(f"[system] [feed_instruction] goal_set is: {goal_set}")
+        self._log_info(f"[system] [feed_instruction] goal_set is: {goal_set}")
         self.agent_env.cur_goal_set = goal_set
         # 提取目标对象集合 TODO:行为树能否不依赖于给定的目标集合
         self.target_set = { self.agent_env.extract_targes(goal) for goal in goal_set }
         if any(x is None for x in self.target_set):
             self._conv_err("无法理解指令中的目标对象，已中断指令下发")
             return
-        self._log(f"[system] [feed_instruction] target_set is: {self.target_set}")
+        self._log_info(f"[system] [feed_instruction] target_set is: {self.target_set}")
         self.bt_generator.set_key_objects(list(self.target_set))
         self._conv(f"智能体: 准备从逻辑目标生成以 {self.target_set} 为目标集的行为树")
         # 生成行为树
@@ -257,37 +251,40 @@ class EGAgentSystem:
         if not self.bt:
             self._conv_err("无法解析指令生成行为树，已中断指令下发")
             return
-        self._log(f"[system] [feed_instruction] Generated BehaviorTree: {self.bt}")
+        self._log_info(f"[system] [feed_instruction] Generated BehaviorTree: {self.bt}")
         self.bt.draw(png_only=True, file_name=self.bt_name)
         # load the saved behavior tree image into memory for GUI
         img_path = Path(self.bt_name + ".png")
         self._last_bt_image = np.array(Image.open(img_path).convert("RGB"))
         self._log(f"Behavior tree image updated: {img_path.resolve()}")
-        self._conv(f"智能体: 已生成行为树并显示在左下窗口")
+        self._conv_info("已生成行为树并显示在左下窗口")
 
         # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置告知给 IsaacsimEnv
-        self.agent_env.bind_bt(self.bt)
-        self._log("[system] [feed_instruction] Binding BT to agent_env.")
         """After feed_instruction, bind bt to env, query the target object positions"""        
         if not self.backend_ready:
-            self._log("[system] Backend not created, cannot query object positions.")
+            self._log_warn("[system] Backend not created, cannot query object positions.")
             self._conv_warn("后台未创建，无法查询目标位置，请先点击右侧“创建后台”。")
             return
         # (a) 调用 vlmap 查询目标
-        self._log(f"[system] [update_cur_target_set] self.target_set: {self.target_set}")
+        self._log_info(f"[system] [update_cur_target_set] self.target_set: {self.target_set}")
         cur_goal_places = {}
         for obj in self.target_set:
             target_position = self.vlmap_backend.query_object(obj)
-            self._log(f"[system] [update_cur_target_set] query {obj} result: {target_position}")
+            self._log_info(f"[system] [update_cur_target_set] query {obj} result: {target_position}")
             if target_position is not None:
                 cur_goal_places[obj] = target_position
         # (b) 将 目标位置 传递给 IsaacsimEnv，并更新可视性（每个目标是否在当前相机的视锥内）
-        if cur_goal_places:
-            self.agent_env.set_object_places(cur_goal_places)
-            self._log(f"[system] [update_cur_target_set] set cur_goal_places to env: {cur_goal_places}")
-            self._conv(f"智能体: 已更新当前目标位置为 \n{cur_goal_places}")
+        if not cur_goal_places:
+            self._conv_warn("无法在当前地图中找到目标对象或相似目标，请确认目标对象是否存在于场景中。")
+            self._log_warn("[system] [update_cur_target_set] No target positions found for current targets.")
+            return
+        self.agent_env.set_object_places(cur_goal_places)
+        self._log(f"[system] [update_cur_target_set] set cur_goal_places to env: {cur_goal_places}")
+        self._conv_info(f"已更新当前目标位置为 \n{cur_goal_places}")
+        self.agent_env.bind_bt(self.bt)
+        self._log_info("[system] [feed_instruction] Binding BT to agent_env.")
             
-        self.agent_env.run_action("mark", None)  # for test
+        # self.agent_env.run_action("mark", None)  # for test
 
     # ---------------------- 数据获取占位接口 ----------------------
     def get_conversation_text(self) -> str:
@@ -338,6 +335,21 @@ class EGAgentSystem:
 
         return rows
 
+    def update_objects_from_map(self):
+        if not self.backend_ready:
+            return
+        entites = self.get_entity_rows()
+        if entites:
+            self.bt_objects = {name.split('/', 1)[1].capitalize() for name, _ in entites if name.startswith("global/")}
+            self.goal_generator.prepare_prompt(self.bt_objects)
+            # self._log(f"Updated goal_generator with scene_prompt: {self.goal_generator.prompt_scene}")
+            # self.bt_generator.set_key_objects(list(self.bt_objects))
+            # self._log(f"已设置原子动作: \n{[action.name for action in self.bt_generator.planner.actions]}")
+            if self.cfg['caring_mode']:
+                chinese_objs = self.goal_generator.ask_question(
+                    f"请用中文列出以下英文目标集合：{self.bt_objects}", use_system_prompt=False)
+                self._conv(f"智能体: 可以参考的任务对象有 {chinese_objs}")
+
     def get_semantic_map_image(self) -> np.ndarray:
         """Semantic/path map from dualmap; fallback to detector annotated image."""
         semantic_map = self.dm.get_semantic_map_image()
@@ -375,6 +387,7 @@ class EGAgentSystem:
         if len(self._conversation) > 2000:
             self._conversation = self._conversation[-1000:]
 
+    # 简洁的对话分级包装
     def _conv(self, line: str):
         """Append a line to the conversation buffer with trimming."""
         self._append_conversation(line)
@@ -388,6 +401,10 @@ class EGAgentSystem:
         """Emit an agent warning message with a tag for GUI styling."""
         self._conv(f"智能体: [!warn] {message}")
 
+    def _conv_info(self, message: str):
+        """Emit an agent info message with a tag for GUI styling."""
+        self._conv(f"智能体: [!info] {message}")
+
     def _log(self, line: str):
         """Append a timestamped line to logs and emit 'log' event."""
         ts = time.strftime("%H:%M:%S")
@@ -395,6 +412,16 @@ class EGAgentSystem:
         if len(self._logs) > 5000:
             self._logs = self._logs[-3000:]
         self._emit("log", self.get_log_text_tail())
+
+    # 简洁的日志分级包装
+    def _log_info(self, msg: str): 
+        self._log(f"[INFO] {msg}")
+
+    def _log_warn(self, msg: str): 
+        self._log(f"[WARN] {msg}")
+        
+    def _log_error(self, msg: str): 
+        self._log(f"[ERROR] {msg}")
 
     def _gen_dummy_image(self, w: int, h: int, text: str) -> np.ndarray:
         """Generate a simple gradient placeholder image of shape (h, w, 3)."""

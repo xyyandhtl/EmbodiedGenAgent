@@ -1,3 +1,6 @@
+[Condition]
+{AllCondition}
+
 [Examples]
 - 指令: "请前往控制室。"
 Goal: RobotNear_ControlRoom

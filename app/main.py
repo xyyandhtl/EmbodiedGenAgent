@@ -104,6 +104,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.entityTable.verticalHeader().setVisible(False)
 
         self.update_statusbar()
+        # 新增：初始化分段状态栏（状态/BT节点/在视野目标）
+        self._init_statusbar()
+        self.update_statusbar()
 
         # --- 新增：初始化图像与报告浏览器 ---
         self._setup_image_browser()
@@ -185,6 +188,8 @@ class MainWindow(QtWidgets.QMainWindow):
         """高频: 当前视野实例分割"""
         img = self.agent_system.get_current_instance_seg_image()
         self.instanceSegLabel.setPixmap(np_to_qpix(img))
+        # 高频刷新状态栏段落
+        self.update_statusbar()
 
     def update_medium(self):
         if not self.agent_system.backend_ready:
@@ -265,12 +270,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._avatar_agent = self._make_avatar(QtGui.QColor("#6a7a8a"), "智")
 
         # 新增：可复用的聊天主题与严重级别标签
-        self._severity_tags = {"[!error]": "error", "[!warn]": "warn"}
+        self._severity_tags = {"[!error]": "error", "[!warn]": "warn", "[!info]": "info"}
         self._chat_theme = {
             "user":        {"bg": "#3d7cff", "fg": "#ffffff", "border": "none"},
             "agent":       {"bg": "#3a3f4b", "fg": "#ffffff", "border": "none"},
             "agent_warn":  {"bg": "#5a4b2b", "fg": "#ffd666", "border": "1px solid #ffd666"},
             "agent_error": {"bg": "#5a2a2a", "fg": "#ffb3b3", "border": "2px solid #ff6b6b"},
+            "agent_info":  {"bg": "#1f5630", "fg": "#eaffea", "border": "1px solid #89e08f"},
         }
 
     def _group_messages(self, txt: str) -> list:
@@ -439,11 +445,57 @@ class MainWindow(QtWidgets.QMainWindow):
     def update_statusbar(self):
         if not hasattr(self, "statusbar"):
             return
+        # 段1：状态
         if not self.agent_system.backend_ready:
-            self.statusbar.showMessage("智能体状态: 未创建后台")
+            state_txt = "未创建后台"
+        else:
+            state_txt = "运行中" if self.agent_system.status else "已停止"
+        if hasattr(self, "sb_state"):
+            self.sb_state.setText(f"状态: {state_txt}")
+
+        # 段2：当前行为树执行节点
+        cur_node = ""
+        try:
+            cur_node = self.agent_system.get_last_tick_output()
+        except Exception:
+            cur_node = ""
+        if hasattr(self, "sb_bt"):
+            self.sb_bt.setText(f"BT: {cur_node or '-'}")
+
+        # 段3：目标在视野（简要）
+        inview_txt = "-"
+        try:
+            gv = self.agent_system.get_goal_inview()
+            if gv:
+                keys = list(gv.keys())
+                total = len(keys)
+                in_keys = [k for k, v in gv.items() if v]
+                n_in = len(in_keys)
+                # 只展示前几项，避免过长
+                preview = ", ".join(in_keys[:4]) + ("…" if n_in > 4 else "")
+                inview_txt = f"{n_in}/{total}" + (f" [{preview}]" if n_in else "")
+        except Exception:
+            pass
+        if hasattr(self, "sb_inview"):
+            self.sb_inview.setText(f"视野: {inview_txt}")
+
+    # --- 新增：分段状态栏初始化
+    def _init_statusbar(self):
+        if not hasattr(self, "statusbar"):
             return
-        state = "运行中" if self.agent_system.status else "已停止"
-        self.statusbar.showMessage(f"智能体状态: {state}")
+        # 三段：总体状态 / 当前BT节点 / 视野内目标
+        self.sb_state = QtWidgets.QLabel("状态: -")
+        self.sb_bt = QtWidgets.QLabel("BT: -")
+        self.sb_inview = QtWidgets.QLabel("视野: -")
+        for w in (self.sb_state, self.sb_bt, self.sb_inview):
+            f = w.font()
+            f.setPointSize(max(9, f.pointSize()-1))
+            w.setFont(f)
+            w.setStyleSheet("QLabel { color: #dddddd; }")
+        # 作为永久部件，showMessage 时也不会遮挡
+        self.statusbar.addPermanentWidget(self.sb_state, 1)
+        self.statusbar.addPermanentWidget(self.sb_bt, 2)
+        self.statusbar.addPermanentWidget(self.sb_inview, 2)
 
     # --- 新增：图像浏览器初始化与行为 ---
     def _setup_image_browser(self):
@@ -693,6 +745,8 @@ class MainWindow(QtWidgets.QMainWindow):
             # 让状态文字立刻可见
             self.statusbar.showMessage(msg, 0)
             QtWidgets.QApplication.processEvents(QtCore.QEventLoop.AllEvents, 50)
+        # 记录忙碌态，避免被定时刷新覆盖
+        self._busy = bool(busy)
         if busy:
             self._set_controls_enabled(False)
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
