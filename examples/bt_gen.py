@@ -3,39 +3,40 @@ from EG_agent.planning.bt_planner import BTGenerator
 if __name__ == "__main__":
     test_env = "embodied"  # "virtualhome"  # "embodied"
 
-    if test_env == "embodied":
-        cur_cond_set = set()
-        goal_str = 'RobotNear_Doorway & IsCaptured_Victim'
-        key_objects = ["StagingArea", "Corridor", "Intersection", "Stairwell",
-                    "Office", "Warehouse", "ControlRoom", "LoadingBay", 
-                    "Lobby", "ChargingStation", "Outdoor", "Indoor", "Wall",
-                    "Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
-                    "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",
-                    "Blood", "Fire", "Gas", "Debris",
-                    "Victim", "Rescuer", "Visitor", "Staff"]
-    elif test_env == "virtualhome":
-        cur_cond_set = {'IsSwitchedOff(dishwasher)', 'IsSwitchedOff(tablelamp)', 'IsClose(garbagecan)', 
-                        'IsClose(cabinet)', 'IsStanding(self)', 'IsSwitchedOff(toaster)', 'IsClose(dishwasher)', 
-                        'IsSwitchedOff(lightswitch)', 'IsRightHandEmpty(self)', 'IsLeftHandEmpty(self)', 
-                        'IsSwitchedOff(tv)', 'IsClose(kitchencabinet)', 'IsSwitchedOff(microwave)', 
-                        'IsSwitchedOff(faucet)', 'IsClose(stove)', 'IsSwitchedOff(coffeemaker)', 
-                        'IsSwitchedOff(computer)', 'IsClose(microwave)', 'IsClose(fridge)', 'IsSwitchedOff(stove)'}
-        goal_str = 'IsSwitchedOn_tv & IsClose_microwave '
-        key_objects = ["tv","microwave"]
-    else:
-        raise NotImplementedError
+    # if test_env == "embodied":
+    #     cur_cond_set = set()
+    #     goal_str = 'RobotNear_Doorway & IsCaptured_Victim'
+    #     key_objects = ["StagingArea", "Corridor", "Intersection", "Stairwell",
+    #                 "Office", "Warehouse", "ControlRoom", "LoadingBay", 
+    #                 "Lobby", "ChargingStation", "Outdoor", "Indoor", "Wall",
+    #                 "Doorway", "Window", "ElectricalPanel", "GasMeter", "Equipment",
+    #                 "StructuralCrack", "SmokeSource", "WaterLeak", "BlockedExit",
+    #                 "Blood", "Fire", "Gas", "Debris",
+    #                 "Victim", "Rescuer", "Visitor", "Staff"]
+    # elif test_env == "virtualhome":
+    #     cur_cond_set = {'IsSwitchedOff(dishwasher)', 'IsSwitchedOff(tablelamp)', 'IsClose(garbagecan)', 
+    #                     'IsClose(cabinet)', 'IsStanding(self)', 'IsSwitchedOff(toaster)', 'IsClose(dishwasher)', 
+    #                     'IsSwitchedOff(lightswitch)', 'IsRightHandEmpty(self)', 'IsLeftHandEmpty(self)', 
+    #                     'IsSwitchedOff(tv)', 'IsClose(kitchencabinet)', 'IsSwitchedOff(microwave)', 
+    #                     'IsSwitchedOff(faucet)', 'IsClose(stove)', 'IsSwitchedOff(coffeemaker)', 
+    #                     'IsSwitchedOff(computer)', 'IsClose(microwave)', 'IsClose(fridge)', 'IsSwitchedOff(stove)'}
+    #     goal_str = 'IsSwitchedOn_tv & IsClose_microwave '
+    #     key_objects = ["tv","microwave"]
+    # else:
+    #     raise NotImplementedError
 
-    print("goal_str:", goal_str)
+    # print("goal_str:", goal_str)
 
     # instantiate wrapper with minimal args
     bt_gen = BTGenerator(
         env_name=test_env,
-        cur_cond_set=cur_cond_set,
-        key_objects=["tv","microwave"], # fro test, key_objects in __init__ and set_key_objects is different
+        cur_cond_set=set(), # set empty
+        key_objects=[],     # set empty
     )
 
-    bt_gen.set_key_objects(key_objects)
-    bt = bt_gen.generate(goal_str, btml_name="tree")
+    bt_gen.set_key_objects(["TrafficSign"])
+    bt_gen.set_goal("RobotNear_TrafficSign & IsCaptured_TrafficSign")
+    bt = bt_gen.generate(btml_name="tree")
 
      # if scene in ["VH","RW"]:
     #     if not headless:

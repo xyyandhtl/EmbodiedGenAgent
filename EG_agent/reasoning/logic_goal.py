@@ -27,25 +27,26 @@ class LogicGoalGenerator:
 
         self.llm = VLMInference()
 
-    def prepare_prompt(self, object_set=None):
+    def prepare_prompt(self, object_set=()):
         from EG_agent.prompts import default_objects
         all_cond_str = default_objects.AllCondition
-        if object_set is None:
-            # 预定义 object sets 时用这个
-            object_list = sorted(list(default_objects.AllObject))
-            object_str = json.dumps(object_list, ensure_ascii=False)
-            self.prompt_scene = self.prompt_scene_template.format(
-                AllObject=object_str,
-                AllCondition=all_cond_str
-            )
-        else:
-            # 需要动态传入 object sets 时用这个在外部调用
-            objects_list = sorted(list(object_set))
-            objects = json.dumps(objects_list, ensure_ascii=False)
-            self.prompt_scene = self.prompt_scene_template.format(
-                AllObject=objects,
-                AllCondition=all_cond_str
-            )
+        object_set = object_set or {"AnyObject"}
+        # if object_set is None:
+        #     # 预定义 object sets 时用这个
+        #     object_list = sorted(list(default_objects.AllObject))
+        #     object_str = json.dumps(object_list, ensure_ascii=False)
+        #     self.prompt_scene = self.prompt_scene_template.format(
+        #         AllObject=object_str,
+        #         AllCondition=all_cond_str
+        #     )
+        # else:
+        # 需要动态传入 object sets 时用这个在外部调用
+        objects_list = sorted(list(object_set))
+        objects = json.dumps(objects_list, ensure_ascii=False)
+        self.prompt_scene = self.prompt_scene_template.format(
+            AllObject=objects,
+            AllCondition=all_cond_str
+        )
         self.prompt = self.prompt_scene + self.prompt_goal
         self.llm.set_system_prompt(self.prompt)
 

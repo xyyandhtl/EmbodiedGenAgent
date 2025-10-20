@@ -55,13 +55,25 @@ class BTGenerator:
         self.key_objects = key_objects
         self.planner.set_key_objects(key_objects=self.key_objects)
 
-    def generate(self, goal: str, btml_name: str = "tree") -> BehaviorTree:
+    def goal_str2set(self, goal: str) -> set:
+        return goal_transfer_str(goal)[0]
+
+    # Would not be used, when bt no need to be connected to env
+    def execute(self, goal: set, state: set, verbose: bool = True):
+        if not self.planner:
+            raise RuntimeError("Planner not initialized. Call generate() first.")
+        return self.planner.execute_bt(goal, state, verbose=verbose)
+
+    def set_goal(self, goal: str):
+        self.goal_set = goal_transfer_str(goal)[0]
+
+    def generate(self, btml_name: str = "tree") -> Optional[BehaviorTree]:
         """
         goal: either a goal string (e.g. 'A & B') or a pre-parsed goal_set (list/iterable of condition sets)
         Returns a BehaviorTree instance (and stores ptml/cost/expanded_num in self.last_*).
         """
         start_time = time.time()
-        self.goal_set = goal_transfer_str(goal)[0]
+        # self.goal_set = goal_transfer_str(goal)[0]
 
         # planner already created in constructor
         self.planner.process([self.goal_set])
@@ -94,12 +106,3 @@ class BTGenerator:
         # If requested, write PTML to the specified file
         # bt.draw(file_name=btml_name, png_only=True)
         return bt
-    
-    def goal_str2set(self, goal: str) -> set:
-        return goal_transfer_str(goal)[0]
-
-    # Would not be used, when bt no need to be connected to env
-    def execute(self, goal: set, state: set, verbose: bool = True):
-        if not self.planner:
-            raise RuntimeError("Planner not initialized. Call generate() first.")
-        return self.planner.execute_bt(goal, state, verbose=verbose)
