@@ -264,6 +264,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self._avatar_user = self._make_avatar(QtGui.QColor("#3d7cff"), "你")
         self._avatar_agent = self._make_avatar(QtGui.QColor("#6a7a8a"), "智")
 
+        # 新增：可复用的聊天主题与严重级别标签
+        self._severity_tags = {"[!error]": "error", "[!warn]": "warn"}
+        self._chat_theme = {
+            "user":        {"bg": "#3d7cff", "fg": "#ffffff", "border": "none"},
+            "agent":       {"bg": "#3a3f4b", "fg": "#ffffff", "border": "none"},
+            "agent_warn":  {"bg": "#5a4b2b", "fg": "#ffd666", "border": "1px solid #ffd666"},
+            "agent_error": {"bg": "#5a2a2a", "fg": "#ffb3b3", "border": "2px solid #ff6b6b"},
+        }
+
     def _group_messages(self, txt: str) -> list:
         """将全量对话文本按‘用户:’/‘智能体:’分组，保持单条消息内的换行。"""
         lines = txt.splitlines()
@@ -330,7 +339,15 @@ class MainWindow(QtWidgets.QMainWindow):
             is_user = False
             content = line.split(":", 1)[1].strip()
 
-        widget = self._build_chat_item(content or line, is_user)
+        # 新增：解析严重级别标签
+        kind = None
+        for tag, k in self._severity_tags.items():
+            if content.startswith(tag):
+                kind = k
+                content = content[len(tag):].lstrip()
+                break
+
+        widget = self._build_chat_item(content or line, is_user, kind)
         item = QtWidgets.QListWidgetItem()
         # 使每一行占满列表视口宽度，便于将用户气泡推到最右侧边缘
         row_w = self.conversationList.viewport().width() or 600
@@ -340,7 +357,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # 新增：确保添加后行宽正确（处理偶发的延迟布局）
         self._update_chat_item_widths()
 
-    def _build_chat_item(self, text: str, is_user: bool) -> QtWidgets.QWidget:
+    def _build_chat_item(self, text: str, is_user: bool, kind: str | None = None) -> QtWidgets.QWidget:
         w = QtWidgets.QWidget()
         h = QtWidgets.QHBoxLayout(w)
         h.setContentsMargins(6, 2, 6, 2)
@@ -352,22 +369,27 @@ class MainWindow(QtWidgets.QMainWindow):
         avatar_lbl.setPixmap((self._avatar_user if is_user else self._avatar_agent))
 
         bubble = QtWidgets.QLabel(text)
-        # 仅在显式换行符处分行
         bubble.setTextFormat(QtCore.Qt.PlainText)
         bubble.setWordWrap(False)
         bubble.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+
+        # 新增：根据主题与严重级别设置样式
+        if is_user:
+            theme = self._chat_theme.get("user")
+        else:
+            key = "agent" if not kind else f"agent_{kind}"
+            theme = self._chat_theme.get(key, self._chat_theme.get("agent"))
         bubble.setStyleSheet(
             "QLabel {"
-            f" background: {'#3d7cff' if is_user else '#3a3f4b'};"
-            " color: white;"
+            f" background: {theme['bg']};"
+            f" color: {theme['fg']};"
+            f" border: {theme['border']};"
             " border-radius: 8px;"
             " padding: 8px 10px;"
             "}"
         )
+
         bubble.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
-        # 移除最大宽度限制，避免因宽度上限导致按空格换行或截断
-        # (若需要可改为在气泡内部加入水平滚动的只读文本控件)
-        # bubble.setMaximumWidth(...)
 
         if is_user:
             h.addStretch(1)

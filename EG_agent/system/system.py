@@ -212,8 +212,8 @@ class EGAgentSystem:
             # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
 
             # 最终行为树执行测试
-            # is_finished = self.agent_env.step()
-            self._log(f"当前行为树执行节点：{self.agent_env.last_tick_output}")
+            is_finished = self.agent_env.step()
+            # self._log(f"当前行为树执行节点：{self.agent_env.last_tick_output}")
 
         if self.backend_ready:
             self.dm.end_process()
@@ -236,7 +236,7 @@ class EGAgentSystem:
         self._log(f"[system] [feed_instruction] goal is: {self.goal}")
         self._conv(f"智能体: 已解析指令为逻辑目标: {self.goal}")
         if not self.goal:
-            self._conv(f"智能体: 无法理解指令")
+            self._conv_err("无法理解指令，已中断指令下发")
             return
 
         # 2. goal 逻辑指令 ==> BehaviorTree 实例
@@ -246,13 +246,16 @@ class EGAgentSystem:
         self.agent_env.cur_goal_set = goal_set
         # 提取目标对象集合 TODO:行为树能否不依赖于给定的目标集合
         self.target_set = { self.agent_env.extract_targes(goal) for goal in goal_set }
+        if any(x is None for x in self.target_set):
+            self._conv_err("无法理解指令中的目标对象，已中断指令下发")
+            return
         self._log(f"[system] [feed_instruction] target_set is: {self.target_set}")
         self.bt_generator.set_key_objects(list(self.target_set))
         self._conv(f"智能体: 准备从逻辑目标生成以 {self.target_set} 为目标集的行为树")
         # 生成行为树
         self.bt = self.bt_generator.generate(btml_name="tree")
         if not self.bt:
-            self._conv(f"智能体: 无法解析指令生成行为树")
+            self._conv_err("无法解析指令生成行为树，已中断指令下发")
             return
         self._log(f"[system] [feed_instruction] Generated BehaviorTree: {self.bt}")
         self.bt.draw(png_only=True, file_name=self.bt_name)
@@ -268,7 +271,7 @@ class EGAgentSystem:
         """After feed_instruction, bind bt to env, query the target object positions"""        
         if not self.backend_ready:
             self._log("[system] Backend not created, cannot query object positions.")
-            self._conv("智能体: 后台未创建，无法查询目标位置，请先点击右侧“创建后台”。")
+            self._conv_warn("后台未创建，无法查询目标位置，请先点击右侧“创建后台”。")
             return
         # (a) 调用 vlmap 查询目标
         self._log(f"[system] [update_cur_target_set] self.target_set: {self.target_set}")
@@ -376,6 +379,14 @@ class EGAgentSystem:
         """Append a line to the conversation buffer with trimming."""
         self._append_conversation(line)
         self._emit("conversation", self.get_conversation_text())
+
+    def _conv_err(self, message: str):
+        """Emit an agent error message with a tag for GUI styling."""
+        self._conv(f"智能体: [!error] {message}")
+
+    def _conv_warn(self, message: str):
+        """Emit an agent warning message with a tag for GUI styling."""
+        self._conv(f"智能体: [!warn] {message}")
 
     def _log(self, line: str):
         """Append a timestamped line to logs and emit 'log' event."""
