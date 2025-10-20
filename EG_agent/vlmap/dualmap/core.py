@@ -429,6 +429,8 @@ class Dualmap:
                     # Global Mapping
                     self.global_map_manager.process_observations(global_obs_list)
 
+                    self.visualizer.mark_semantic_map_dirty(dirty=True)  # global_map 改变，需更新语义地图图像缓存
+
                 # Get memory usage statistics of local and global maps
                 # mem_stats = get_map_memory_usage(self.local_map_manager.local_map,
                 #                                 self.global_map_manager.global_map)
@@ -577,6 +579,8 @@ class Dualmap:
         # (1) 将 点云数据 设置给 GlobalMapManager.layout_map
         # (2) 如果没有墙壁点云，则提取墙壁点云
         self.global_map_manager.set_layout_info(layout_pcd)
+
+        self.visualizer.mark_semantic_map_dirty(dirty=True)  # wall_pcd 改变，需更新语义地图图像缓存
 
         # calculate the path based on current global map
         # Get 3D path point in world coordinate

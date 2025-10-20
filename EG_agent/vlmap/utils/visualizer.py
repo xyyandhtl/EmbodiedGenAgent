@@ -40,6 +40,10 @@ class ReRunVisualizer:
             self.image = None
             self._intrinsic_initialized = False
 
+            # Caching for the semantic map
+            self.cached_semantic_map = None
+            self.semantic_map_dirty = True
+            self.semantic_map_metadata = {}
             self._initialized = True
 
             self.overlapped_image = None
@@ -231,200 +235,181 @@ class ReRunVisualizer:
 
         return image
 
+    def mark_semantic_map_dirty(self, dirty=True):
+        """Marks the semantic map as dirty, forcing a redraw on next get."""
+        self.semantic_map_dirty = dirty
+
     def get_semantic_map_image(self, global_map_manager, resolution=0.03, curr_pose=None, traj_path=None, nav_path=None) -> None | np.ndarray:
         """
         Generates a top-down 2D image of the global semantic map, including the navigation path and current robot position.
-            * resolution = 0.03 m/pix (same as the resolution of the NavGraph in calculate_global/local_path())
+        Uses caching to avoid regenerating the static parts of the map on every call.
         """
         from PIL import Image, ImageDraw, ImageFont
 
         if not global_map_manager.has_global_map():
+            self.cached_semantic_map = None # Clear cache if map is empty
             return None
 
-        # 1. Get all GlobalObject's points (GlobalObject的体素下采样后点云，坐标为每个体素中点云的均值) from the global map
-        all_points_lists = [np.asarray(obj.pcd_2d.points) for obj in global_map_manager.global_map if not obj.pcd_2d.is_empty()]
-
-        layout_map = global_map_manager.layout_map
-        layout_pcd = None
-        wall_pcd = None
-        if layout_map is not None:
-            # 2. all wall points if available
-            wall_pcd = layout_map.wall_pcd
-            if wall_pcd is not None:
+        if self.semantic_map_dirty or self.cached_semantic_map is None:
+            logger.info("[Visualizer] Regenerating semantic map cache...")
+            # 1. Get all GlobalObject's pcd and wall pcd (GlobalObject的体素下采样后点云，坐标为每个体素中点云的均值) from the global map
+            all_points_lists = [np.asarray(obj.pcd_2d.points) for obj in global_map_manager.global_map if not obj.pcd_2d.is_empty()]
+            wall_pcd = global_map_manager.layout_map.wall_pcd if global_map_manager.layout_map else None
+            if wall_pcd is not None and not wall_pcd.is_empty():
                 all_points_lists.append(np.asarray(wall_pcd.points))
 
-        if not all_points_lists:
-            return None
+            if not all_points_lists:
+                return None
+            all_points = np.vstack(all_points_lists)
+            all_points = all_points[np.isfinite(all_points).all(axis=1)]  # Filter out invalid values
+            if all_points.size == 0:
+                return None
 
-        all_points = np.vstack(all_points_lists)
-        all_points = all_points[np.isfinite(all_points).all(axis=1)]  # Filter out invalid values
-        if all_points.size == 0:
-            return None
+            # 2. Determine map dimensions and create base image
+            min_coords = np.min(all_points[:, :2], axis=0)
+            max_coords = np.max(all_points[:, :2], axis=0)
+            map_size = max_coords - min_coords  # the size of the image
+            scale_factor = 6.0
+            padding = 100  # pixels
+            width = int((map_size[0]) / resolution * scale_factor) + padding
+            height = int((map_size[1]) / resolution * scale_factor) + padding
 
-        # Determine the bounding box of the whole pcd
-        min_coords = np.min(all_points[:, :2], axis=0)
-        max_coords = np.max(all_points[:, :2], axis=0)
-        map_size = max_coords - min_coords  # the size of the image
+            pil_img = Image.new('RGB', (width, height), (255, 255, 255))
+            draw = ImageDraw.Draw(pil_img)
 
-        scale_factor = 6.0
-        padding = 100  # pixels
-        width = int((map_size[0]) / resolution * scale_factor) + padding
-        height = int((map_size[1]) / resolution * scale_factor) + padding
+            try:
+                font = ImageFont.truetype("DejaVuSans.ttf", size=int(12 * (scale_factor / 3)))
+            except IOError:
+                font = ImageFont.load_default()
 
-        pil_img = Image.new('RGB', (width, height), (255, 255, 255))
-        draw = ImageDraw.Draw(pil_img)
+            # World-to-image transformation function
+            def world_to_img(point):
+                point_img = ((point[:2] - min_coords) / resolution * scale_factor).astype(int)
+                point_img[0] += padding // 2
+                point_img[1] = height - point_img[1] - (padding // 2)
+                return tuple(point_img)
 
-        try:
-            # Use a common, often pre-installed, anti-aliased font.
-            # If not found, PIL will fall back to a default bitmap font.
-            font = ImageFont.truetype("DejaVuSans.ttf", size=int(12 * (scale_factor / 3)))
-            coord_font = ImageFont.truetype("DejaVuSans.ttf", size=int(10 * (scale_factor / 3)))
-        except IOError:
-            logger.warning("[Visualizer] DejaVuSans.ttf not found. Falling back to default font.")
-            font = ImageFont.load_default()
-            coord_font = ImageFont.load_default()
-
-        # Transform points to image coordinates (with scaling)
-        def world_to_img(point):
-            point_img = ((point[:2] - min_coords) / resolution * scale_factor).astype(int)
-            point_img[0] += padding // 2
-            point_img[1] = height - point_img[1] - (padding // 2)  # flip Y axis
-            return tuple(point_img)
-
-        placed_label_boxes = [] # List to store bounding boxes of placed labels
-
-        # 0. Draw wall maps first as a background
-        if wall_pcd is not None and not wall_pcd.is_empty():
-            wall_points = np.asarray(wall_pcd.points)
-            wall_points = wall_points[np.isfinite(wall_points).all(axis=1)]
-            if wall_points.shape[0] > 0:
-                wall_points_img = np.array([world_to_img(p) for p in wall_points])
+            # 3. --- Drawing Static Elements --- (wall pcd and GlobalObject's pcd)
+            placed_label_boxes = []  # List to store bounding boxes of placed labels
+            # (1) Draw wall maps first as a background
+            if wall_pcd is not None and not wall_pcd.is_empty():
+                wall_points_img = np.array([world_to_img(p) for p in np.asarray(wall_pcd.points) if np.isfinite(p).all()])
                 radius = int(1 * (scale_factor / 3))
                 for p_img in wall_points_img:
-                    draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=(100, 100, 100)) # Dark gray
+                    draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=(100, 100, 100))  # Dark gray
+            # (2) Draw GlobalObject's points
+            for obj in global_map_manager.global_map:
+                points = np.asarray(obj.pcd_2d.points)
+                points = points[np.isfinite(points).all(axis=1)]
+                if points.shape[0] == 0: continue
+                # Get the class color for the object
+                obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
+                color_rgb_int = tuple(int(c * 255) for c in self.obj_classes.get_class_color(obj_name))  # float RGB color (0-255 range)
+                points_img = np.array([world_to_img(p) for p in points])
+                radius = int(2 * (scale_factor / 3))
+                for p_img in points_img:
+                    draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=color_rgb_int)
 
-        # 1. Draw GlobalObject's points
-        for obj in global_map_manager.global_map:
-            points = np.asarray(obj.pcd_2d.points)
-            points = points[np.isfinite(points).all(axis=1)]
-            if points.shape[0] == 0:
-                continue
-            # (1) Draw the points with class color on the image
-            # Get the color for the object
-            obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
-            color_rgb = self.obj_classes.get_class_color(obj_name)  # float RGB color (0-1 range)
-            color_rgb_int = tuple(int(c * 255) for c in color_rgb)  # (0-255 range)
+                # (3) Draw the class text on the image (with collision detection)
+                # object bbox in image coords and text size
+                obj_x_min, obj_y_min = np.min(points_img, axis=0)
+                obj_x_max, obj_y_max = np.max(points_img, axis=0)
+                centroid_img = np.mean(points_img, axis=0).astype(int)
 
-            # Transform points to image coordinates (with scaling)
-            points_img = np.array([world_to_img(p) for p in points])
+                text_bbox = draw.textbbox((0, 0), obj_name, font=font)
+                text_w, text_h = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
 
-            radius = int(2 * (scale_factor / 3))
-            for p_img in points_img:
-                draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=color_rgb_int)
+                # text_bbox candidate positions
+                candidates = [
+                    (centroid_img[0] - text_w // 2, centroid_img[1] - text_h // 2 - 5),  # Center
+                    (obj_x_min + (obj_x_max - obj_x_min) // 2 - text_w // 2, obj_y_min - text_h),  # Top-center
+                    (obj_x_max + 1, obj_y_min + text_h // 2),  # Top-right
+                    (obj_x_min - text_w - 1, obj_y_min + text_h // 2),  # Top-left
+                    (obj_x_max + 1, obj_y_max),  # Bottom-right
+                    (obj_x_min - text_w - 1, obj_y_max),  # Bottom-left
+                ]
 
-            # (2) Draw the class text on the image (with collision detection)
-            # Get object bbox in image coords and text size
-            obj_x_min, obj_y_min = np.min(points_img, axis=0)
-            obj_x_max, obj_y_max = np.max(points_img, axis=0)
-            centroid_img = np.mean(points_img, axis=0).astype(int)
-
-            text_bbox = draw.textbbox((0, 0), obj_name, font=font)
-            text_w, text_h = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
-
-            # text_bbox candidate positions
-            candidates = [
-                (centroid_img[0] - text_w // 2, centroid_img[1] - text_h // 2 - 5),  # Center
-                (obj_x_min + (obj_x_max - obj_x_min) // 2 - text_w // 2, obj_y_min - text_h),  # Top-center
-                (obj_x_max + 1, obj_y_min + text_h // 2),  # Top-right
-                (obj_x_min - text_w - 1, obj_y_min + text_h // 2),  # Top-left
-                (obj_x_max + 1, obj_y_max),  # Bottom-right
-                (obj_x_min - text_w - 1, obj_y_max),  # Bottom-left
-            ]
-
-            final_pos = None
-            # Find a non-colliding position
-            for pos in candidates:
-                lx, ly = pos
-                label_box = (lx, ly, lx + text_w, ly + text_h)
-
-                # Check for collision with image boundaries
-                if not (label_box[0] >= 0 and label_box[1] >= 0 and label_box[2] < width and label_box[3] < height):
-                    continue
-
-                # Check for collision with other labels
-                is_colliding = False
-                for placed_box in placed_label_boxes:
-                    if not (label_box[2] < placed_box[0] or \
-                            label_box[0] > placed_box[2] or \
-                            label_box[3] < placed_box[1] or \
-                            label_box[1] > placed_box[3]):
-                        is_colliding = True
+                final_pos = None
+                # Find a non-colliding position
+                for pos in candidates:
+                    lx, ly = pos
+                    label_box = (lx, ly, lx + text_w, ly + text_h)
+                    # Check for collision with image boundaries
+                    if not (label_box[0] >= 0 and label_box[1] >= 0 and label_box[2] < width and label_box[3] < height):
+                        continue
+                    # Check for collision with other labels
+                    is_colliding = False
+                    for placed_box in placed_label_boxes:
+                        if not (label_box[2] < placed_box[0] or \
+                                label_box[0] > placed_box[2] or \
+                                label_box[3] < placed_box[1] or \
+                                label_box[1] > placed_box[3]):
+                            is_colliding = True
+                            break
+                    if not is_colliding:
+                        final_pos = pos
+                        placed_label_boxes.append(label_box)
                         break
-                if not is_colliding:
-                    final_pos = pos
-                    placed_label_boxes.append(label_box)
-                    break
-            # If no good position is found, fall back to the center
-            if final_pos is None:
-                final_pos = candidates[0]
-            draw.text(final_pos, obj_name, font=font, fill=(0, 0, 0))
+                # If no good position is found, fall back to the center
+                if final_pos is None:
+                    final_pos = candidates[0]
+                draw.text(final_pos, obj_name, font=font, fill=(0, 0, 0))
 
-        # 2. Draw navigation path
+
+            # 4. Store cached image and metadata
+            self.cached_semantic_map = pil_img
+            self.semantic_map_metadata = {'min_coords': min_coords, 'resolution': resolution, 'scale_factor': scale_factor, 'padding': padding, 'width': width, 'height': height}
+            self.semantic_map_dirty = False
+        
+        # --- 5. Drawing Dynamic Elements ---
+        if self.cached_semantic_map is None:
+            return None
+
+        # Copy the cached image to draw dynamic elements
+        pil_img = self.cached_semantic_map.copy()
+        draw = ImageDraw.Draw(pil_img)
+        
+        meta = self.semantic_map_metadata
+        def world_to_img_cached(point):
+            point_img = ((point[:2] - meta['min_coords']) / meta['resolution'] * meta['scale_factor']).astype(int)
+            point_img[0] += meta['padding'] // 2
+            point_img[1] = meta['height'] - point_img[1] - (meta['padding'] // 2)
+            return tuple(point_img)
+
+        try:
+            coord_font = ImageFont.truetype("DejaVuSans.ttf", size=int(10 * (meta['scale_factor'] / 3)))
+        except IOError:
+            coord_font = ImageFont.load_default()
+
+        # (1) Draw navigation path
         if nav_path and len(nav_path) > 1:
-            # print(f"[DEBUG] nav_path: {nav_path}")
-            path_points_img = []
-            for point in nav_path:
-                if isinstance(point, (list, tuple, np.ndarray)) and len(point) >= 2:
-                    p = np.array(point)
-                else:
-                    continue
-                path_point_img = world_to_img(p)
-                path_points_img.append(path_point_img)
+            path_points_img = [world_to_img_cached(np.array(p)) for p in nav_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
             if len(path_points_img) > 1:
-                draw.line(path_points_img, fill=(0, 255, 0), width=6) # Green line
+                draw.line(path_points_img, fill=(0, 255, 0), width=6)  # Green line
 
-        # 3. Draw trajectory
+        # (2) Draw trajectory
         if traj_path and len(traj_path) > 1:
-            traj_path_points_img = []
-            for point in traj_path:
-                if isinstance(point, (list, tuple, np.ndarray)) and len(point) >= 2:
-                    p = np.array(point)
-                else:
-                    continue
-                traj_path_point_img = world_to_img(p)
-                traj_path_points_img.append(traj_path_point_img)
-            if len(traj_path_points_img) > 1:
-                draw.line(traj_path_points_img, fill=(0, 0, 255), width=4)  # Blue line
+            traj_points_img = [world_to_img_cached(np.array(p)) for p in traj_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
+            if len(traj_points_img) > 1:
+                draw.line(traj_points_img, fill=(0, 0, 255), width=4)  # Blue line
 
-        # 4. Draw current pose as an arrow
+        # (3) Draw current pose
         if curr_pose is not None:
             pos = curr_pose[:3, 3]
             rot_matrix = curr_pose[:3, :3]
+            fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
+            pos_img = world_to_img_cached(pos)
             
-            # Forward vector in ROS is +Z
-            fwd_vec_local = np.array([0, 0, 1])
-            fwd_vec_world = rot_matrix @ fwd_vec_local
-            
-            pos_img = world_to_img(pos)
-
-            # Arrow properties
-            arrow_length = 16 * (scale_factor / 3)
-            arrow_color = (255, 0, 0) # Red
-
-            # Calculate arrow tip
-            # We only care about the 2D direction on the map (X, Y)
-            # The Y-axis is flipped in the image, so we subtract the y-component of the direction
-            fwd_vec_2d = fwd_vec_world[:2]
-            fwd_vec_2d_normalized = fwd_vec_2d / (np.linalg.norm(fwd_vec_2d) + 1e-6)
-
+            arrow_length = 16 * (meta['scale_factor'] / 3)
+            arrow_color = (255, 0, 0)  # Red
+            fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
             tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
-            tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1] # Subtract because Y is flipped
+            tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]  # Subtract because Y is flipped
 
             # Define triangle points for the arrow
-            # Perpendicular vector for arrow base
             perp_vec_2d = np.array([-fwd_vec_2d_normalized[1], fwd_vec_2d_normalized[0]])
-            base_width = 8 * (scale_factor / 3)
-            
+            base_width = 8 * (meta['scale_factor'] / 3)
+
             base_center_x = pos_img[0] - 0.5 * arrow_length * fwd_vec_2d_normalized[0]
             base_center_y = pos_img[1] + 0.5 * arrow_length * fwd_vec_2d_normalized[1]
 
@@ -435,12 +420,9 @@ class ReRunVisualizer:
             draw.polygon([p1, p2, p3], fill=arrow_color)
             # Add coordinates text
             coord_text = f"({pos[0]:.2f}, {pos[1]:.2f})"
-            text_pos = (pos_img[0] + 15, pos_img[1])
-            draw.text(text_pos, coord_text, font=coord_font, fill=(0, 0, 0)) # Black text
+            draw.text((pos_img[0] + 15, pos_img[1]), coord_text, font=coord_font, fill=(0, 0, 0))
 
-        # Convert PIL (RGB) image to numpy array (BGR) for OpenCV
-        image = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-        return image
+        return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)  # Convert PIL (RGB) image to numpy array (BGR) for OpenCV
 
     def get_traversable_map_image(self, global_map_manager) -> None | np.ndarray:
         """
