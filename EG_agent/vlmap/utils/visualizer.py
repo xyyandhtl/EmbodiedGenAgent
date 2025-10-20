@@ -241,13 +241,27 @@ class ReRunVisualizer:
         if not global_map_manager.has_global_map():
             return None
 
-        # Get all points from the global map
-        all_points = np.vstack([np.asarray(obj.pcd_2d.points) for obj in global_map_manager.global_map if not obj.pcd_2d.is_empty()])
+        # 1. Get all GlobalObject's points (GlobalObject的体素下采样后点云，坐标为每个体素中点云的均值) from the global map
+        all_points_lists = [np.asarray(obj.pcd_2d.points) for obj in global_map_manager.global_map if not obj.pcd_2d.is_empty()]
+
+        layout_map = global_map_manager.layout_map
+        layout_pcd = None
+        wall_pcd = None
+        if layout_map is not None:
+            # 2. all wall points if available
+            wall_pcd = layout_map.wall_pcd
+            if wall_pcd is not None:
+                all_points_lists.append(np.asarray(wall_pcd.points))
+
+        if not all_points_lists:
+            return None
+
+        all_points = np.vstack(all_points_lists)
         all_points = all_points[np.isfinite(all_points).all(axis=1)]  # Filter out invalid values
         if all_points.size == 0:
             return None
 
-        # Determine the bounding box of whole pcd
+        # Determine the bounding box of the whole pcd
         min_coords = np.min(all_points[:, :2], axis=0)
         max_coords = np.max(all_points[:, :2], axis=0)
         map_size = max_coords - min_coords  # the size of the image
@@ -279,7 +293,17 @@ class ReRunVisualizer:
 
         placed_label_boxes = [] # List to store bounding boxes of placed labels
 
-        # 1. Draw each object
+        # 0. Draw wall maps first as a background
+        if wall_pcd is not None and not wall_pcd.is_empty():
+            wall_points = np.asarray(wall_pcd.points)
+            wall_points = wall_points[np.isfinite(wall_points).all(axis=1)]
+            if wall_points.shape[0] > 0:
+                wall_points_img = np.array([world_to_img(p) for p in wall_points])
+                radius = int(1 * (scale_factor / 3))
+                for p_img in wall_points_img:
+                    draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=(100, 100, 100)) # Dark gray
+
+        # 1. Draw GlobalObject's points
         for obj in global_map_manager.global_map:
             points = np.asarray(obj.pcd_2d.points)
             points = points[np.isfinite(points).all(axis=1)]
