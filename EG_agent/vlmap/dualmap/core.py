@@ -589,6 +589,8 @@ class Dualmap:
             self.curr_pose, goal_mode=self.get_goal_mode, resolution=self.cfg.resolution, goal_position=self.goal_pose
         )
 
+        self.visualizer.mark_traversable_map_dirty(dirty=True)  # nav_graph 改变，需更新语义地图图像缓存
+
         # Clear the local mapping results
         self.curr_local_path = None
         self.begin_local_planning = True
@@ -797,5 +799,6 @@ class Dualmap:
     
     def get_traversable_map_image(self):
         return self.visualizer.get_traversable_map_image(
-            self.global_map_manager
+            self.global_map_manager,
+            curr_pose=self.curr_pose
         )

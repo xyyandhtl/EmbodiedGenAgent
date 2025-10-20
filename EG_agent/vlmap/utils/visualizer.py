@@ -44,6 +44,12 @@ class ReRunVisualizer:
             self.cached_semantic_map = None
             self.semantic_map_dirty = True
             self.semantic_map_metadata = {}
+
+            # Caching for the traversable map
+            self.cached_traversable_map = None
+            self.traversable_map_dirty = True
+            self.traversable_map_metadata = {}
+
             self._initialized = True
 
             self.overlapped_image = None
@@ -239,6 +245,10 @@ class ReRunVisualizer:
         """Marks the semantic map as dirty, forcing a redraw on next get."""
         self.semantic_map_dirty = dirty
 
+    def mark_traversable_map_dirty(self, dirty=True):
+        """Marks the traversable map as dirty, forcing a redraw on next get."""
+        self.traversable_map_dirty = dirty
+
     def get_semantic_map_image(self, global_map_manager, resolution=0.03, curr_pose=None, traj_path=None, nav_path=None) -> None | np.ndarray:
         """
         Generates a top-down 2D image of the global semantic map, including the navigation path and current robot position.
@@ -424,26 +434,72 @@ class ReRunVisualizer:
 
         return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)  # Convert PIL (RGB) image to numpy array (BGR) for OpenCV
 
-    def get_traversable_map_image(self, global_map_manager) -> None | np.ndarray:
+    def get_traversable_map_image(self, map_manager, curr_pose=None) -> None | np.ndarray:
         """
-        Generates a top-down 2D image of the local traversable map.
+        Generates a top-down 2D image of the traversable map from a given map manager (local or global).
         """
-        free_grid = global_map_manager.get_traversability_grid()  # Assume this method exists
+        from PIL import Image, ImageDraw
+
+        if not (map_manager and hasattr(map_manager, 'nav_graph') and map_manager.nav_graph and hasattr(map_manager.nav_graph, 'free_space')):
+            return None
+
+        nav_graph = map_manager.nav_graph
+        free_grid = nav_graph.free_space
+
         if free_grid is None:
             return None
 
-        # Create a color representation of the grid
         h, w = free_grid.shape
-        image = np.zeros((h, w, 3), dtype=np.uint8)
 
-        # Color based on grid value (0=occupied, 1=free)
-        image[free_grid == 1] = [255, 255, 255]  # White for free space
-        image[free_grid == 0] = [0, 0, 0]  # Black for occupied
+        if self.traversable_map_dirty or self.cached_traversable_map is None:
+            logger.info("[Visualizer] Regenerating traversable map cache...")
+            image = np.zeros((h, w, 3), dtype=np.uint8)
+            image[free_grid == 1] = [255, 255, 255]  # White for free space
+            image[free_grid == 0] = [100, 100, 100]  # Gray for occupied
 
-        # Flip the image vertically to correct orientation
-        image = cv2.flip(image, 0)
+            # Flip the image vertically to correct orientation
+            image = cv2.flip(image, 0)
+            
+            # PIL expects RGB
+            self.cached_traversable_map = Image.fromarray(image, 'RGB')
+            self.traversable_map_metadata = {'origin': nav_graph.pcd_min, 'resolution': nav_graph.cell_size, 'height': h, 'width': w}
+            self.traversable_map_dirty = False
 
-        return image
+        if self.cached_traversable_map is None:
+            return None
+
+        # --- Drawing Dynamic Elements ---
+        pil_img = self.cached_traversable_map.copy()
+        draw = ImageDraw.Draw(pil_img)
+        meta = self.traversable_map_metadata
+
+        def world_to_grid_img(point):
+            # Transform world point to grid indices
+            grid_x = int((point[0] - meta['origin'][0]) / meta['resolution'])
+            grid_y = int((point[1] - meta['origin'][1]) / meta['resolution'])
+            # Transform grid indices to image coordinates (y is flipped)
+            return (grid_x, meta['height'] - 1 - grid_y)
+
+        if curr_pose is not None:
+            pos = curr_pose[:3, 3]
+            rot_matrix = curr_pose[:3, :3]
+            fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
+            pos_img = world_to_grid_img(pos)
+
+            arrow_length = 16
+            arrow_color = (255, 0, 0) # Red
+
+            fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
+            
+            # Tip in image coordinates (y direction is flipped)
+            tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
+            tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]
+
+            draw.line([pos_img, (tip_x, tip_y)], fill=arrow_color, width=3)
+            draw.ellipse([pos_img[0]-4, pos_img[1]-4, pos_img[0]+4, pos_img[1]+4], fill=arrow_color)
+
+        # Convert back to BGR for OpenCV
+        return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
     
 def visualize_result_rgb(
     image: np.ndarray,
