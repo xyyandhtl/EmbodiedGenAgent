@@ -224,7 +224,7 @@ class IsaacsimEnv(BaseAgentEnv):
     def set_object_places(self, places: dict[str, list[float]]):
         """设置/更新目标位置，并更新可视性（每个目标是否在当前相机的视锥内）"""
         # Normalize to lower-case keys to match action args
-        self.cur_goal_places = {str(k).lower(): v for k, v in places.items()}
+        self.cur_goal_places = {str(k): v for k, v in places.items()}
         # Recompute visibility when goal set changes
         self._update_goal_inview()
 
@@ -234,11 +234,6 @@ class IsaacsimEnv(BaseAgentEnv):
         self.cur_agent_states = {}
         self.goal_inview = {}
         self._last_obs_time = None
-
-    def task_finished(self):
-        """根据条件集合判定任务完成。"""
-        # Delegate scheduling/completion to behavior tree
-        return self.cur_goal_set and self.cur_goal_set <= self.condition_set
 
     # ==========================================
     # 动作发布与执行（cmd_vel、nav_pose、枚举命令、mark）

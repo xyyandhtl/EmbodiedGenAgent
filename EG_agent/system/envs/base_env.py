@@ -27,25 +27,29 @@ class BaseAgentEnv:
     def __init__(self):
         self.time = 0
         self.start_time = time.time()
-        self.condition_set = set()  # moved from Agent
+        self.condition_set = set()
         self.bt: BehaviorTree = None  # type: ignore
 
-        self.init_statistics()  # moved from Agent
+        self.init_statistics()
 
         self.create_behavior_lib()
 
         self._paren_pattern = re.compile(r'\((.*?)\)')
 
-    # moved from Agent
     def bind_bt(self, bt: BehaviorTree):
         bt.bind_agent(self)
         self.bt = bt
 
-    # moved from Agent
     def init_statistics(self):
         self.step_num = 1
         self.next_response_time = self.response_frequency
         self.last_tick_output = None
+
+    def extract_targes(self, bt_node_name):
+        walk_objects = self._paren_pattern.search(bt_node_name)
+        if walk_objects:
+            return walk_objects.group(1)
+        return None
 
     # =========================================================
     # methods that low-level env should impl 
@@ -78,9 +82,9 @@ class BaseAgentEnv:
             if bt_output != self.last_tick_output:
                 # Do some work that low-level env is not callable
                 if bt_output.startswith("Walk"):
-                    walk_objects = self._paren_pattern.search(bt_output)
+                    walk_objects = self.extract_targes(bt_output)
                     if walk_objects:
-                        self.find_path(self.cur_goal_places[walk_objects.group(1).lower()])
+                        self.find_path(self.cur_goal_places[walk_objects])
                     else:
                         raise ValueError(f"Cannot parse walk object from BT output: {bt_output}")
 
@@ -97,7 +101,10 @@ class BaseAgentEnv:
     # control and status methods
     # =========================================================
     def task_finished(self):
-        raise NotImplementedError
+        # raise NotImplementedError
+        """根据条件集合判定任务完成。"""
+        # Delegate scheduling/completion to behavior tree
+        return self.cur_goal_set and self.cur_goal_set <= self.condition_set
 
     def create_behavior_lib(self):
         self.behavior_lib = ExecBehaviorLibrary(self.behavior_lib_path)

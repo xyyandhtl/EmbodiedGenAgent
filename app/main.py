@@ -4,6 +4,7 @@ import numpy as np
 from PyQt5 import QtWidgets, QtCore, QtGui, uic
 from zoom_widget import ZoomableImageWidget
 import threading
+import traceback  # 新增：格式化异常堆栈
 
 # 正式运行
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -685,8 +686,9 @@ class MainWindow(QtWidgets.QMainWindow):
             ok, err = True, ""
             try:
                 func()
-            except Exception as e:
-                ok, err = False, str(e)
+            except Exception:
+                # 新增：捕获完整堆栈，便于定位问题
+                ok, err = False, traceback.format_exc()
             finally:
                 # 通知主线程结束
                 self.taskFinished.emit(desc, ok, err)
@@ -698,7 +700,16 @@ class MainWindow(QtWidgets.QMainWindow):
         if ok:
             self.statusbar.showMessage(f"{desc}完成", 3000)
         else:
-            self.statusbar.showMessage(f"{desc}失败: {err}", 5000)
+            self.statusbar.showMessage(f"{desc}失败: {err.splitlines()[-1] if err else ''}", 5000)
+            # 新增：将完整异常堆栈追加到日志窗口
+            if hasattr(self, "logText") and self.logText is not None:
+                try:
+                    cur = self.logText.toPlainText()
+                    sep = "\n" if cur and not cur.endswith("\n") else ""
+                    self.logText.setPlainText(cur + f"{sep}[{desc}] 异常:\n{err}\n")
+                    self.logText.verticalScrollBar().setValue(self.logText.verticalScrollBar().maximum())
+                except Exception:
+                    pass
         # 状态栏状态同步
         self.update_statusbar()
 
