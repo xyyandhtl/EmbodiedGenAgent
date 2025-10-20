@@ -442,23 +442,26 @@ class ReRunVisualizer:
         image = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
         return image
 
-    def get_traversable_map_image(self, local_map_manager) -> None | np.ndarray:
+    def get_traversable_map_image(self, global_map_manager) -> None | np.ndarray:
         """
         Generates a top-down 2D image of the local traversable map.
         """
-        grid = local_map_manager.get_traversability_grid()  # Assume this method exists
-        if grid is None:
+        free_grid = global_map_manager.get_traversability_grid()  # Assume this method exists
+        if free_grid is None:
             return None
 
         # Create a color representation of the grid
-        h, w = grid.shape
+        h, w = free_grid.shape
         image = np.zeros((h, w, 3), dtype=np.uint8)
 
         # Color based on grid value (0=occupied, 1=free)
-        image[grid == 1] = [255, 255, 255]  # White for free space
-        image[grid == 0] = [0, 0, 0]  # Black for occupied
+        image[free_grid == 1] = [255, 255, 255]  # White for free space
+        image[free_grid == 0] = [0, 0, 0]  # Black for occupied
 
-        return cv2.resize(image, (260, 180), interpolation=cv2.INTER_NEAREST)
+        # Flip the image vertically to correct orientation
+        image = cv2.flip(image, 0)
+
+        return image
     
 def visualize_result_rgb(
     image: np.ndarray,

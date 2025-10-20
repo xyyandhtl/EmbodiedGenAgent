@@ -390,9 +390,6 @@ class Dualmap:
             # mem_usage = self.get_total_memory_by_keyword()
             # self.detector.visualize_memory(mem_usage)
 
-        # Update traversability grid for GUI display
-        self.local_map_manager.update_traversability_grid()
-
     def run_mapping_thread(self):
         """
         Independent thread: Monitor detection results and process local mapping and global mapping.
@@ -542,7 +539,7 @@ class Dualmap:
             logger.warning("[VLMapNav] [query_object] Global map is empty. Cannot find object.")
             return None
 
-        # 3. 将对象名称转换为 CLIP 特征向量并设置为查询目标
+        # 3. 将对象名称转换为 CLIP 特征向量，并传给 global_map_manager 为在 INQUIRY 模式下获取目标点坐标
         self.inquiry_feat = self.convert_inquiry_to_feat(object_name)
         self.global_map_manager.inquiry = self.inquiry_feat
 
@@ -795,4 +792,6 @@ class Dualmap:
         return semantic_map
     
     def get_traversable_map_image(self):
-        return self.visualizer.get_traversable_map_image(self.local_map_manager)
+        return self.visualizer.get_traversable_map_image(
+            self.global_map_manager
+        )

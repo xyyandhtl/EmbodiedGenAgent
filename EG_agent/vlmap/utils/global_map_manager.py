@@ -64,6 +64,11 @@ class GlobalMapManager(BaseMapManager):
         if self.layout_map.wall_pcd is None:
             self.layout_map.extract_wall_pcd(num_samples_per_grid=10, z_value=self.cfg.floor_height)
 
+    def get_traversability_grid(self):
+        if self.nav_graph and hasattr(self.nav_graph, 'free_space'):
+            return self.nav_graph.free_space
+        return None
+
     def process_observations(
         self,
         curr_observations: List[Observation]
