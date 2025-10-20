@@ -940,22 +940,27 @@ class LocalMapManager(BaseMapManager):
                 obj_names, obj_colors, obj_bboxes
             )
 
-    def calculate_local_path(
-        self, curr_pose, goal_mode=GoalMode.POSE, resolution=0.03, goal_position=None
-    ):
+    def create_nav_graph(self, resolution=0.03) -> None:
+        """
+            Generates the NavigationGraph based on the current local map.
+            (A computationally intensive operation)
+        """
+        logger.info("[LocalMapManager] [create_nav_graph] Creating navigation graph...")
+
         import open3d as o3d
 
-        # Get all pcd from local map
+        # 1. Get all objects' pcd from the current local map
         total_pcd = o3d.geometry.PointCloud()
         for obj in self.local_map:
             if obj.observed_num <= 3:
                 continue
-            obj_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
             # Ignore ceiling wall
-            if obj_name == "ceiling wall" or obj_name == "carpet" or obj_name == "rug" or obj_name == "unknown":
+            obj_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
+            if obj_name in ["ceiling wall", "carpet", "rug", "unknown"]:
                 continue
             total_pcd += obj.pcd
 
+        # 2. Add all objects' pcd from the global map
         for obj in self.global_map:
             total_pcd += obj.pcd_2d
 
@@ -964,19 +969,32 @@ class LocalMapManager(BaseMapManager):
         # curr_point.points = o3d.utility.Vector3dVector([curr_point_coords])
         # total_pcd += curr_point
 
-        pcd_points = np.array(total_pcd.points)
+        if not total_pcd.has_points():
+            logger.warning("[LocalMapManager] [create_nav_graph] No points in map to create navigation graph.")
+            self.nav_graph = None
+            return
 
-        if len(pcd_points) == 0:
-            logger.error("[LocalMap][Path] No points in the point cloud!")
+        # 3. Construct NavigationGraph and 2D occupancy map
+        try:
+            nav_graph = NavigationGraph(self.cfg, total_pcd, cell_size=resolution)
+            self.nav_graph = nav_graph
+
+            nav_graph.get_occ_map()
+        except Exception as e:
+            logger.error(f"[LocalMapManager] [create_nav_graph] Failed to create navigation graph: {e}")
+            self.nav_graph = None
+
+    def calculate_local_path(
+            self, curr_pose, goal_mode=GoalMode.POSE, resolution=0.03, goal_position=None
+    ):
+        # Step 1: Construct NavigationGraph and 2D occupancy map
+        self.create_nav_graph(resolution=resolution)
+        if self.nav_graph is None:
+            logger.warning("[LocalMapManager] [calculate_local_path] Navigation graph not available. Skipping local_path calculation.")
             return []
+        nav_graph = self.nav_graph
 
-        # Step 1: Constructing 2D occupancy map
-        nav_graph = NavigationGraph(self.cfg, total_pcd, resolution)
-        self.nav_graph = nav_graph
-
-        nav_graph.get_occ_map()
-
-        # Get start and goal position
+        # Step 2: Get start and goal position
         curr_position = curr_pose[:3, 3]
         start_position_grid = nav_graph.calculate_pos_2d(curr_position)
 
@@ -986,7 +1004,7 @@ class LocalMapManager(BaseMapManager):
             logger.warning("[LocalMap][Path] No goal position found!")
             return []
 
-        # Step 2: Calculate path
+        # Step 3: Calculate path
         rrt_path = nav_graph.find_rrt_path(start_position_grid, goal_position_grid)
 
         if len(rrt_path) == 0:
