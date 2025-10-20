@@ -23,22 +23,28 @@ class EGAgentSystem:
     Note: This change only beautifies comments/docstrings; no logic changes.
     """
     goal: str
-    goal_set: set
-    bt: BehaviorTree
+    target_set: set # different from bt_generator.goal_set, conclude only targets not conditions
+    bt: BehaviorTree | None = None
     bt_name: str = "behavior_tree"
 
     def __init__(self):
         """Initialize generators, environment runtime, and UI caches."""
+        # QT监听器与缓存
+        self._listeners: Dict[str, List[Callable[[Any], None]]] = {}
+        self._conversation: List[str] = ["智能体: 请先创建后台"]
+        self._logs: List[str] = []
+        self._last_bt_image: np.ndarray = self._gen_dummy_image(300, 400, "Behavior Tree")
+        self._placeholder_counter = 0
+
         # 逻辑 Goal 生成器：用于将用户的自然语言指令（如“找到椅子”）解析为结构化的 逻辑目标
         self.goal_generator = LogicGoalGenerator()
-        # 使用 goal_generator 的一个预定义 object set，同时给下面 bt_generator，供简单调试
         self.goal_generator.prepare_prompt(object_set=None)
+        self._log(f"goal_generator prompt: \n{self.goal_generator.prompt}")
 
-        # 行为树规划器：用于根据逻辑目标，动态地生成一个 BT
+        # 行为树规划器：用于根据逻辑目标，动态地生成一个 BT。连续任务时需即时更新 cur_cond_set 和 key_objects
         self.bt_generator = BTGenerator(env_name="embodied",
                                         cur_cond_set=set(),
-                                        key_objects=list(AllObject))
-        # TODO: 连续任务时需即时更新 cur_cond_set 和 key_objects
+                                        key_objects=[])
 
         # Agent 载体部署环境
         # 组成：通过 bint_bt 动态绑定行为树，定义 run_action 实现交互逻辑，通过 ROS2 与部署环境信息收发
@@ -56,13 +62,6 @@ class EGAgentSystem:
         self._is_finished = False
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
-
-        # QT监听器与缓存
-        self._listeners: Dict[str, List[Callable[[Any], None]]] = {}
-        self._conversation: List[str] = ["智能体: 请先创建后台"]
-        self._logs: List[str] = []
-        self._last_bt_image: np.ndarray = self._gen_dummy_image(300, 400, "Behavior Tree")
-        self._placeholder_counter = 0
 
         self._emit("conversation", self.get_conversation_text())
 
@@ -180,10 +179,11 @@ class EGAgentSystem:
         entites = self.get_entity_rows()
         if entites:
             self.bt_objects = {name.split('/', 1)[1].capitalize() for name, _ in entites if name.startswith("global/")}
-            self._log(f"Prepared goal generator from loaded map with the following "
-                      f"{len(self.bt_objects)} objects: \n{self.bt_objects} .")
+            # self._log(f"Prepared goal generator from loaded map with the following "
+            #           f"{len(self.bt_objects)} objects: \n{self.bt_objects} .")
             self.goal_generator.prepare_prompt(self.bt_objects)
-            self.bt_generator.set_key_objects(list(self.bt_objects))
+            self._log(f"Updated goal_generator with scene_prompt: {self.goal_generator.prompt_scene}")
+            # self.bt_generator.set_key_objects(list(self.bt_objects))
             self._log(f"已设置原子动作: \n{[action.name for action in self.bt_generator.planner.actions]}")
             if self.cfg['caring_mode']:
                 chinese_objs = self.goal_generator.ask_question(
@@ -213,7 +213,7 @@ class EGAgentSystem:
 
             # 最终行为树执行测试
             # is_finished = self.agent_env.step()
-            # self._log(f"当前行为树执行节点：{self.agent_env.last_tick_output}")
+            self._log(f"当前行为树执行节点：{self.agent_env.last_tick_output}")
 
         if self.backend_ready:
             self.dm.end_process()
@@ -229,60 +229,62 @@ class EGAgentSystem:
         """Plan a behavior tree from instruction, draw it, and update UI caches."""
         # text = "请前往拍摄车辆"   ＃ for test
         # 1. 用户指令 ==> goal 逻辑指令（如：请前往控制室 转换为 RobotNear_ControlRoom）
+        self._conv(f"用户: {text}")
         self.goal = self.goal_generator.generate_single(text)
         # self.goal = "RobotNear_Equipment"  # 调试测试
+        self._log(f"User instruction: {text}")
         self._log(f"[system] [feed_instruction] goal is: {self.goal}")
-
+        self._conv(f"智能体: 已解析指令为逻辑目标: {self.goal}")
         if not self.goal:
-            self._log(f"User instruction: {text}")
-            self._append_conversation(f"用户: {text}")
-            self._append_conversation(f"智能体: 无法理解指令")
-            self._emit("conversation", self.get_conversation_text())
+            self._conv(f"智能体: 无法理解指令")
             return
 
-        # 2. goal 逻辑指令 ==> BehaviorTree 实例（如：['Walk(ControlRoom)']）
-        self.bt = self.bt_generator.generate(self.goal)
-        self._log(f"[system] [feed_instruction] BT is created!")
-        self._log(f"User instruction: {text}")
-        self._append_conversation(f"用户: {text}")
-        self._append_conversation(f"智能体: 准备执行行为树指令 {self.goal}")
-        self._emit("conversation", self.get_conversation_text())
-        self.goal_set = {goal.split("_")[-1] for goal in self.bt_generator.goal_set}
-
-        # save behavior_tree.png to the current work dir to visualize in gui
+        # 2. goal 逻辑指令 ==> BehaviorTree 实例
+        self.bt_generator.set_goal(self.goal)
+        goal_set = self.bt_generator.goal_set
+        self._log(f"[system] [feed_instruction] goal_set is: {goal_set}")
+        self.agent_env.cur_goal_set = goal_set
+        # 提取目标对象集合 TODO:行为树能否不依赖于给定的目标集合
+        self.target_set = { self.agent_env.extract_targes(goal) for goal in goal_set }
+        self._log(f"[system] [feed_instruction] target_set is: {self.target_set}")
+        self.bt_generator.set_key_objects(list(self.target_set))
+        self._conv(f"智能体: 准备从逻辑目标生成以 {self.target_set} 为目标集的行为树")
+        # 生成行为树
+        self.bt = self.bt_generator.generate(btml_name="tree")
+        if not self.bt:
+            self._conv(f"智能体: 无法解析指令生成行为树")
+            return
+        self._log(f"[system] [feed_instruction] Generated BehaviorTree: {self.bt}")
         self.bt.draw(png_only=True, file_name=self.bt_name)
         # load the saved behavior tree image into memory for GUI
         img_path = Path(self.bt_name + ".png")
         self._last_bt_image = np.array(Image.open(img_path).convert("RGB"))
         self._log(f"Behavior tree image updated: {img_path.resolve()}")
+        self._conv(f"智能体: 已生成行为树并显示在左下窗口")
 
         # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置告知给 IsaacsimEnv
         self.agent_env.bind_bt(self.bt)
-        self.update_cur_goal_set()
-        self.agent_env.run_action("mark", None)  # for test
-
-    # ---------------------- 模块间数据交互 -----------------------
-    def update_cur_goal_set(self):
+        self._log("[system] [feed_instruction] Binding BT to agent_env.")
         """After feed_instruction, bind bt to env, query the target object positions"""        
         if not self.backend_ready:
             self._log("[system] Backend not created, cannot query object positions.")
             self._conv("智能体: 后台未创建，无法查询目标位置，请先点击右侧“创建后台”。")
             return
-
-        # (2) 调用 vlmap 查询目标
-        self._log(f"[system] [update_cur_goal_set] self.goal_set: {self.goal_set}")
+        # (a) 调用 vlmap 查询目标
+        self._log(f"[system] [update_cur_target_set] self.target_set: {self.target_set}")
         cur_goal_places = {}
-        for obj in self.goal_set:
+        for obj in self.target_set:
             target_position = self.vlmap_backend.query_object(obj)
-            self._log(f"[system] [update_cur_goal_set] query {obj} result: {target_position}")
+            self._log(f"[system] [update_cur_target_set] query {obj} result: {target_position}")
             if target_position is not None:
                 cur_goal_places[obj] = target_position
-
-        # (3) 将 目标位置 传递给 IsaacsimEnv，并更新可视性（每个目标是否在当前相机的视锥内）
+        # (b) 将 目标位置 传递给 IsaacsimEnv，并更新可视性（每个目标是否在当前相机的视锥内）
         if cur_goal_places:
             self.agent_env.set_object_places(cur_goal_places)
-            self._log(f"[system] [update_cur_goal_set] set cur_goal_places to env: {cur_goal_places}")
+            self._log(f"[system] [update_cur_target_set] set cur_goal_places to env: {cur_goal_places}")
             self._conv(f"智能体: 已更新当前目标位置为 \n{cur_goal_places}")
+            
+        self.agent_env.run_action("mark", None)  # for test
 
     # ---------------------- 数据获取占位接口 ----------------------
     def get_conversation_text(self) -> str:
@@ -395,11 +397,3 @@ class EGAgentSystem:
         return img
 
 
-if __name__ == "__main__":
-    agent_system = EGAgentSystem()
-    agent_system.create_backend()  # 新增：测试时先创建后台
-    agent_system.start()
-    time.sleep(2)
-    agent_system.feed_instruction("测试指令")
-    time.sleep(2)
-    agent_system.stop()
