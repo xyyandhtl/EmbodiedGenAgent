@@ -64,10 +64,11 @@ class VLMapNav(RunnerROSBase):
 
         Returns:
             - A velocity command tuple (vx, vy, wz) in the robot's base frame.
-            - A boolean flag indicating if the waypoint is reached.
         """
-        if self.dualmap.curr_pose is None:
-            self.logger.debug("[VLMapNav] [get_cmd_vel] curr_pose is None, please ensure start!")
+        # dualmap.curr_pose 只有在判断为关键帧后运行 self.dualmap.parallel_process() 时才会被更新，所以该值为关键帧位姿
+        # 而实时计算速度指令，应用实时位姿
+        if self.dualmap.realtime_pose is None:
+            self.logger.debug("[VLMapNav] [get_cmd_vel] realtime_pose is None, please ensure start!")
             return (0.0, 0.0, 0.0)
         
         start = time.time()
@@ -83,7 +84,7 @@ class VLMapNav(RunnerROSBase):
         yaw_error_threshold = 0.8
         goal_reached_threshold = 0.3
 
-        camera_pose_ros = self.dualmap.curr_pose.copy()  # 4x4 pose matrix in ROS frame
+        camera_pose_ros = self.dualmap.realtime_pose.copy()  # 4x4 pose matrix in ROS frame
         # if isinstance(camera_pose_ros, np.ndarray) and camera_pose_ros.ndim == 3:
         #     camera_pose_ros = camera_pose_ros[-1, :, :]
 

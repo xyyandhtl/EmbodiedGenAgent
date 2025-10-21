@@ -83,6 +83,7 @@ class Dualmap:
 
         # pose memory
         self.curr_pose: np.ndarray = None
+        self.realtime_pose: np.ndarray = None
         self.prev_pose: np.ndarray = None
         self.goal_pose: np.ndarray = None
         self.wait_count = 0
@@ -111,7 +112,7 @@ class Dualmap:
         self.path_counter = 0
 
         # History of agent's actual traversed path
-        self.traversed_path = deque(maxlen=30)
+        self.traj_path = deque(maxlen=60)
 
         # Parallel for mapping thread
         if self.cfg.use_parallel:
@@ -316,7 +317,7 @@ class Dualmap:
     def parallel_process(self, data_input: DataInput):
         """
         Process input data in parallel. 数据流入的主要入口
-            1. 接收一帧数据 (DataInput，包含RGB、depth、pose等）
+            1. 接收一 关键帧 (DataInput，包含RGB、depth、pose等）
             2. 调用 Detector 对图像进行处理，生成物体观测结果。为不阻塞主线程（数据接收线程），将检测和观测结果放入 (`detection_results_queue`) 队列
             3. 更新可视化信息
             4. 更新地图，计算导航路径（全局+局部）
@@ -324,12 +325,12 @@ class Dualmap:
         # Get current frame id
         self.curr_frame_id = data_input.idx
 
-        # Get current pose
+        # Get current pose（被判断作为关键帧的 位姿）
         self.curr_pose = data_input.pose
 
-        # Record the traversed path
-        if self.curr_pose is not None:
-            self.traversed_path.append(self.curr_pose[:3, 3].copy())
+        # Record the traj_path with realtime pos
+        if self.realtime_pose is not None:
+            self.traj_path.append(self.realtime_pose[:3, 3].copy())
 
         # --- 1. Detection process ---
         start_time = time.time()
@@ -784,7 +785,7 @@ class Dualmap:
             self.global_map_manager,
             resolution=self.cfg.resolution,
             curr_pose=self.curr_pose,
-            traj_path=self.traversed_path,
+            traj_path=self.traj_path,
             nav_path=self.curr_global_path  # TODO: 后续更改为 self.action_path，或者传入 global_path 和 local_path，以不同颜色显示
         )
 
