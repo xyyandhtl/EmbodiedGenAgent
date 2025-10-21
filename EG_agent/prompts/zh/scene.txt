@@ -1,2 +1,5 @@
+[Condition]
+{AllCondition}
+
 [Object]
 {AllObject}

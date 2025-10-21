@@ -4,7 +4,7 @@ import numpy as np
 from PyQt5 import QtWidgets, QtCore, QtGui, uic
 from zoom_widget import ZoomableImageWidget
 import threading
-import traceback  # 新增：格式化异常堆栈
+import traceback
 
 # 正式运行
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -184,6 +184,8 @@ class MainWindow(QtWidgets.QMainWindow):
     # ----------------- Periodic Updates -----------------
     def update_fast(self):
         if not self.agent_system.backend_ready:
+            # 仍然让状态栏刷新其它段（如状态/BT）
+            self.update_statusbar()
             return
         """高频: 当前视野实例分割"""
         img = self.agent_system.get_current_instance_seg_image()
@@ -447,55 +449,66 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         # 段1：状态
         if not self.agent_system.backend_ready:
-            state_txt = "未创建后台"
+            state_txt = "Backend Not Ready"
         else:
-            state_txt = "运行中" if self.agent_system.status else "已停止"
-        if hasattr(self, "sb_state"):
-            self.sb_state.setText(f"状态: {state_txt}")
+            state_txt = "Running" if self.agent_system.status else "Stopped"
+        self._set_status_segment("state", f"Status: {state_txt}")
 
         # 段2：当前行为树执行节点
-        cur_node = ""
-        try:
-            cur_node = self.agent_system.get_last_tick_output()
-        except Exception:
-            cur_node = ""
-        if hasattr(self, "sb_bt"):
-            self.sb_bt.setText(f"BT: {cur_node or '-'}")
+        self._set_status_segment("bt", f"BTNode: {self.agent_system.get_last_tick_output()}")
 
         # 段3：目标在视野（简要）
-        inview_txt = "-"
-        try:
-            gv = self.agent_system.get_goal_inview()
-            if gv:
-                keys = list(gv.keys())
-                total = len(keys)
-                in_keys = [k for k, v in gv.items() if v]
-                n_in = len(in_keys)
-                # 只展示前几项，避免过长
-                preview = ", ".join(in_keys[:4]) + ("…" if n_in > 4 else "")
-                inview_txt = f"{n_in}/{total}" + (f" [{preview}]" if n_in else "")
-        except Exception:
-            pass
-        if hasattr(self, "sb_inview"):
-            self.sb_inview.setText(f"视野: {inview_txt}")
+        self._set_status_segment("inview", f"Visible: {self.agent_system.get_goal_inview()}")
 
-    # --- 新增：分段状态栏初始化
+        # 段4：速度指令 (vx, vy, wz)
+        vx, vy, wz = self.agent_system.get_cur_cmd_vel()
+        vel_txt = f"vx={vx:.2f}, vy={vy:.2f}, wz={wz:.2f}"
+        self._set_status_segment("vel", f"CmdVel: {vel_txt}")
+
+        # 段5：位姿 (x, y, z, yaw)
+        x, y, z = self.agent_system.get_agent_pose()[:3]
+        pose_txt = f"x={x:.2f}, y={y:.2f}, z={z:.2f}"
+        self._set_status_segment("pose", f"RobotPose: {pose_txt}")
+
+        # 段6：目标位置（数量+预览）
+        target_dict = self.agent_system.get_target_pos()
+        formatted_targets = {
+            k: [f"{v_i:.2f}" for v_i in v] for k, v in target_dict.items()
+        }
+        self._set_status_segment("goals", f"TargetPos: {formatted_targets}")
+
+    # --- 新增：分段状态栏（可扩展） ---
     def _init_statusbar(self):
         if not hasattr(self, "statusbar"):
             return
-        # 三段：总体状态 / 当前BT节点 / 视野内目标
-        self.sb_state = QtWidgets.QLabel("状态: -")
-        self.sb_bt = QtWidgets.QLabel("BT: -")
-        self.sb_inview = QtWidgets.QLabel("视野: -")
-        for w in (self.sb_state, self.sb_bt, self.sb_inview):
-            f = w.font()
-            f.setPointSize(max(9, f.pointSize()-1))
-            w.setFont(f)
-            w.setStyleSheet("QLabel { color: #dddddd; }")
-        # 作为永久部件，showMessage 时也不会遮挡
-        self.statusbar.addPermanentWidget(self.sb_state, 1)
-        self.statusbar.addPermanentWidget(self.sb_bt, 2)
-        self.statusbar.addPermanentWidget(self.sb_inview, 2)
+        # 统一管理的段集合
+        self._sb_segments = {}
+        # 统一样式
+        def _style_label(lbl: QtWidgets.QLabel):
+            f = lbl.font()
+            f.setPointSize(max(9, f.pointSize() - 1))
+            lbl.setFont(f)
+            lbl.setStyleSheet("QLabel { color: #dddddd; }")
+
+        # 工具：新增一个段位
+        def _add(key: str, title: str, stretch: int):
+            lbl = QtWidgets.QLabel(title)
+            _style_label(lbl)
+            self.statusbar.addPermanentWidget(lbl, stretch)
+            self._sb_segments[key] = lbl
+
+        # 默认段位（可扩展）
+        _add("state", "Status: -", 1)
+        _add("bt", "BTNode: -", 1)
+        _add("inview", "Visible: -", 1)
+        _add("vel", "CmdVel: -", 1)
+        _add("pose", "RobotPose: -", 1)
+        _add("goals", "TargetPos: -", 1)
+
+    def _set_status_segment(self, key: str, text: str):
+        seg = getattr(self, "_sb_segments", {}).get(key)
+        if seg is not None:
+            seg.setText(text)
 
     # --- 新增：图像浏览器初始化与行为 ---
     def _setup_image_browser(self):

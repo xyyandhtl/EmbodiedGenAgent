@@ -25,23 +25,20 @@ if typing.TYPE_CHECKING:
     from EG_agent.vlmap.vlmap import VLMapNav
 
 class IsaacsimEnv(BaseAgentEnv):
-    agent_num = 1
-
     behavior_lib_path = f"{AGENT_ENV_PATH}/embodied"
-
-    # Camera model defaults and tracking
-    cam_fov_x_deg = 90.0
-    cam_aspect = 4.0 / 3.0
-    cam_forward_axis = "z"  # hardcoded: camera's +Z faces forward
-    # Real-time visibility state: {goal_name_lower: bool}
-    goal_inview = {}
-    near_dist = 2.0
-
     # =========================================================
     # 构造与配置（初始化、ROS 话题与发布者/订阅者配置）
     # =========================================================
     def __init__(self):
         super().__init__()
+        # Camera model defaults and tracking
+        self.cam_fov_x_deg = 90.0
+        self.cam_aspect = 4.0 / 3.0
+        self.cam_forward_axis = "z"  # hardcoded: camera's +Z faces forward
+        # Real-time visibility state: {goal_name_lower: bool}
+        self.goal_inview = {}
+        self.near_dist = 2.0  # meters
+
         # Defer ROS init to configure_ros
         self.ros_node: Node | None = None
         self.cmd_vel_pub: Publisher = None
@@ -64,8 +61,6 @@ class IsaacsimEnv(BaseAgentEnv):
 
         # Config reference
         self._cfg = None  # Dynaconf instance
-        # Track last synced observation time
-        self._last_obs_time: float | None = None
 
         # --- 新增: VLMap 后端引用 + 发布器资源 ---
         self._vlmap_backend: VLMapNav = None
@@ -73,10 +68,13 @@ class IsaacsimEnv(BaseAgentEnv):
         self._ros_pub_executor: ThreadPoolExecutor = None
         self._ros_pub_timer = None
 
-        self._cur_path = []
-        self._cur_cmd_vel = (0.0, 0.0, 0.0)  # vx, vy, wz
-        self._action_count = 0
-        # 新增：可扩展动作分发表（运行时绑定）
+        self._cur_path: list = []
+        self._action_count: int = 0
+        self.cur_goal_places = dict()  # str -> [x,y,z]
+        self.cur_agent_pose: tuple = (0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0)  # [x,y,z,qw,qx,qy,qz]
+        self.cur_cmd_vel: tuple = (0.0, 0.0, 0.0)  # vx, vy, wz
+
+        # 可扩展动作分发表（运行时绑定）
         self._action_dispatch = {
             "cmd_vel": self._handle_cmd_vel,
             "cmdvel": self._handle_cmd_vel,
@@ -155,6 +153,11 @@ class IsaacsimEnv(BaseAgentEnv):
     def find_path(self, goal_pose):
         """调用 VLMap 后端计算路径"""
         return self._vlmap_backend.get_global_path(goal_pose)
+    
+    def get_cur_cmd_vel(self) -> tuple:
+        """返回当前计算的速度命令 (vx, vy, wz)"""
+        self.cur_cmd_vel = self._vlmap_backend.get_cmd_vel()
+        return self.cur_cmd_vel
 
     def _synced_callback(self, rgb_msg, depth_msg, odom_msg):
         """RGB/Depth/Odom 同步回调：解码 -> 位姿矩阵 -> 推送到 VLMap 后端 -> 更新可视状态"""
@@ -192,14 +195,13 @@ class IsaacsimEnv(BaseAgentEnv):
         # Forward to backend directly
         self._vlmap_backend.push_data(rgb_img, depth_img, pose, timestamp)
 
-        # Record last observation time
-        self._last_obs_time = timestamp
+        # Update env state 
+        self.cur_agent_pose = (t[0], t[1], t[2], qw, qx, qy, qz)
+        # TODO: if need more status updates
 
-        # Optionally update env state for FOV checks
-        self.agent_env_update({
-            "cam_pose_w": [t[0], t[1], t[2], qw, qx, qy, qz],
-            # TODO: if need more status updates
-        })
+        # Recompute real-time FOV visibility check using cam_pose_w
+        self._update_goal_inview()
+        # self.cur_cmd_vel = self._vlmap_backend.get_cmd_vel()
 
     def _ros_pub_tick(self):
         """Timer tick to publish all visualizations via ROSPublisher."""
@@ -212,10 +214,6 @@ class IsaacsimEnv(BaseAgentEnv):
     def agent_env_update(self, env_data: dict):
         """更新环境态并实时刷新目标可视性。"""
         self.cur_agent_states = {**env_data}
-
-        # Recompute real-time visibility using cam_pose_w
-        self._update_goal_inview()
-        self._cur_cmd_vel = self._vlmap_backend.get_cmd_vel()
 
     def get_inview_goals(self) -> list[str]:
         """返回当前在相机视锥内的目标名称列表）。"""
@@ -231,9 +229,7 @@ class IsaacsimEnv(BaseAgentEnv):
     def reset(self):
         """重置环境：清空内部状态、发布零速以停止，并等待首次同步观测（最多约2秒）。"""
         # Clear internal state
-        self.cur_agent_states = {}
         self.goal_inview = {}
-        self._last_obs_time = None
 
     # ==========================================
     # 动作发布与执行（cmd_vel、nav_pose、枚举命令、mark）
@@ -345,7 +341,7 @@ class IsaacsimEnv(BaseAgentEnv):
         n = math.sqrt(qw*qw + qx*qx + qy*qy + qz*qz)
         if n == 0.0:
             return _np.eye(3, dtype=_np.float64)
-        qw, qx, qy, qz = qw/n, qx/n, qy/n, qz/n
+        qw, qx, qy, qz = qw/n, qx/qx, qy/qy, qz/qz
         xx, yy, zz = qx*qx, qy*qy, qz*qz
         xy, xz, yz = qx*qy, qx*qz, qy*qz
         wx, wy, wz = qw*qx, qw*qy, qw*qz
@@ -396,7 +392,7 @@ class IsaacsimEnv(BaseAgentEnv):
         """根据当前相机位姿与目标位置，实时更新目标是否在视野内。"""
         # Default: no goals or no pose => all False
         self.goal_inview = {name: False for name in self.cur_goal_places.keys()}
-        cam_pose = self.cur_agent_states.get("cam_pose_w")
+        cam_pose = self.cur_agent_pose
         if not cam_pose or len(cam_pose) != 7:
             return
         

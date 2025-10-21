@@ -1,3 +1,5 @@
+check_mobility: false
+
 # low mobility examples
 lm_examples:
   - "building"

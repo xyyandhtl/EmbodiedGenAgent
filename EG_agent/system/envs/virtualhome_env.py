@@ -11,8 +11,6 @@ from EG_agent.planning.btpg.utils import ROOT_PATH
 import atexit
 
 class VHEnv(BaseAgentEnv):
-    agent_num = 1
-
     headless = True
 
     # launch simulator

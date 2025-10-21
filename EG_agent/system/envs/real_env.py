@@ -10,8 +10,6 @@ from std_msgs.msg import Int32
 import numpy as _np
 
 class RealEnv(BaseAgentEnv):
-    agent_num = 1
-
     behavior_lib_path = f"{AGENT_ENV_PATH}/embodied"
 
     def __init__(self):
