@@ -13,11 +13,11 @@ handlers:
     stream: ext://sys.stdout
   file:
     class: logging.FileHandler
-    level: INFO
+    level: DEBUG
     formatter: standard
     mode: w # write not attach
     filename: 'default.log'
 
 root:
-  level: INFO
+  level: DEBUG
   handlers: [console, file]

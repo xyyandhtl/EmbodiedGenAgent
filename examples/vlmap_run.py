@@ -85,7 +85,7 @@ class VLMapRosRunner(Node):
 
     def _tick(self):
         """Periodic processing + publish maps/topics via the original ROSPublisher."""
-        self.backend.run_once(lambda: self.get_clock().now().nanoseconds / 1e9)
+        self.backend.run_once()
         self.publish_executor.submit(self.publisher.publish_all, self.backend.dualmap)
 
     def destroy_node(self):

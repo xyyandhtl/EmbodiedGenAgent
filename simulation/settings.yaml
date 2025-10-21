@@ -22,7 +22,7 @@ sensors:
     fy: 320.0
     cx: 320.0
     cy: 240.0
-monitor_camera: True
+monitor_camera: False
 camera_follow: False
 
 # ui config

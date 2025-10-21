@@ -32,6 +32,7 @@ pympler
 rerun-sdk==0.22.1
 git+https://github.com/ultralytics/CLIP.git
 git+https://github.com/apple/ml-mobileclip.git # --no-deps
+
 # if use habitat-data-collector
 # habitat-sim==0.3.2  # source install
 # habitat-lab==0.3.2  # source install
@@ -40,5 +41,8 @@ git+https://github.com/apple/ml-mobileclip.git # --no-deps
 # app GUI
 PyQt5
 
-# isaacsim agent deployment env: see simulation/SIMULATION.md
+# ROS2 IDL dependencies
+# empy
+# lark
 
+# isaacsim agent deployment env: see simulation/SIMULATION.md

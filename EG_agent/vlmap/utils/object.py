@@ -392,15 +392,18 @@ class LocalObject(BaseObject):
             self.downsample_num += 1
             self.pcd = self.pcd.voxel_down_sample(voxel_size=self._cfg.downsample_voxel_size)
 
+            # TODO: 是否需要这个 major_plane_info 去提取 is_on 关联
+
             # only after downsample, we calculate the major plane info
             # If the object is low mobility, do major plane info calculation
             # TODO: do not need to calculate major plane info from scratch, incrementally calculate z_value
             # The major plane info can be calculated in the Observation Generation
             # Merging using the point number as the weight process
-            if self.is_low_mobility:
-                self.major_plane_info = self.find_major_plane_info()
-            else:
-                self.major_plane_info = None
+            
+            # if self.is_low_mobility:
+            #     self.major_plane_info = self.find_major_plane_info()
+            # else:
+            #     self.major_plane_info = None
 
     
     def update_split_info(
@@ -549,9 +552,9 @@ class LocalObject(BaseObject):
 
         self.is_low_mobility = most_common_lm
 
-        # get major plane info
-        if self.is_low_mobility:
-            self.major_plane_info = self.find_major_plane_info()
+        # TODO: 是否需要这个 major_plane_info 去提取 is_on 关联
+        # if self.is_low_mobility:
+        #     self.major_plane_info = self.find_major_plane_info()
 
     def update_spatial_stable_info(
         self,
