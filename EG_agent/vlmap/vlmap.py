@@ -70,7 +70,7 @@ class VLMapNav(RunnerROSBase):
         if self.dualmap.realtime_pose is None:
             self.logger.debug("[VLMapNav] [get_cmd_vel] realtime_pose is None, please ensure start!")
             return (0.0, 0.0, 0.0)
-        
+
         start = time.time()
         next_waypoint = self.get_next_waypoint()
         if next_waypoint is None:
@@ -78,75 +78,57 @@ class VLMapNav(RunnerROSBase):
             return (0.0, 0.0, 0.0)
         
         # Controller constants (tune as needed)
-        kp = 0.25
+        kp_ang = 0.8
+        kp_lin = 0.8
         max_lin_vel = 2.0
         max_ang_vel = 1.0
         yaw_error_threshold = 0.8
-        goal_reached_threshold = 0.3
+        goal_reached_threshold = 0.2  # m
 
+        # 1. 计算 目标方向
         camera_pose_ros = self.dualmap.realtime_pose.copy()  # 4x4 pose matrix in ROS frame
-        # if isinstance(camera_pose_ros, np.ndarray) and camera_pose_ros.ndim == 3:
-        #     camera_pose_ros = camera_pose_ros[-1, :, :]
+        cam_pos = camera_pose_ros[:3, 3]
+        cam_rot = camera_pose_ros[:3, :3]
 
-        # Rotation from ROS to World frame
-        # rot_ros_to_world = R.from_matrix([
-        #     [0, 0, 1],
-        #     [-1, 0, 0],
-        #     [0, -1, 0]
-        # ])
-        # Camera offset from base in World frame
-        # cam_offset_world = np.array([0.0, 0.0, 0.2])
+        waypoint_pos = np.array(next_waypoint)
+        delta_world = waypoint_pos - cam_pos
 
-        # Extract camera pose in ROS
-        cam_pos_ros = camera_pose_ros[:3, 3]
-        cam_rot_ros_matrix = camera_pose_ros[:3, :3]
-        cam_rot_ros = R.from_matrix(cam_rot_ros_matrix)
-
-        # Transform camera pose to World
-        # cam_pos_world = rot_ros_to_world.apply(cam_pos_ros)
-        # cam_rot_world = rot_ros_to_world * cam_rot_ros
-
-        # Compute robot base pose in World
-        # robot_pos_world = cam_pos_world - cam_offset_world
-        # robot_rot_world = cam_rot_world
-
-        # Transform next waypoint to World
-        waypoint_ros = np.array(next_waypoint)
-        # waypoint_world = rot_ros_to_world.apply(waypoint_ros)
-
-        # Distance to goal (XY)
-        dist_to_goal = np.linalg.norm(waypoint_ros[:2] - cam_pos_ros[:2])
+        # Distance to goal
+        dist_to_goal = np.linalg.norm(delta_world[:2])
         if dist_to_goal <= goal_reached_threshold:
-            self.logger.info(f"[VLMapNav] [get_cmd_vel] Waypoint reached (distance: {dist_to_goal: .2f}m).")
+            self.logger.info(f"[VLMapNav] [get_cmd_vel] Waypoint reached (distance = {dist_to_goal: .2f}m).")
             return (0.0, 0.0, 0.0)
 
-        # Desired heading in World XY plane
-        goal_yaw = np.arctan2(
-            waypoint_ros[1] - cam_pos_ros[1],
-            waypoint_ros[0] - cam_pos_ros[0]
-        )
+        # 2. 将 目标方向 投影到 机器人局部坐标系
+        # 将 目标方向 从世界方向 转到 相机坐标系
+        delta_body = cam_rot.T @ delta_world
+        # 注：ROS系统下，相机forward为 +Z，而机器人forward为 +X
+        # 速度指令是给机器人底盘（x-forward），需从 camera系 旋转到 base_link系
+        # camera_to_base_link: +Z_cam -> +X_base, +X_cam -> -Y_base, +Y_cam -> -Z_base
+        R_cam_to_base = np.array([[0, 0, 1],
+                                  [-1, 0, 0],
+                                  [0, -1, 0]], dtype=float)
+        delta_base = R_cam_to_base @ delta_body
 
-        # Current yaw from rotation matrix (use robot's forward axis projected on XY)
-        rot_mat_world = cam_rot_ros.as_matrix()
-        forward_world = rot_mat_world[:, 0]  # body +X axis in world frame
-        current_yaw = np.arctan2(forward_world[1], forward_world[0])
-
-        # Heading error wrapped to [-pi, pi]
-        yaw_error = np.arctan2(np.sin(goal_yaw - current_yaw), np.cos(goal_yaw - current_yaw))
+        # 3. 计算偏航误差（基于base_link）
+        goal_yaw = np.arctan2(delta_base[1], delta_base[0])
+        yaw_error = np.arctan2(np.sin(goal_yaw), np.cos(goal_yaw))
 
         # Angular velocity
-        ang_vel_z = np.clip(kp * yaw_error, -max_ang_vel, max_ang_vel)
-
-        self.logger.info(f"[VLMapNav] [get_cmd_vel] cur_yaw: {current_yaw: .2f}, goal_yaw: {goal_yaw: .2f}")
-
-        # Linear velocity with decoupling during sharp turns
+        ang_vel_z = np.clip(kp_ang * yaw_error, -max_ang_vel, max_ang_vel)
+        # Linear velocity
+        lin_vel_x = np.clip(kp_lin * dist_to_goal * np.cos(yaw_error), 0.0, max_lin_vel)
         if np.abs(yaw_error) > yaw_error_threshold:
-            lin_vel_x = max_lin_vel * (1.0 - (np.abs(yaw_error) - yaw_error_threshold) / (np.pi - yaw_error_threshold))
-            lin_vel_x = float(np.clip(lin_vel_x, 0.0, max_lin_vel))
-        else:
-            lin_vel_x = max_lin_vel
-        
+            lin_vel_x *= max(0.3, 1.0 - np.abs(yaw_error) / np.pi)
+
         end = time.time()
         self.logger.debug(f"[VLMapNav] [get_cmd_vel] Computation time: {end - start: .4f}s")
-        return (lin_vel_x, 0.0, ang_vel_z)
+        self.logger.debug(
+            f"[VLMapNav] [get_cmd_vel] Pose = ({cam_pos[0]:.2f}, {cam_pos[1]:.2f}), "
+            f"Goal = ({waypoint_pos[0]:.2f}, {waypoint_pos[1]:.2f}), "
+            f"Dist = {dist_to_goal:.2f}, yaw_err={yaw_error:.2f}, "
+            f"CMD = ({lin_vel_x:.2f}, 0, {ang_vel_z:.2f})"
+        )
+
+        return (float(lin_vel_x), 0.0, float(ang_vel_z))
 
