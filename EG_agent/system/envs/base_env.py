@@ -63,8 +63,10 @@ class BaseAgentEnv:
         raise NotImplementedError
 
     def step(self):
+        if self.bt is None:
+            return False
+        
         self.time = time.time() - self.start_time
-
         # Integrated Agent.step logic
         if self.bt is not None and self.time > self.next_response_time:
             self.next_response_time += self.response_frequency
