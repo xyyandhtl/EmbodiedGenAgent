@@ -99,7 +99,7 @@ class RunnerROS1(RunnerROSBase):
         rate = rospy.Rate(self.cfg.ros_rate)
         while not rospy.is_shutdown() and not self.shutdown_requested:
             try:
-                self.run_once(lambda: time.time())
+                self.run_once()
             except Exception as e:
                 self.logger.error(f"[RunnerROS1] Exception: {e}", exc_info=True)
             rate.sleep()

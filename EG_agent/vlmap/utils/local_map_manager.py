@@ -305,11 +305,12 @@ class LocalMapManager(BaseMapManager):
             # logger.info uid for debug
             # logger.info(f"Checking relations for {obj.uid}")
 
+            # TODO: 目前把物体间 is_on 前置平面提取注释掉了，以下都会False跳过，之后按需自己开发有必要的关联关系
             # traverse all the other objects and check the relation with the current object
             for other_obj in self.local_map:
                 # If the other obj meets the on relation with the current object
-                # and not the obj itself
                 if other_obj.uid != obj.uid and self.on_relation_check(obj, other_obj):
+                    logger.info(f"[LocalMap][Relation] Found 'on' relation between {obj.uid} and {other_obj.uid}")
                     # set the relation in the graph
                     self.set_relation(obj.uid, other_obj.uid)
                     # save the current valid relations

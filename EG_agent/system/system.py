@@ -200,12 +200,8 @@ class EGAgentSystem:
             self._log_info("Environment reset.")
             is_finished = False
             while not self._stop_event.is_set() and not is_finished:
-                time.sleep(0.1)
-
-                # 地图/导航处理（需后端已创建）
-                # (1) 检查 synced_data_queue 中的最新帧是否为 关键帧
-                # (2) dualmap.parallel_process 处理该关键帧（Detector 对图像生成物体观测结果；更新地图并计算导航路径（全局+局部））
-                self.vlmap_backend.run_once(lambda: time.time())
+                # VLM 建图后台处理一帧数据
+                self.vlmap_backend.run_once()
 
                 # 简单导航测试
                 # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
@@ -215,21 +211,17 @@ class EGAgentSystem:
         except Exception as e:
             tb = traceback.format_exc()
             self._log_error(f"Run loop exception: {e}")
-            # 将完整堆栈打印到日志窗口
             self._log(tb)
-            # 对话窗口给出简短提示（会以错误样式显示）
             self._conv_err("运行循环异常，已停止。请查看日志窗口。")
-        finally:
-            if self.backend_ready:
-                try:
-                    self.dm.end_process()
-                    self.vlmap_backend.shutdown_requested = True
-                except Exception:
-                    pass
-            self._is_finished = True
-            self._running = False
-            self._log_info("Agent loop stopped.")
-            self._emit("status", self.status)
+
+        if self.backend_ready:
+            self.dm.end_process()
+            self.vlmap_backend.shutdown_requested = True
+
+        self._is_finished = True
+        self._running = False
+        self._log_info("Agent loop stopped.")
+        self._emit("status", self.status)
 
     # ---------------------- 输入接口 ----------------------
     def feed_instruction(self, text: str):

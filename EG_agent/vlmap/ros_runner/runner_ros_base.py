@@ -106,7 +106,7 @@ class RunnerROSBase:
         self.synced_data_queue.append(data_input)
         return data_input
 
-    def run_once(self, current_time_fn):
+    def run_once(self):
         """Check and process a keyframe if data is ready."""
         if not self.synced_data_queue:
             self.logger.warning("[Main] No data in synced_data_queue")

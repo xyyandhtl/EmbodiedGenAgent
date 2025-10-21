@@ -175,8 +175,10 @@ class Detector:
                 logger.info(
                     f"[Detector][Init] Loading YOLO model from\t{cfg.yolo.model_path}"
                 )
-                self.yolo = YOLO(cfg.yolo.model_path)
+                self.yolo = YOLO(str(cfg.yolo.model_path))  
+                # self.yolo.to(cfg.device)
                 self.yolo.set_classes(self.obj_classes.get_classes_arr())
+                logger.info(f"[Detector][Init] YOLO device: {self.yolo.device}")
             except Exception as e:
                 logger.error(f"[Detector][Init] Error loading YOLO model: {e}")
                 return
@@ -186,7 +188,9 @@ class Detector:
                 logger.info(
                     f"[Detector][Init] Loading SAM model from\t{cfg.sam.model_path}"
                 )
-                self.sam = SAM(cfg.sam.model_path)
+                self.sam = SAM(str(cfg.sam.model_path))
+                # self.sam.to(cfg.device)
+                logger.info(f"[Detector][Init] SAM device: {self.sam.device}")
             except Exception as e:
                 logger.error(f"[Detector][Init] Error loading SAM model: {e}")
                 return
@@ -198,6 +202,7 @@ class Detector:
                         f"[Detector][Init] Loading FastSAM model from\t{cfg.fastsam.model_path}"
                     )
                     self.fastsam = FastSAM(cfg.fastsam.model_path)
+                    # self.fastsam.to(cfg.device)
                 except Exception as e:
                     logger.error(f"[Detector][Init] Error loading FASTSAM model: {e}")
                     return
@@ -747,10 +752,9 @@ class Detector:
 
         if self.cfg.visualize_detection:
             with timing_context("Visualize Detection", self):
-                annotated_image, _ = visualize_result_rgb(
+                self.annotated_image, _ = visualize_result_rgb(
                     color, filtered_detections, self.obj_classes.get_classes_arr()
                 )
-                self.annotated_image = annotated_image
 
         self.curr_results = results
 
