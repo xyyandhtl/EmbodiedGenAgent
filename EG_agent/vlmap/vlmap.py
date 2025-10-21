@@ -69,6 +69,8 @@ class VLMapNav(RunnerROSBase):
         if self.dualmap.curr_pose is None:
             self.logger.debug("[VLMapNav] [get_cmd_vel] curr_pose is None, please ensure start!")
             return (0.0, 0.0, 0.0)
+        
+        start = time.time()
         next_waypoint = self.get_next_waypoint()
         if next_waypoint is None:
             self.logger.debug("[VLMapNav] [get_cmd_vel] get_next_waypoint failed!")
@@ -142,6 +144,8 @@ class VLMapNav(RunnerROSBase):
             lin_vel_x = float(np.clip(lin_vel_x, 0.0, max_lin_vel))
         else:
             lin_vel_x = max_lin_vel
-
+        
+        end = time.time()
+        self.logger.debug(f"[VLMapNav] [get_cmd_vel] Computation time: {end - start: .4f}s")
         return (lin_vel_x, 0.0, ang_vel_z)
 

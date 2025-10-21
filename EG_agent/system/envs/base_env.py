@@ -7,31 +7,28 @@ from EG_agent.planning.btpg import BehaviorTree
 # Merged Agent and Env for simplicity
 # If hard to work or clarify the logic, separate them into two classes
 class BaseAgentEnv:
-    # Env attributes
-    agent_num = 1
     behavior_lib_path = None
-    print_ticks = True
-
-    # Agent attributes
-    response_frequency = 0.2
-
-    cur_goal_set = set()  # set of str
-    cur_goal_places = dict()  # str -> [x,y,z]
-    cur_agent_states = dict()  # str -> state
-
-    bt: BehaviorTree = None  # type: ignore
-
     # =========================================================
     # base methods
     # =========================================================
     def __init__(self):
-        self.time = 0
-        self.start_time = time.time()
-        self.condition_set = set()
+        # EnvAgent attributes
+        self.print_ticks = True
+        self.cur_goal_set = set()  # set of str
+
+        # Behavior Tree attributes
         self.bt: BehaviorTree = None  # type: ignore
 
-        self.init_statistics()
+        self.response_frequency = 0.1
+        self.step_num = 0
+        self.next_response_time = 0.0
+        self.last_tick_output = None
+        self.time = 0.0
+        self.start_time = time.time()
 
+        self.condition_set = set()
+
+        self.init_statistics()
         self.create_behavior_lib()
 
         self._paren_pattern = re.compile(r'\((.*?)\)')

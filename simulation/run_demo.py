@@ -145,7 +145,7 @@ def main():
             #    cmd_vel has higher priority than nav_pose if both are received.
             if zmq.latest_cmd_vel is not None:
                 latest_cmd_vel = zmq.latest_cmd_vel
-                print(f"[CMD] Received cmd_vel -> lin_x={latest_cmd_vel[0]}, ang_z={latest_cmd_vel[1]}")
+                # print(f"[CMD] Received cmd_vel -> lin_x={latest_cmd_vel[0]}, ang_z={latest_cmd_vel[1]}")
                 lin_vel_x, ang_vel_z = latest_cmd_vel[0], latest_cmd_vel[1]
                 velocity_command = torch.tensor([[lin_vel_x, 0.0, ang_vel_z]], device=CFG.policy_device)
                 obs = mdp.update_observation_with_velocity_command(env, obs, velocity_command)

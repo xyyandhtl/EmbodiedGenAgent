@@ -173,12 +173,25 @@ class EGAgentSystem:
         # For quick test, directly set a goal pose
         # self.vlmap_backend.get_global_path(goal_pose=np.array([4.0, 5.0, 0.0]))
         # self._log(f"Computed global_path: {self.dm.curr_global_path}")
+        self._conv_info("地图加载完成。")
 
     def get_last_tick_output(self) -> str:
         return self.agent_env.last_tick_output or ""
 
     def get_goal_inview(self) -> dict:
         return self.agent_env.goal_inview
+    
+    def get_cur_cmd_vel(self) -> tuple:
+        """返回当前计算的速度命令 (vx, vy, wz)"""
+        return self.agent_env.cur_cmd_vel
+
+    def get_agent_pose(self) -> tuple:
+        """返回当前机器人位姿 [x,y,z,qw,qx,qy,qz]"""
+        return self.agent_env.cur_agent_pose
+
+    def get_target_pos(self) -> dict:
+        """返回当前所有目标的全局位置 {target_name: [x,y,z]}"""
+        return self.agent_env.cur_goal_places
 
     def _run_loop(self):
         """Main loop: step environment, propagate events, and check completion."""

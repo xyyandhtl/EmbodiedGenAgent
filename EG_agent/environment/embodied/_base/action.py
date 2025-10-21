@@ -29,8 +29,7 @@ class EmbodiedAction(Action):
         cur_action_done = False
 
         if cur_action == "walk":
-            # cur_goal_place = self.agent_env.cur_goal_places[self.args[0].lower()]
-            cur_cmd_vel = self.agent_env.cur_agent_states.get("cmd_vel", (0,0,0))
+            cur_cmd_vel = self.agent_env.get_cur_cmd_vel()
             self.agent_env.run_action("cmd_vel", cur_cmd_vel)
             # If current target has entered camera FOV, consider walk complete
             if self.agent_env.goal_inview[self.args[0]]:
