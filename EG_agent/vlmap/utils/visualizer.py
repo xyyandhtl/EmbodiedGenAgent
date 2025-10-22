@@ -396,6 +396,8 @@ class ReRunVisualizer:
             path_points_img = [world_to_img_cached(np.array(p)) for p in nav_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
             if len(path_points_img) > 1:
                 draw.line(path_points_img, fill=(0, 255, 0), width=6)  # Green line
+                for point in path_points_img:
+                    draw.ellipse([point[0]-3, point[1]-3, point[0]+3, point[1]+3], fill=(255, 0, 0))
 
         # (2) Draw trajectory
         if traj_path and len(traj_path) > 1:
