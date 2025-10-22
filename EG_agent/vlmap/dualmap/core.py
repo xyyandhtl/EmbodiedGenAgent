@@ -448,6 +448,7 @@ class Dualmap:
         """
         The process of ending the sequnce.
         """
+        self.visualizer.shutdown()
         end_frame_id = self.curr_frame_id
 
         self.stop_threading()
