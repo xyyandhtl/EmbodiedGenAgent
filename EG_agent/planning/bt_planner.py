@@ -49,7 +49,7 @@ class BTGenerator:
             use_priority_act=self.use_priority_act
         )
 
-        self.goal_set = set()
+        self.goal_candidates = []
 
     def set_key_objects(self, key_objects: List[str]):
         self.key_objects = key_objects
@@ -65,18 +65,17 @@ class BTGenerator:
         return self.planner.execute_bt(goal, state, verbose=verbose)
 
     def set_goal(self, goal: str):
-        self.goal_set = goal_transfer_str(goal)[0]
+        self.goal_candidates = goal_transfer_str(goal)
 
     def generate(self, btml_name: str = "tree") -> Optional[BehaviorTree]:
         """
-        goal: either a goal string (e.g. 'A & B') or a pre-parsed goal_set (list/iterable of condition sets)
         Returns a BehaviorTree instance (and stores ptml/cost/expanded_num in self.last_*).
         """
         start_time = time.time()
         # self.goal_set = goal_transfer_str(goal)[0]
 
         # planner already created in constructor
-        self.planner.process([self.goal_set])
+        self.planner.process(self.goal_candidates)
 
         ptml_string, cost, expanded_num = self.planner.post_process()
         planning_time_total = time.time() - start_time
@@ -91,9 +90,9 @@ class BTGenerator:
         # self.last_cost = cost
         # self.last_expanded_num = expanded_num
         error, state, act_num, current_cost, record_act_ls, ticks = self.execute(
-            self.goal_set, self.cur_cond_set, verbose=False)
+            self.goal_candidates[0], self.cur_cond_set, verbose=False)
         
-        print(f'\x1b[32mGoal:{self.goal_set}\x1b[0m, \n'
+        print(f'\x1b[32mGoal:{self.goal_candidates}\x1b[0m, \n'
               f'\x1b[31merror:\x1b[0m {error}, \n'
               f'\x1b[33mstate:\x1b[0m {state}, \n'
               f'\x1b[35mact_num:\x1b[0m {act_num}, \n'

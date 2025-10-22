@@ -158,6 +158,13 @@ class IsaacsimEnv(BaseAgentEnv):
         """返回当前计算的速度命令 (vx, vy, wz)"""
         self.cur_cmd_vel = self._vlmap_backend.get_cmd_vel()
         return self.cur_cmd_vel
+    
+    def get_target_pos(self, target_name: str) -> list[float]:
+        """返回指定目标的当前位置 [x,y,z]，若未知则返回 None。"""
+        return self.cur_goal_places.get(target_name, [])
+    
+    def get_cur_target_pos(self) -> list[float]:
+        return self.get_target_pos(self.cur_target)
 
     def _synced_callback(self, rgb_msg, depth_msg, odom_msg):
         """RGB/Depth/Odom 同步回调：解码 -> 位姿矩阵 -> 推送到 VLMap 后端 -> 更新可视状态"""
@@ -222,7 +229,7 @@ class IsaacsimEnv(BaseAgentEnv):
     def set_object_places(self, places: dict[str, list[float]]):
         """设置/更新目标位置，并更新可视性（每个目标是否在当前相机的视锥内）"""
         # Normalize to lower-case keys to match action args
-        self.cur_goal_places = {str(k): v for k, v in places.items()}
+        self.cur_goal_places.update(places)
         # Recompute visibility when goal set changes
         self._update_goal_inview()
 

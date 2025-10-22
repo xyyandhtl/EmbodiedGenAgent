@@ -3,7 +3,7 @@ from EG_agent.environment.embodied._base.action import EmbodiedAction
 class Capture(EmbodiedAction):
     can_be_expanded = True
     num_args = 1
-    valid_args = EmbodiedAction.AllObject
+    valid_args = set()
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -24,7 +24,7 @@ class Capture(EmbodiedAction):
             "pre": {f"RobotNear({target})"},
             "add": {f"IsCaptured({target})"},
             "del_set": set(),
-            "cost": 10,
+            "cost": 5,
         }
 
     def change_condition_set(self):

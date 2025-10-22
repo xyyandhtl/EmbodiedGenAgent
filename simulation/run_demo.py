@@ -181,7 +181,7 @@ def main():
             obs, _, _, _ = env.step(actions)
 
             if CFG.camera_follow:
-                camera_follow(env, camera_offset_=(-2.0, 0.0, 0.5))
+                camera_follow(env, camera_offset_=(-2.0, 0.0, 0.3))
 
             # --- 发布 sensor 数据（按CFG间隔） ---
             now = time.time()

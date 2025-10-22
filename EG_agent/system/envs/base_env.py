@@ -22,10 +22,12 @@ class BaseAgentEnv:
         self.response_frequency = 0.1
         self.step_num = 0
         self.next_response_time = 0.0
-        self.last_tick_output = None
+        self.last_tick_output: str = ""
+        self.tick_updated = False
         self.time = 0.0
         self.start_time = time.time()
-
+        
+        self.cur_target: str = ""
         self.condition_set = set()
 
         self.init_statistics()
@@ -40,13 +42,13 @@ class BaseAgentEnv:
     def init_statistics(self):
         self.step_num = 1
         self.next_response_time = self.response_frequency
-        self.last_tick_output = None
+        self.last_tick_output = ""
 
-    def extract_targes(self, bt_node_name):
+    def extract_targets(self, bt_node_name: str) -> str:
         walk_objects = self._paren_pattern.search(bt_node_name)
         if walk_objects:
             return walk_objects.group(1)
-        return None
+        return ""
 
     # =========================================================
     # methods that low-level env should impl 
@@ -57,6 +59,9 @@ class BaseAgentEnv:
     
     def grab_object(self, object_name: str):
         # high-level env like VirtualHome has its wrapped function so it is not needed
+        raise NotImplementedError
+    
+    def get_target_pos(self, target_name: str):
         raise NotImplementedError
 
     def step(self):
@@ -79,18 +84,20 @@ class BaseAgentEnv:
                 bt_output = ""
 
             if bt_output != self.last_tick_output:
+                self.cur_target = self.extract_targets(bt_output)
                 # Do some work that low-level env is not callable
                 if bt_output.startswith("Walk"):
-                    walk_objects = self.extract_targes(bt_output)
-                    if walk_objects:
-                        self.find_path(self.cur_goal_places[walk_objects])
+                    if self.cur_target:
+                        self.find_path(self.get_target_pos(self.cur_target))
                     else:
                         raise ValueError(f"Cannot parse walk object from BT output: {bt_output}")
 
+                self.last_tick_output = bt_output
+                self.tick_updated = True
+                
                 if self.print_ticks:
                     print(f"==== time:{self.time:f}s ======")
                     print(f"Action {self.step_num}: {bt_output}")
-                    self.last_tick_output = bt_output
 
         # self.agent_env_step()
         self.last_step_time = self.time

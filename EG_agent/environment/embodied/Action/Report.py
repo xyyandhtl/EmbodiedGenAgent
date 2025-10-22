@@ -3,7 +3,7 @@ from EG_agent.environment.embodied._base.action import EmbodiedAction
 class Report(EmbodiedAction):
     can_be_expanded = True
     num_args = 1
-    valid_args = EmbodiedAction.AllObject
+    valid_args = set()
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -22,7 +22,7 @@ class Report(EmbodiedAction):
         # If your planner supports more complex preconditions, consider:
         # "pre": {f"HasImage({target})"} or {f"IsMarked({target})"} or a disjunction.
         return {
-            "pre": {f"IsCaptured({target})"},
+            "pre": {f"TargetFound({target})"},
             # unify with goal generator: REPORT -> IsReported(X)
             "add": {f"IsReported({target})"},
             "del_set": set(),

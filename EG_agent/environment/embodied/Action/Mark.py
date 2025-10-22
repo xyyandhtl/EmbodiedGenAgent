@@ -3,7 +3,7 @@ from EG_agent.environment.embodied._base.action import EmbodiedAction
 class Mark(EmbodiedAction):
     can_be_expanded = True
     num_args = 1
-    valid_args = EmbodiedAction.AllObject
+    valid_args = set()
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -21,7 +21,6 @@ class Mark(EmbodiedAction):
         target = arg[0]
         return {
             "pre": {f"RobotNear({target})"},
-            # unify with goal generator: MARK -> IsMarked(X)
             "add": {f"IsMarked({target})"},
             "del_set": set(),
             "cost": 5,

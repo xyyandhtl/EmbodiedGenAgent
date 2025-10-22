@@ -178,7 +178,7 @@ QStatusBar QLabel {
          <item>
           <widget class="QLineEdit" name="instructionEdit">
            <property name="text">
-            <string>请前往拍摄交通标志</string>
+            <string>请前往红绿灯处标记，并拍摄几种交通标志和设施</string>
            </property>
            <property name="placeholderText">
             <string>输入指令...</string>

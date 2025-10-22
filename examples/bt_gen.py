@@ -34,8 +34,9 @@ if __name__ == "__main__":
         key_objects=[],     # set empty
     )
 
-    bt_gen.set_key_objects(["TrafficSign"])
+    bt_gen.set_key_objects(["TrafficSign", "Trafficbarrier", "Trafficlight"])
     bt_gen.set_goal("RobotNear_TrafficSign & IsCaptured_TrafficSign")
+    # bt_gen.set_goal("RobotNear_Trafficbarrier & IsCaptured_Trafficbarrier & RobotNear_Trafficlight & IsMarked_Trafficlight")
     bt = bt_gen.generate(btml_name="tree")
 
      # if scene in ["VH","RW"]:
