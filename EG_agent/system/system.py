@@ -170,9 +170,11 @@ class EGAgentSystem:
                        f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
                        f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
         self.update_objects_from_map()
-        # For quick test, directly set a goal pose
-        # self.vlmap_backend.get_global_path(goal_pose=np.array([4.0, 5.0, 0.0]))
+
+        # # TODO: For quick test, directly set a goal pose
+        # self.vlmap_backend.get_global_path(goal_pose=np.array([3.5, 6.0, 0.0]))
         # self._log(f"Computed global_path: {self.dm.curr_global_path}")
+
         self._conv_info("地图加载完成。")
 
     def get_last_tick_output(self) -> str:
@@ -180,7 +182,7 @@ class EGAgentSystem:
 
     def get_goal_inview(self) -> dict:
         return self.agent_env.goal_inview
-    
+
     def get_cur_cmd_vel(self) -> tuple:
         """返回当前计算的速度命令 (vx, vy, wz)"""
         return self.agent_env.cur_cmd_vel
@@ -203,7 +205,7 @@ class EGAgentSystem:
                 # VLM 建图后台处理一帧数据
                 self.vlmap_backend.run_once()
 
-                # 简单导航测试
+                # TODO: 简单导航测试
                 # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
 
                 # 最终行为树执行测试
@@ -358,7 +360,6 @@ class EGAgentSystem:
     def get_semantic_map_image(self) -> np.ndarray:
         """Semantic/path map from dualmap; fallback to detector annotated image."""
         semantic_map = self.dm.get_semantic_map_image()
-        # TODO: 语义实体地图 + 导航路径 (not at all)
         if semantic_map is not None:
             self.update_objects_from_map()
             return semantic_map
@@ -367,7 +368,6 @@ class EGAgentSystem:
     def get_traversable_map_image(self) -> np.ndarray:
         """Traversable map from dualmap."""
         traversable_map = self.dm.get_traversable_map_image()
-        # TODO: 可通行地图 (init version)
         if traversable_map is not None:
             return traversable_map
         return self._gen_dummy_image(260, 180, "Traversable")
@@ -419,13 +419,13 @@ class EGAgentSystem:
         self._emit("log", self.get_log_text_tail())
 
     # 简洁的日志分级包装
-    def _log_info(self, msg: str): 
+    def _log_info(self, msg: str):
         self._log(f"[INFO] {msg}")
 
-    def _log_warn(self, msg: str): 
+    def _log_warn(self, msg: str):
         self._log(f"[WARN] {msg}")
-        
-    def _log_error(self, msg: str): 
+
+    def _log_error(self, msg: str):
         self._log(f"[ERROR] {msg}")
 
     def _gen_dummy_image(self, w: int, h: int, text: str) -> np.ndarray:
