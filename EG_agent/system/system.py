@@ -171,9 +171,9 @@ class EGAgentSystem:
                        f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
         self.update_objects_from_map()
 
-        # TODO: For quick test, directly set a goal pose
-        self.vlmap_backend.get_global_path(goal_pose=np.array([3.5, 6.0, 0.0]))
-        self._log(f"Computed global_path: {self.dm.curr_global_path}")
+        # # TODO: For quick test, directly set a goal pose
+        # self.vlmap_backend.get_global_path(goal_pose=np.array([3.5, 6.0, 0.0]))
+        # self._log(f"Computed global_path: {self.dm.curr_global_path}")
 
         self._conv_info("地图加载完成。")
 
@@ -205,8 +205,8 @@ class EGAgentSystem:
                 # VLM 建图后台处理一帧数据
                 self.vlmap_backend.run_once()
 
-            # TODO: 简单导航测试
-            # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
+                # TODO: 简单导航测试
+                # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
 
                 # 最终行为树执行测试
                 is_finished = self.agent_env.step()
