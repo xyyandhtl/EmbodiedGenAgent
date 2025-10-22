@@ -9,7 +9,7 @@ from isaaclab.sensors.camera import Camera
 
 def camera_follow(
         env: ManagerBasedRLEnv,
-        camera_offset_: tuple[float, float, float] = (-2.0, -2.0, 1.0),
+        camera_offset: tuple[float, float, float] = (-2.0, -2.0, 1.0),
         smoothing_window: int = 50
 ):
     """
@@ -17,7 +17,7 @@ def camera_follow(
 
     Args:
         env: Isaac Lab environment instance.
-        camera_offset_: Camera offset relative to the robot (x, y, z).
+        camera_offset: (x, y, z) offset in world coordinates for the camera position.
         smoothing_window: Smoothing window size to reduce camera jitter.
     """
     if not hasattr(camera_follow, "smooth_camera_positions"):
@@ -27,7 +27,7 @@ def camera_follow(
     robot_pos = asset.data.root_pos_w[0]
     robot_quat = asset.data.root_quat_w[0]
 
-    camera_offset_tensor = torch.tensor(camera_offset_, dtype=torch.float32, device=env.device)
+    camera_offset_tensor = torch.tensor(camera_offset, dtype=torch.float32, device=env.device)
 
     camera_pos = math_utils.transform_points(
         camera_offset_tensor.unsqueeze(0),
@@ -42,6 +42,45 @@ def camera_follow(
         camera_follow.smooth_camera_positions.pop(0)
 
     smooth_camera_pos = torch.mean(torch.stack(camera_follow.smooth_camera_positions), dim=0)
+
+    env.unwrapped.viewport_camera_controller.set_view_env_index(env_index=0)
+    env.unwrapped.viewport_camera_controller.update_view_location(
+        eye=smooth_camera_pos.cpu().numpy(),
+        lookat=robot_pos.cpu().numpy()
+    )
+
+
+def camera_topdown_follow(
+        env: ManagerBasedRLEnv,
+        camera_offset: tuple[float, float, float] = (2.0, 0.0, 10.0),
+        smoothing_window: int = 50
+):
+    """
+    Make the camera follow the robot in a top-down view.
+    The camera does not rotate with the robot — it only translates to keep the robot centered in view.
+
+    Args:
+        env: Isaac Lab environment instance.
+        camera_offset: (x, y, z) offset in world coordinates for the camera position
+        smoothing_window: Smoothing window size to reduce camera jitter.
+    """
+    if not hasattr(camera_topdown_follow, "smooth_camera_positions"):
+        camera_topdown_follow.smooth_camera_positions = []
+
+    asset = env.unwrapped.scene["robot"]
+    robot_pos = asset.data.root_pos_w[0]
+
+    camera_offset_tensor = torch.tensor(camera_offset, dtype=torch.float32, device=env.device)
+    camera_pos = robot_pos + camera_offset_tensor
+
+    camera_pos[2] = torch.clamp(camera_pos[2], min=0.1)
+
+
+    camera_topdown_follow.smooth_camera_positions.append(camera_pos)
+    if len(camera_topdown_follow.smooth_camera_positions) > smoothing_window:
+        camera_topdown_follow.smooth_camera_positions.pop(0)
+
+    smooth_camera_pos = torch.mean(torch.stack(camera_topdown_follow.smooth_camera_positions), dim=0)
 
     env.unwrapped.viewport_camera_controller.set_view_env_index(env_index=0)
     env.unwrapped.viewport_camera_controller.update_view_location(

@@ -448,6 +448,7 @@ class Dualmap:
         """
         The process of ending the sequnce.
         """
+        self.visualizer.shutdown()
         end_frame_id = self.curr_frame_id
 
         self.stop_threading()
@@ -778,7 +779,7 @@ class Dualmap:
         if not cur_path:
             logger.debug("[Core] No remaining path available for next waypoint computation.")
             return None
-        return cur_path[min(5, len(cur_path)-1)]
+        return cur_path[min(1, len(cur_path)-1)]
 
     def get_semantic_map_image(self):
         semantic_map = self.visualizer.get_semantic_map_image(

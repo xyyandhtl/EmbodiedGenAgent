@@ -80,10 +80,11 @@ class VLMapNav(RunnerROSBase):
         # Controller constants (tune as needed)
         kp_ang = 0.8
         kp_lin = 0.8
+        min_lin_vel = 0.8
         max_lin_vel = 2.0
         max_ang_vel = 1.0
         yaw_error_threshold = 0.8
-        goal_reached_threshold = 0.2  # m
+        goal_reached_threshold = 0.1  # m
 
         # 1. 计算 目标方向
         camera_pose_ros = self.dualmap.realtime_pose.copy()  # 4x4 pose matrix in ROS frame
@@ -117,9 +118,12 @@ class VLMapNav(RunnerROSBase):
         # Angular velocity
         ang_vel_z = np.clip(kp_ang * yaw_error, -max_ang_vel, max_ang_vel)
         # Linear velocity
-        lin_vel_x = np.clip(kp_lin * dist_to_goal * np.cos(yaw_error), 0.0, max_lin_vel)
+        lin_vel_x = min_lin_vel + (max_lin_vel - min_lin_vel) * (1 - np.exp(-kp_lin * dist_to_goal))
+        yaw_factor = np.clip(np.cos(yaw_error), 0.0, 1.0)
         if np.abs(yaw_error) > yaw_error_threshold:
-            lin_vel_x *= max(0.3, 1.0 - np.abs(yaw_error) / np.pi)
+            yaw_factor *= max(0.3, 1.0 - np.abs(yaw_error) / np.pi)
+        lin_vel_x *= yaw_factor
+        lin_vel_x = np.clip(lin_vel_x, 0.0, max_lin_vel)
 
         end = time.time()
         self.logger.debug(f"[VLMapNav] [get_cmd_vel] Computation time: {end - start: .4f}s")

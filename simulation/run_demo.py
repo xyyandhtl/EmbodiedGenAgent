@@ -37,7 +37,7 @@ import simulation.mdp as mdp
 from simulation.env.go2w_locomotion_env_cfg import LocomotionVelocityEnvCfg
 from simulation.utils import (
     setup_isaacsim_settings,
-    camera_follow,
+    camera_follow, camera_topdown_follow,
     get_current_stage,
     handle_enum_action,
     handle_mark_action,
@@ -181,7 +181,7 @@ def main():
             obs, _, _, _ = env.step(actions)
 
             if CFG.camera_follow:
-                camera_follow(env, camera_offset_=(-2.0, 0.0, 0.3))
+                camera_topdown_follow(env, camera_offset=(2.0, 0.0, 10.0))
 
             # --- 发布 sensor 数据（按CFG间隔） ---
             now = time.time()
