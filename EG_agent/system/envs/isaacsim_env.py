@@ -158,6 +158,10 @@ class IsaacsimEnv(BaseAgentEnv):
         """返回当前计算的速度命令 (vx, vy, wz)"""
         self.cur_cmd_vel = self._vlmap_backend.get_cmd_vel()
         return self.cur_cmd_vel
+    
+    def get_target_pos(self, target_name: str) -> list[float]:
+        """返回指定目标的当前位置 [x,y,z]，若未知则返回 None。"""
+        return self.cur_goal_places[target_name] 
 
     def _synced_callback(self, rgb_msg, depth_msg, odom_msg):
         """RGB/Depth/Odom 同步回调：解码 -> 位姿矩阵 -> 推送到 VLMap 后端 -> 更新可视状态"""

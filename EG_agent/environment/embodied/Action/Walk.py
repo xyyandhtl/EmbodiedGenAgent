@@ -3,7 +3,7 @@ from EG_agent.environment.embodied._base.action import EmbodiedAction
 class Walk(EmbodiedAction):
     can_be_expanded = True
     num_args = 1
-    valid_args = EmbodiedAction.AllObject
+    valid_args = set()
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -20,7 +20,7 @@ class Walk(EmbodiedAction):
         """
         target = arg[0]
         info = {}
-        info["pre"] = set()
+        info["pre"] = set() # {f"TargetFound({target})"}
         info["add"] = {f"RobotNear({target})"}
         info["del_set"] = {f"RobotNear({place})" for place in cls.valid_args if place != target}
         info["cost"] = 15

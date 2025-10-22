@@ -7,7 +7,6 @@ from PIL import Image
 from dynaconf import Dynaconf
 import traceback
 
-from EG_agent.prompts.default_objects import AllObject
 from EG_agent.reasoning.logic_goal import LogicGoalGenerator
 from EG_agent.planning.bt_planner import BTGenerator
 from EG_agent.planning.btpg import BehaviorTree
@@ -24,7 +23,7 @@ class EGAgentSystem:
     Note: This change only beautifies comments/docstrings; no logic changes.
     """
     goal: str
-    target_set: set # different from bt_generator.goal_set, conclude only targets not conditions
+    target_set: set = set()
     bt: BehaviorTree | None = None
     bt_name: str = "behavior_tree"
 
@@ -242,11 +241,13 @@ class EGAgentSystem:
 
         # 2. goal 逻辑指令 ==> BehaviorTree 实例
         self.bt_generator.set_goal(self.goal)
-        goal_set = self.bt_generator.goal_set
-        self._log_info(f"[system] [feed_instruction] goal_set is: {goal_set}")
-        self.agent_env.cur_goal_set = goal_set
-        # 提取目标对象集合 TODO:行为树能否不依赖于给定的目标集合
-        self.target_set = { self.agent_env.extract_targes(goal) for goal in goal_set }
+        goal_candidates = self.bt_generator.goal_candidates
+        self._log_info(f"[system] [feed_instruction] goal_candidates is: {goal_candidates}")
+        self.agent_env.cur_goal_set = goal_candidates[0]
+        # 提取目标对象集合
+        for goal_set in goal_candidates:
+            self.target_set.update( { self.agent_env.extract_targes(goal) for goal in goal_set })
+            # self.target_set = { self.agent_env.extract_targes(goal) for goal in goal_set }
         if any(x is None for x in self.target_set):
             self._conv_err("无法理解指令中的目标对象，已中断指令下发")
             return

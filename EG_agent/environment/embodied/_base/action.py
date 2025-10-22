@@ -13,7 +13,7 @@ class EmbodiedAction(Action):
     agent_env: IsaacsimEnv = None  # type: ignore
 
     # Backward-compat: single roll-up set if needed elsewhere
-    AllObject = AllObject
+    # AllObject = set()
 
     @property
     def action_class_name(self):
@@ -25,7 +25,8 @@ class EmbodiedAction(Action):
     def update(self) -> Status:
         # 在这里执行具体的动作逻辑，比如移动、拍照等
         cur_action = self.action_class_name.lower()
-        print(f"Executing action: {cur_action} on target: {self.args[0]}")
+        if cur_action != "walk":
+            print(f"Executing action: {cur_action} on target: {self.args[0]}")
         cur_action_done = False
 
         if cur_action == "walk":

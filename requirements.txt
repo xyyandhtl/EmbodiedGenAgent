@@ -1,25 +1,25 @@
-# basic dependencies
+# ----- basic dependencies -----
 numpy==1.26.4
 opencv-python-headless==4.10.0.84
 pillow
 plotly
 tqdm
 
-# mannually install
+# ----- mannually install ------
 # torch
 # torchvision
 
-# reasoning module
+# ------ reasoning module ------
 openai
 
-# planning module
+# ------ planning module -------
 py_trees
 faiss-cpu
 antlr4-python3-runtime~=4.13.1
 protobuf==3.20.3
 autopep8~=2.0.4
 
-# dualmap module
+# ------- dualmap module -------
 open_clip_torch
 ultralytics==8.3.103
 supervision==0.25.1
@@ -33,16 +33,17 @@ rerun-sdk==0.22.1
 git+https://github.com/ultralytics/CLIP.git
 git+https://github.com/apple/ml-mobileclip.git # --no-deps
 
-# if use habitat-data-collector
-# habitat-sim==0.3.2  # source install
-# habitat-lab==0.3.2  # source install
-# gym==0.23.0
-
-# app GUI
+# ---------- app GUI -----------
 PyQt5
 
-# ROS2 IDL dependencies
+# --- ROS2 IDL dependencies ----
 # empy
 # lark
 
-# isaacsim agent deployment env: see simulation/SIMULATION.md
+# -------- isaac-sim -----------
+# see simulation/SIMULATION.md
+
+# ----- if use habitat-sim -----
+# habitat-sim==0.3.2  # source install
+# habitat-lab==0.3.2  # source install
+# gym==0.23.0

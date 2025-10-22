@@ -25,7 +25,7 @@ class BaseAgentEnv:
         self.last_tick_output = None
         self.time = 0.0
         self.start_time = time.time()
-
+        
         self.condition_set = set()
 
         self.init_statistics()
@@ -58,6 +58,9 @@ class BaseAgentEnv:
     def grab_object(self, object_name: str):
         # high-level env like VirtualHome has its wrapped function so it is not needed
         raise NotImplementedError
+    
+    def get_target_pos(self, target_name: str):
+        raise NotImplementedError
 
     def step(self):
         if self.bt is None:
@@ -83,7 +86,7 @@ class BaseAgentEnv:
                 if bt_output.startswith("Walk"):
                     walk_objects = self.extract_targes(bt_output)
                     if walk_objects:
-                        self.find_path(self.cur_goal_places[walk_objects])
+                        self.find_path(self.get_target_pos(walk_objects))
                     else:
                         raise ValueError(f"Cannot parse walk object from BT output: {bt_output}")
 

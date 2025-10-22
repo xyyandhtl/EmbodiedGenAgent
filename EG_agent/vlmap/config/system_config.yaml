@@ -122,7 +122,7 @@ pcd_sample_ratio: 0.1
 sim_threshold: 1.0
 
 ### KEYFRAME CONFIG
-time_threshold: 1.0
+time_threshold: 1.5 # set 1.5 because the view average detections are ~10, local mapping time would be ~1.0s per frame
 pose_threshold: 0.5
 rotation_threshold: 5
 
