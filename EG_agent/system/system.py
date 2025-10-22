@@ -177,7 +177,7 @@ class EGAgentSystem:
         self._conv_info("地图加载完成。")
 
     def get_last_tick_output(self) -> str:
-        return self.agent_env.last_tick_output or ""
+        return self.agent_env.last_tick_output
 
     def get_goal_inview(self) -> dict:
         return self.agent_env.goal_inview
@@ -190,9 +190,9 @@ class EGAgentSystem:
         """返回当前机器人位姿 [x,y,z,qw,qx,qy,qz]"""
         return self.agent_env.cur_agent_pose
 
-    def get_target_pos(self) -> dict:
+    def get_cur_target_pos(self) -> list:
         """返回当前所有目标的全局位置 {target_name: [x,y,z]}"""
-        return self.agent_env.cur_goal_places
+        return self.agent_env.get_cur_target_pos()
 
     def _run_loop(self):
         """Main loop: step environment, propagate events, and check completion."""
@@ -209,6 +209,9 @@ class EGAgentSystem:
 
                 # 最终行为树执行测试
                 is_finished = self.agent_env.step()
+                if self.agent_env.tick_updated:
+                    self._conv_info(f"行为树执行节点更新: {self.get_last_tick_output()}")
+                    self.agent_env.tick_updated = False
         except Exception as e:
             tb = traceback.format_exc()
             self._log_error(f"Run loop exception: {e}")
@@ -227,7 +230,6 @@ class EGAgentSystem:
     # ---------------------- 输入接口 ----------------------
     def feed_instruction(self, text: str):
         """Plan a behavior tree from instruction, draw it, and update UI caches."""
-        # text = "请前往拍摄车辆"   ＃ for test
         # 1. 用户指令 ==> goal 逻辑指令（如：请前往控制室 转换为 RobotNear_ControlRoom）
         self._conv(f"用户: {text}")
         self.goal = self.goal_generator.generate_single(text)
@@ -239,22 +241,21 @@ class EGAgentSystem:
             self._conv_err("无法理解指令，已中断指令下发")
             return
 
-        # 2. goal 逻辑指令 ==> BehaviorTree 实例
+        # 2. goal 逻辑指令 ==> BehaviorTree 实例并可视化
         self.bt_generator.set_goal(self.goal)
         goal_candidates = self.bt_generator.goal_candidates
         self._log_info(f"[system] [feed_instruction] goal_candidates is: {goal_candidates}")
         self.agent_env.cur_goal_set = goal_candidates[0]
-        # 提取目标对象集合
+        # Extract target objects from goal candidates
         for goal_set in goal_candidates:
-            self.target_set.update( { self.agent_env.extract_targes(goal) for goal in goal_set })
-            # self.target_set = { self.agent_env.extract_targes(goal) for goal in goal_set }
+            self.target_set.update( { self.agent_env.extract_targets(goal) for goal in goal_set })
         if any(x is None for x in self.target_set):
             self._conv_err("无法理解指令中的目标对象，已中断指令下发")
             return
         self._log_info(f"[system] [feed_instruction] target_set is: {self.target_set}")
         self.bt_generator.set_key_objects(list(self.target_set))
         self._conv(f"智能体: 准备从逻辑目标生成以 {self.target_set} 为目标集的行为树")
-        # 生成行为树
+        # Generate BehaviorTree
         self.bt = self.bt_generator.generate(btml_name="tree")
         if not self.bt:
             self._conv_err("无法解析指令生成行为树，已中断指令下发")
@@ -267,32 +268,32 @@ class EGAgentSystem:
         self._log(f"Behavior tree image updated: {img_path.resolve()}")
         self._conv_info("已生成行为树并显示在左下窗口")
 
-        # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定；调用 vlmap 查询每个目标的位置；将目标位置告知给 IsaacsimEnv
-        """After feed_instruction, bind bt to env, query the target object positions"""        
+        # 3-pre. 检查 VLMap 后台是否已创建, 若未创建, 则直接返回
         if not self.backend_ready:
             self._log_warn("[system] Backend not created, cannot query object positions.")
-            self._conv_warn("后台未创建，无法查询目标位置，请先点击右侧“创建后台”。")
+            self._conv_warn("VLMap后台未创建，无法执行行为树，请先点击右侧“创建后台”。")
             return
+        # 以下注释代码块已迁移至 Action (Find)作为行为树一个动作节点执行
         # (a) 调用 vlmap 查询目标
-        self._log_info(f"[system] [update_cur_target_set] self.target_set: {self.target_set}")
-        cur_goal_places = {}
-        for obj in self.target_set:
-            target_position = self.vlmap_backend.query_object(obj)
-            self._log_info(f"[system] [update_cur_target_set] query {obj} result: {target_position}")
-            if target_position is not None:
-                cur_goal_places[obj] = target_position
-        # (b) 将 目标位置 传递给 IsaacsimEnv，并更新可视性（每个目标是否在当前相机的视锥内）
-        if not cur_goal_places:
-            self._conv_warn("无法在当前地图中找到目标对象或相似目标，请确认目标对象是否存在于场景中。")
-            self._log_warn("[system] [update_cur_target_set] No target positions found for current targets.")
-            return
-        self.agent_env.set_object_places(cur_goal_places)
-        self._log(f"[system] [update_cur_target_set] set cur_goal_places to env: {cur_goal_places}")
-        self._conv_info(f"已更新当前目标位置为 \n{cur_goal_places}")
+        # self._log_info(f"[system] [update_cur_target_set] self.target_set: {self.target_set}")
+        # cur_goal_places = {}
+        # for obj in self.target_set:
+        #     target_position = self.vlmap_backend.query_object(obj)
+        #     self._log_info(f"[system] [update_cur_target_set] query {obj} result: {target_position}")
+        #     if target_position is not None:
+        #         cur_goal_places[obj] = target_position
+        # # (b) 将 目标位置 传递给 IsaacsimEnv，并更新可视性（每个目标是否在当前相机的视锥内）
+        # if not cur_goal_places:
+        #     self._conv_warn("无法在当前地图中找到目标对象或相似目标，请确认目标对象是否存在于场景中。")
+        #     self._log_warn("[system] [update_cur_target_set] No target positions found for current targets.")
+        #     return
+        # self.agent_env.set_object_places(cur_goal_places)
+        # self._log(f"[system] [update_cur_target_set] set cur_goal_places to env: {cur_goal_places}")
+        # self._conv_info(f"已更新当前目标位置为 \n{cur_goal_places}")
+
+        # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定
         self.agent_env.bind_bt(self.bt)
         self._log_info("[system] [feed_instruction] Binding BT to agent_env.")
-            
-        # self.agent_env.run_action("mark", None)  # for test
 
     # ---------------------- 数据获取占位接口 ----------------------
     def get_conversation_text(self) -> str:

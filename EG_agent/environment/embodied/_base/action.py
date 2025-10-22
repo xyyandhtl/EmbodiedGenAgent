@@ -9,11 +9,7 @@ from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
 class EmbodiedAction(Action):
     can_be_expanded = True
     num_args = 1
-
     agent_env: IsaacsimEnv = None  # type: ignore
-
-    # Backward-compat: single roll-up set if needed elsewhere
-    # AllObject = set()
 
     @property
     def action_class_name(self):
@@ -24,12 +20,18 @@ class EmbodiedAction(Action):
 
     def update(self) -> Status:
         # 在这里执行具体的动作逻辑，比如移动、拍照等
+        # TODO: 当这里代码越来越复杂时,考虑将不同动作的逻辑拆分到各自的子类中
         cur_action = self.action_class_name.lower()
         if cur_action != "walk":
             print(f"Executing action: {cur_action} on target: {self.args[0]}")
         cur_action_done = False
 
-        if cur_action == "walk":
+        if cur_action == "find":
+            target_position = self.agent_env._vlmap_backend.query_object(self.args[0])
+            if target_position is not None:
+                self.agent_env.set_object_places({self.args[0]: target_position})
+                cur_action_done = True
+        elif cur_action == "walk":
             cur_cmd_vel = self.agent_env.get_cur_cmd_vel()
             self.agent_env.run_action("cmd_vel", cur_cmd_vel)
             # If current target has entered camera FOV, consider walk complete

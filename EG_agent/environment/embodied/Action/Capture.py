@@ -24,7 +24,7 @@ class Capture(EmbodiedAction):
             "pre": {f"RobotNear({target})"},
             "add": {f"IsCaptured({target})"},
             "del_set": set(),
-            "cost": 10,
+            "cost": 5,
         }
 
     def change_condition_set(self):

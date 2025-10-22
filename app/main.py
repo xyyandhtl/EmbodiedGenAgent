@@ -471,10 +471,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._set_status_segment("pose", f"RobotPose: {pose_txt}")
 
         # 段6：目标位置（数量+预览）
-        target_dict = self.agent_system.get_target_pos()
-        formatted_targets = {
-            k: [f"{v_i:.2f}" for v_i in v] for k, v in target_dict.items()
-        }
+        # target_dict = self.agent_system.get_cur_target_pos()
+        # formatted_targets = {
+        #     k: [f"{v_i:.2f}" for v_i in v] for k, v in target_dict.items()
+        # }
+        target_pos = self.agent_system.get_cur_target_pos()
+        formatted_targets = [f"{coord:.2f}" for coord in target_pos]
         self._set_status_segment("goals", f"TargetPos: {formatted_targets}")
 
     # --- 新增：分段状态栏（可扩展） ---
