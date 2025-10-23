@@ -33,6 +33,7 @@ class LayoutMap:
         self.x_edges = None
         self.y_edges = None
         self.wall_pcd: o3d.geometry.PointCloud = None  # Store extracted wall point cloud
+        self.free_space: np.ndarray = None
 
     def set_layout_pcd(self, layout_pcd):
         """
@@ -203,21 +204,19 @@ class LayoutMap:
         self.wall_pcd = o3d.geometry.PointCloud()
         self.wall_pcd.points = o3d.utility.Vector3dVector(wall_points)
         # self.visualize_wall_pcd()
-        save_dir = self.cfg.map_save_path
-        layout_pcd_path = save_dir + "/wall.pcd"
-        self.save_wall_pcd(layout_pcd_path)
-
         print(f"Extracted wall point cloud with {len(self.wall_pcd.points)} points.")
     
-    def save_wall_pcd(self, output_path="wall_points.pcd"):
+    def save_wall_pcd(self):
         """
         Save wall point cloud to disk.
         """
+        save_dir = self.cfg.map_save_path
+        layout_pcd_path = save_dir + "/wall.pcd"
         if self.wall_pcd is None or len(self.wall_pcd.points) == 0:
             print("No wall points to save.")
             return
-        o3d.io.write_point_cloud(output_path, self.wall_pcd)
-        print(f"Wall point cloud saved to {output_path}")
+        o3d.io.write_point_cloud(layout_pcd_path, self.wall_pcd)
+        print(f"Wall point cloud saved to {layout_pcd_path}")
 
     def visualize_wall_pcd(self):
         """

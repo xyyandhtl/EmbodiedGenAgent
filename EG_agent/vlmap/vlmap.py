@@ -7,11 +7,11 @@ from scipy.spatial.transform import Rotation as R
 
 from EG_agent.system.module_path import AGENT_VLMAP_PATH
 from EG_agent.vlmap.dualmap.core import Dualmap
-from EG_agent.vlmap.ros_runner.runner_ros_base import RunnerROSBase
+from EG_agent.vlmap.ros_runner.runner_ros_base import DualmapInterface
 from EG_agent.vlmap.utils.logging_helper import setup_logging
 from EG_agent.vlmap.utils.types import GoalMode
 
-class VLMapNav(RunnerROSBase):
+class VLMapNav(DualmapInterface):
     """
     VLMap navigation backend without ROS2 dependencies.
     EGAgentSystem feeds observations; this class maintains Dualmap and exposes navigation APIs.

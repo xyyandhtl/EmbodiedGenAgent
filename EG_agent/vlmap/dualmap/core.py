@@ -6,7 +6,6 @@ import time
 from pathlib import Path
 import logging
 import psutil
-import cv2
 import re
 import yaml
 import numpy as np
@@ -116,7 +115,7 @@ class Dualmap:
         # History of agent's actual traversed path
         self.traj_path = deque(maxlen=60)
 
-        # Queue provided by RunnerROSBase for raw frames
+        # Queue provided by DualmapInterface for raw frames
         self.last_keyframe_idx = -1
         self.input_queue = deque(maxlen=1)
         self.detection_results_queue = queue.Queue(maxsize=10)
@@ -152,7 +151,7 @@ class Dualmap:
         """
         The process of ending the sequnce.
         """
-        self.visualizer.shutdown()
+        self.global_map_manager.shutdown_semantic()
         end_frame_id = self.curr_frame_id
         self.stop_threading()
 
@@ -208,7 +207,7 @@ class Dualmap:
     def run_detector_thread(self):
         """
         Independent thread:
-          - Pull the latest frame from RunnerROSBase.synced_data_queue
+          - Pull the latest frame from DualmapInterface.synced_data_queue
           - Update realtime pose and traj
           - Check keyframe
           - Run the full detector pipeline for keyframes
@@ -318,7 +317,8 @@ class Dualmap:
                 # Global Mapping
                 self.global_map_manager.process_observations(global_obs_list)
 
-                self.visualizer.mark_semantic_map_dirty(dirty=True)  # global_map 改变，需更新语义地图图像缓存
+                if len(global_obs_list) > 0:
+                    self.global_map_manager.mark_semantic_map_dirty()
 
             # Get memory usage statistics of local and global maps
             # mem_stats = get_map_memory_usage(self.local_map_manager.local_map,
@@ -380,6 +380,7 @@ class Dualmap:
         self.detector.save_layout()
         layout_pcd = self.detector.get_layout_pointcloud()
         self.global_map_manager.set_layout_info(layout_pcd)
+        self.global_map_manager.save_wall_pcd()
 
     def load_map(self, map_path=None):
         """
@@ -466,137 +467,6 @@ class Dualmap:
                 continue
         return total_rss / 1024 / 1024  # MB
 
-    def sequential_process(self, data_input: DataInput):
-        """
-        Process input data sequentially.
-        Note: Sequential processing is not recommended for large datasets.
-        It is primarily used for debugging and testing purposes.
-        Also, Sequential processing mode does not support navigation.
-        """
-
-        # Get current frame id
-        self.curr_frame_id = data_input.idx
-
-        # Get current pose
-        self.curr_pose = data_input.pose
-
-        # Set time sequence for visualizer
-        self.visualizer.set_time_sequence("frame", self.curr_frame_id)
-
-        # Set current camera information & image
-        self.visualizer.set_camera_info(data_input.intrinsics, data_input.pose)
-        self.visualizer.set_image(data_input.color)
-
-        # Detection process with timing
-        with timing_context("Detection Process", self):
-            self.detector.set_data_input(data_input)
-
-            if self.cfg.run_detection:
-                self.detector.process_detections()
-                with timing_context("Save Detection", self):
-                    if self.cfg.save_detection:
-                        self.detector.save_detection_results()
-            else:
-                self.detector.load_detection_results()
-
-            # Detection results -> objects observation
-            with timing_context("Vis Detection", self):
-                self.detector.calculate_observations()
-                if self.cfg.use_rerun:
-                    self.detector.visualize_detection()
-
-        # Local Mapping with timing
-        with timing_context("Local Mapping", self):
-            curr_obs_list = self.detector.get_curr_observations()
-            self.detector.update_state()
-            self.detector.update_data()
-            self.local_map_manager.set_curr_idx(self.curr_frame_id)
-            self.local_map_manager.process_observations(curr_obs_list)
-
-        # Get global observations
-        with timing_context("Global Mapping", self):
-            global_obs_list = self.local_map_manager.get_global_observations()
-            self.local_map_manager.clear_global_observations()
-            self.global_map_manager.process_observations(global_obs_list)
-
-    # 现用处理入口, detector在主线程, 仅把mapping放到子线程
-    def parallel_process(self, data_input: DataInput):
-        """
-        Process input data in parallel. 数据流入的主要入口
-            1. 接收一 关键帧 (DataInput，包含RGB、depth、pose等）
-            2. 调用 Detector 对图像进行处理，生成物体观测结果。为不阻塞主线程（数据接收线程），将检测和观测结果放入 (`detection_results_queue`) 队列
-            3. 更新可视化信息
-            4. 更新地图，计算导航路径（全局+局部）
-        """
-        # Get current frame id
-        self.curr_frame_id = data_input.idx
-
-        # Get current pose（被判断作为关键帧的 位姿）
-        self.curr_pose = data_input.pose
-
-        # Record the traj_path with realtime pos
-        if self.realtime_pose is not None:
-            self.traj_path.append(self.realtime_pose[:3, 3].copy())
-
-        # --- 1. Detection process ---
-        start_time = time.time()
-        with timing_context("Observation Generation", self):
-            # (1) 调用 Detector，将 当前帧 设为 curr_data
-            # (2) 运行 数据处理线程：检测当前帧是否可作为 全局点云的关键帧，如果是，则计算 当前帧的点云，并 merge 到全局点云中，更新`迁移关键帧数据`
-            self.detector.set_data_input(data_input)
-
-            with timing_context("Process Detection", self):
-                if self.cfg.run_detection:
-                    # (3) 执行检测：
-                    #   YOLO + Segmentation + FastSAM，并进行过滤，merge，得到 `filtered_detections`
-                    #   Create Object Pointcloud（为每个实例分割生成 点云、颜色 + CLIP（使用 CLIP 提取 图像特征、类别文本特征），得到最终结果 `curr_results`
-                    self.detector.process_detections()
-                    with timing_context("Save Detection", self):
-                        if self.cfg.save_detection:
-                            self.detector.save_detection_results()
-                else:
-                    self.detector.load_detection_results()
-
-            with timing_context("Observation Formatting", self):
-                # (4) 将 语义检测结果 ==> 观测对象 `LocalObservation`，并存入 `curr_observations`
-                # 每个观测对象包含：
-                #   idx:帧ID     class_id:物体类别ID     mask:物体mask     xyxy:物体2D检测框坐标      conf:物体检测置信度
-                #   clip_ft:物体CLIP加权特征      pcd:物体3D点云      bbox:物体点云BBOX   distance:物体到相机的距离
-                #   is_low_mobility:是否为固定物体   masked_image    cropped_image:物体裁剪图像
-                self.detector.calculate_observations()
-
-            # (5) 获取 观测结果 `curr_observations`
-            curr_obs_list = self.detector.get_curr_observations()
-
-            self.detector.update_state()  # 检测、观测结果清空，待下一帧处理
-
-            # (6) 将结果放入 `detection_results_queue` 队列，供 建图线程 处理
-            try:
-                self.detection_results_queue.put(
-                    (curr_obs_list, self.curr_frame_id), timeout=1
-                )
-            except queue.Full:
-                logger.warning(
-                    f"[Core] Mapping queue is full, skipping frame {self.curr_frame_id}."
-                )
-
-        end_time = time.time()
-
-        # Set time sequence for visualizer
-        self.visualizer.set_time_sequence("frame", self.curr_frame_id)
-
-        # Set current camera information
-        self.visualizer.set_camera_info(data_input.intrinsics, data_input.pose)
-        self.visualizer.set_image(data_input.color)
-
-        if self.cfg.use_rerun:
-            elapsed_time = end_time - start_time
-            self.detector.visualize_time(elapsed_time)
-
-            # TODO: psutil seems not that correct
-            # mem_usage = self.get_total_memory_by_keyword()
-            # self.detector.visualize_memory(mem_usage)
-
     def convert_inquiry_to_feat(self, inquiry_sentence: str):
         text_query_tokenized = self.detector.clip_tokenizer(inquiry_sentence).to("cuda")
         text_query_ft = self.detector.clip_model.encode_text(text_query_tokenized)
@@ -642,7 +512,7 @@ class Dualmap:
         if best_candidate is not None:
             # 提取物体边界框的中心点作为其位置
             position = best_candidate.bbox_2d.get_center().tolist()
-            found_obj_name = self.visualizer.obj_classes.get_classes_arr()[best_candidate.class_id]
+            found_obj_name = self.global_map_manager.obj_classes.get_classes_arr()[best_candidate.class_id]
             
             logger.info(f"[VLMapNav] [query_object] Found best match '{found_obj_name}' for query '{object_name}' with score {best_similarity:.4f} at position {position}.")
             return position
@@ -669,16 +539,16 @@ class Dualmap:
         # (2) 如果没有墙壁点云，则提取墙壁点云
         self.global_map_manager.set_layout_info(layout_pcd)
 
-        self.visualizer.mark_semantic_map_dirty(dirty=True)  # wall_pcd 改变，需更新语义地图图像缓存
-
         # calculate the path based on current global map
         # Get 3D path point in world coordinate
         # 计算 全局路径
         self.curr_global_path = self.global_map_manager.calculate_global_path(
-            self.curr_pose, goal_mode=self.get_goal_mode, resolution=self.cfg.resolution, goal_position=self.goal_pose
+            self.curr_pose, goal_mode=self.get_goal_mode,
+            resolution=self.cfg.resolution, goal_position=self.goal_pose
         )
 
-        self.visualizer.mark_traversable_map_dirty(dirty=True)  # nav_graph 改变，需更新语义地图图像缓存
+        self.global_map_manager.mark_semantic_map_dirty()  # wall_pcd 改变，需更新语义地图图像缓存
+        self.global_map_manager.mark_traversable_map_dirty()  # nav_graph 改变，需更新语义地图图像缓存
 
         # Clear the local mapping results
         self.curr_local_path = None
@@ -846,25 +716,21 @@ class Dualmap:
         return cur_path[min(1, len(cur_path)-1)]
 
     def get_semantic_map_image(self):
-        semantic_map = self.visualizer.get_semantic_map_image(
-            self.global_map_manager,
+        semantic_map = self.global_map_manager.get_semantic_map_image(
             resolution=self.cfg.resolution,
             curr_pose=self.curr_pose,
             traj_path=self.traj_path,
             nav_path=self.curr_global_path  # TODO: 后续更改为 self.action_path，或者传入 global_path 和 local_path，以不同颜色显示
         )
-
-        if semantic_map is not None:
-            save_dir = str(self.cfg.map_save_path)
-            save_path = f"{save_dir}/semantic_map.png"
-            if os.path.exists(save_dir) and not os.path.exists(save_path):
-                cv2.imwrite(save_path, semantic_map)
-                print(f"[visualizer] Semantic map saved to {save_path}")
-
+        # if semantic_map is not None:
+        #     save_dir = str(self.cfg.map_save_path)
+        #     save_path = f"{save_dir}/semantic_map.png"
+        #     if os.path.exists(save_dir) and not os.path.exists(save_path):
+        #         cv2.imwrite(save_path, semantic_map)
+        #         print(f"[visualizer] Semantic map saved to {save_path}")
         return semantic_map
     
     def get_traversable_map_image(self):
-        return self.visualizer.get_traversable_map_image(
-            self.global_map_manager,
+        return self.global_map_manager.get_traversable_map_image(
             curr_pose=self.curr_pose
         )
