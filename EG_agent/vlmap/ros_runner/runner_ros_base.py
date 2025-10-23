@@ -14,7 +14,7 @@ from EG_agent.vlmap.utils.types import DataInput
 from EG_agent.vlmap.dualmap.core import Dualmap
 
 
-class RunnerROSBase:
+class DualmapInterface:
     """
     Base class for ROS1 and ROS2 runners.
     Handles shared logic such as intrinsics/extrinsics loading,
@@ -114,7 +114,7 @@ class RunnerROSBase:
 
     def run_once(self):
         # 调用 detector 流程处理一帧 input_queue 的 run_once,
-        # TODO: 后续是否弃用, 把所有 detector 和 mapping 逻辑都放在后台线程
+        # 已弃用, 把所有 detector 和 mapping 逻辑都放在后台线程
         data_input: DataInput = self.dualmap.input_queue[-1]
         if data_input.idx == self.dualmap.last_keyframe_idx:
             return

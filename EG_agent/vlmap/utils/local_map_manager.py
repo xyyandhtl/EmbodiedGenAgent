@@ -1,13 +1,13 @@
 import os
-import shutil
-import pdb
 import logging
 from collections import Counter
 from typing import List
-
 import numpy as np
 import networkx as nx
 from dynaconf import Dynaconf
+import open3d as o3d
+# import torch
+# import torch.nn.functional as F
 
 from EG_agent.vlmap.utils.types import Observation, GlobalObservation, GoalMode
 from EG_agent.vlmap.utils.object import LocalObject, LocalObjStatus
@@ -943,8 +943,6 @@ class LocalMapManager(BaseMapManager):
         """
         logger.info("[LocalMapManager] [create_nav_graph] Creating navigation graph...")
 
-        import open3d as o3d
-
         # 1. Get all objects' pcd from the current local map
         total_pcd = o3d.geometry.PointCloud()
         for obj in self.local_map:
@@ -1095,9 +1093,6 @@ class LocalMapManager(BaseMapManager):
         return candidate_objects
 
     def find_best_candidate_with_inquiry(self, candidates):
-        import torch
-        import torch.nn.functional as F
-
         text_query_ft = self.inquiry
 
         cos_sim = []
