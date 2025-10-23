@@ -2,7 +2,8 @@
 
 import logging
 import time
-from collections import deque
+import queue  # Add queue module for thread-safe communication
+# from collections import deque  # removed
 
 import cv2
 import numpy as np
@@ -28,8 +29,7 @@ class RunnerROSBase:
         self.kf_idx = 0
         self.intrinsics = None
         self.extrinsics = None
-        self.synced_data_queue = deque(maxlen=1)
-        self.shutdown_requested = False
+        # self.synced_data_queue = deque(maxlen=1)  # removed
         self.last_message_time = None
 
     def load_intrinsics(self, dataset_cfg):
@@ -103,25 +103,23 @@ class RunnerROSBase:
             intrinsics=self.intrinsics,
             pose=transformed_pose
         )
-        self.synced_data_queue.append(data_input)
-        return data_input
-
-    def run_once(self):
-        """Check and process a keyframe if data is ready."""
-        if not self.synced_data_queue:
-            self.logger.warning("[Main] No data in synced_data_queue")
-            return
-
-        data_input = self.synced_data_queue[-1]
         self.dualmap.realtime_pose = data_input.pose
-
         # 根据 时间戳和位姿 判断当前帧是否为 关键帧
         if not self.dualmap.check_keyframe(data_input.time_stamp, data_input.pose):
             return
-
+        
         data_input.idx = self.dualmap.get_keyframe_idx()
+        # Push to Dualmap's input queue, waiting for detector thread to process
+        self.dualmap.input_queue.append(data_input)
 
-        # 调用 dualmap，处理该关键帧
+    def run_once(self):
+        # 调用 detector 流程处理一帧 input_queue 的 run_once,
+        # TODO: 后续是否弃用, 把所有 detector 和 mapping 逻辑都放在后台线程
+        data_input: DataInput = self.dualmap.input_queue[-1]
+        if data_input.idx == self.dualmap.last_keyframe_idx:
+            return
+        
+        self.dualmap.last_keyframe_idx = data_input.idx
         self.logger.info("[Main] ============================================================")
         with timing_context("Time Per Frame", self.dualmap):
             if self.cfg.use_parallel:

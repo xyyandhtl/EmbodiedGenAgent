@@ -8,7 +8,6 @@ import logging
 import psutil
 import cv2
 import re
-
 import yaml
 import numpy as np
 from collections import deque
@@ -31,8 +30,16 @@ from EG_agent.vlmap.utils.navigation_helper import (
     remove_sharp_turns_3d,
 )
 
-# Optionally import pdb for debugging purposes
-# import pdb
+def set_thread_priority():
+    """Set current thread to higher priority if possible"""
+    try:
+        # Get current process
+        p = psutil.Process()
+        # Set to higher priority (on Unix systems)
+        p.nice(-10)  # Higher priority (negative values)
+    except (psutil.AccessDenied, AttributeError):
+        # Access denied or platform doesn't support nice
+        pass
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)
@@ -88,21 +95,16 @@ class Dualmap:
         self.goal_pose: np.ndarray = None
         self.wait_count = 0
 
-        # self.load_map()
-
-        # --- 2. Start the file monitoring thread ---
-        self.stop_thread = False  # Signal to stop the thread
+        # --- 2. Threads & Queues ---
+        self.stop_thread = False  # Signal to stop threads
 
         # Mode for Getting the Goal
         self.get_goal_mode = GoalMode.POSE
-        # The request seq for getting the goal
         self.inquiry = ""
         self.inquiry_feat = None
 
-        # Start local planning
+        # Local planning flags & paths
         self.begin_local_planning = False
-
-        # Final path for agent to follow
         self.action_path = []
         self.curr_global_path = []
         self.curr_local_path = []
@@ -114,16 +116,220 @@ class Dualmap:
         # History of agent's actual traversed path
         self.traj_path = deque(maxlen=60)
 
+        # Queue provided by RunnerROSBase for raw frames
+        self.last_keyframe_idx = -1
+        self.input_queue = deque(maxlen=1)
+        self.detection_results_queue = queue.Queue(maxsize=10)
+
+        self.detector_thread = None
+        self.mapping_thread = None
+
+    def start_threading(self):
         # Parallel for mapping thread
-        if self.cfg.use_parallel:
-            self.detection_results_queue = queue.Queue(
-                maxsize=10
-            )  # Limit queue size to avoid memory leaks
-            # Initialize thread
-            self.mapping_thread = threading.Thread(
-                target=self.run_mapping_thread, daemon=True
-            )
-            self.mapping_thread.start()
+        # if self.cfg.use_parallel:
+        self.detector_thread = threading.Thread(
+            target=self.run_detector_thread, daemon=True
+        )
+        self.detector_thread.start()
+        logger.info("[Core] Detector thread started.")
+        self.mapping_thread = threading.Thread(
+            target=self.run_mapping_thread, daemon=True
+        )
+        self.mapping_thread.start()
+        logger.info("[Core] Mapping thread started.")
+
+    def stop_threading(self):
+        self.stop_thread = True
+        # if self.cfg.use_parallel:
+        # Join detector thread
+        if self.detector_thread and self.detector_thread.is_alive():
+            self.detector_thread.join()
+        if self.mapping_thread and self.mapping_thread.is_alive():
+            self.mapping_thread.join()
+        logger.info("[Core] Stopped monitoring config file and mapping thread.")
+
+    def end_process(self):
+        """
+        The process of ending the sequnce.
+        """
+        self.visualizer.shutdown()
+        end_frame_id = self.curr_frame_id
+        self.stop_threading()
+
+        # end duration
+        end_range: int = self.cfg.active_window_size + self.cfg.max_pending_count + 1
+        for i in range(end_range):
+            # Set timestamp for visualizer
+            logger.info("[Core][EndProcess] End Counter: %d", end_frame_id + i + 1)
+            self.visualizer.set_time_sequence("frame", end_frame_id + i + 1)
+
+            # local end_process
+            # set fake timestamp
+            self.local_map_manager.set_curr_idx(end_frame_id + i + 1)
+            self.local_map_manager.end_process()
+            local_map_obj_num = len(self.local_map_manager.local_map)
+            logger.info("[Core][EndProcess] Local Objects num: %d", local_map_obj_num)
+
+            # global process
+            global_obs_list = self.local_map_manager.get_global_observations()
+            self.local_map_manager.clear_global_observations()
+            self.global_map_manager.process_observations(global_obs_list)
+            global_map_obj_num = len(self.global_map_manager.global_map)
+            logger.info("[Core][EndProcess] Global Objects num: %d", global_map_obj_num)
+
+            if local_map_obj_num == 0:
+                logger.warning(
+                    "[EndProcess] End Processing End. to: %d", end_frame_id + i + 1
+                )
+                break
+
+        with timing_context("Merging", self):
+            if self.cfg.merge_local_map:
+                self.local_map_manager.merge_local_map()
+                self.visualizer.set_time_sequence("frame", end_range + 1)
+                logger.info("[Core][EndProcess] Local Map Merged")
+
+        # save the local mapping results
+        # self.save_map()
+
+        # Dualmap process timing
+        if hasattr(self, "timing_results"):
+            print_timing_results("Dualmap", self.timing_results)
+            system_time_path = f"{self.cfg.map_save_path}/../system_time.csv"
+            save_timing_results(self.timing_results, system_time_path)
+
+        # Detector process timing
+        if hasattr(self.detector, "timing_results"):
+            print_timing_results("Detector", self.detector.timing_results)
+            detector_time_path = f"{self.cfg.map_save_path}/../detector_time.csv"
+            save_timing_results(self.detector.timing_results, detector_time_path)
+
+    # 尝试改为 detector 也放在子线程, 但 dectector 抢占不到计算资源, 以后有空再排查, 先不用
+    def run_detector_thread(self):
+        """
+        Independent thread:
+          - Pull the latest frame from RunnerROSBase.synced_data_queue
+          - Update realtime pose and traj
+          - Check keyframe
+          - Run the full detector pipeline for keyframes
+          - Push (curr_obs_list, curr_frame_id) to detection_results_queue
+        """
+        set_thread_priority()
+        while not self.stop_thread:
+            data_input: DataInput = self.input_queue[-1]
+            if data_input.idx == self.last_keyframe_idx:
+                continue
+            self.last_keyframe_idx = data_input.idx
+
+            # Get current frame id
+            self.curr_frame_id = data_input.idx
+            logger.info(f"[Core][DetectorThread] Processing frame {self.curr_frame_id}")
+
+            # Get current pose（被判断作为关键帧的 位姿）
+            self.curr_pose = data_input.pose
+
+            # Detection process (full pipeline)
+            start_time = time.time()
+            with timing_context("Observation Generation", self):
+                self.detector.set_data_input(data_input)
+
+                with timing_context("Process Detection", self):
+                    if self.cfg.run_detection:
+                        self.detector.process_detections()
+                        with timing_context("Save Detection", self):
+                            if self.cfg.save_detection:
+                                self.detector.save_detection_results()
+                    else:
+                        self.detector.load_detection_results()
+
+                with timing_context("Observation Formatting", self):
+                    self.detector.calculate_observations()
+
+                curr_obs_list = self.detector.get_curr_observations()
+
+                self.detector.update_state()
+
+                # Push to mapping queue
+                try:
+                    self.detection_results_queue.put_nowait((curr_obs_list, self.curr_frame_id))
+                except queue.Full:
+                    logger.warning(
+                        f"[Core] Mapping queue is full, skipping frame {self.curr_frame_id}."
+                    )
+
+            end_time = time.time()
+
+            # Set time sequence for visualizer
+            self.visualizer.set_time_sequence("frame", self.curr_frame_id)
+
+            # Set current camera information
+            self.visualizer.set_camera_info(data_input.intrinsics, data_input.pose)
+            self.visualizer.set_image(data_input.color)
+
+            logger.info(f"Detector processed frame {self.curr_frame_id} in {end_time - start_time} seconds")
+            if self.cfg.use_rerun:
+                elapsed_time = end_time - start_time
+                self.detector.visualize_time(elapsed_time)
+
+                # TODO: psutil seems not that correct
+                # mem_usage = self.get_total_memory_by_keyword()
+                # self.detector.visualize_memory(mem_usage)
+
+        logger.info("[Core] Detector thread exiting.")
+
+    def run_mapping_thread(self):
+        """
+        Independent thread: Monitor detection results and process local mapping and global mapping.
+        建图线程（独立的后台线程）：
+            1. 不断地从 detection_results_queue 队列中取出观测结果
+            2. 将观测结果分别送入 LocalMapManager 和 GlobalMapManager，来更新局部和全局地图
+        """
+        while not self.stop_thread:
+            try:
+                # Get detection results from queue
+                # logger.info(f"Queue length: {len(self.detection_results_queue)}")
+                curr_obs_list, curr_frame_id = self.detection_results_queue.get(
+                    timeout=1
+                )  # Timeout exception
+                logger.info(
+                    f"[Core][MappingThread] Received data for frame {curr_frame_id}, Queue size {self.detection_results_queue.qsize()}"
+                )
+            except queue.Empty:
+                continue
+
+            # Set time stamp
+            self.visualizer.set_time_sequence("frame", self.curr_frame_id)
+
+            # Detection Visualization
+            if self.cfg.use_rerun:
+                self.detector.visualize_detection()
+            self.detector.update_data()
+
+            # Local Mapping
+            with timing_context("Local Mapping", self):
+                self.local_map_manager.set_curr_idx(curr_frame_id)
+                self.local_map_manager.process_observations(curr_obs_list)
+
+            # Get global observations
+            with timing_context("Global Mapping", self):
+                global_obs_list = self.local_map_manager.get_global_observations()
+                self.local_map_manager.clear_global_observations()
+
+                # Global Mapping
+                self.global_map_manager.process_observations(global_obs_list)
+
+                self.visualizer.mark_semantic_map_dirty(dirty=True)  # global_map 改变，需更新语义地图图像缓存
+
+            # Get memory usage statistics of local and global maps
+            # mem_stats = get_map_memory_usage(self.local_map_manager.local_map,
+            #                                 self.global_map_manager.global_map)
+
+            # logger.info(
+            #     f"[Core][MappingThread] Memory Usage - Local Map: {mem_stats['local_map_mb']} MB, "
+            #     f"Global Map: {mem_stats['global_map_mb']} MB"
+            # )
+
+        logger.info("[Core] Mapping thread exiting.")
 
     def print_cfg(self):
 
@@ -313,7 +519,7 @@ class Dualmap:
             self.local_map_manager.clear_global_observations()
             self.global_map_manager.process_observations(global_obs_list)
 
-
+    # 现用处理入口, detector在主线程, 仅把mapping放到子线程
     def parallel_process(self, data_input: DataInput):
         """
         Process input data in parallel. 数据流入的主要入口
@@ -390,125 +596,6 @@ class Dualmap:
             # TODO: psutil seems not that correct
             # mem_usage = self.get_total_memory_by_keyword()
             # self.detector.visualize_memory(mem_usage)
-
-    def run_mapping_thread(self):
-        """
-        Independent thread: Monitor detection results and process local mapping and global mapping.
-        建图线程（独立的后台线程）：
-            1. 不断地从 detection_results_queue 队列中取出观测结果
-            2. 将观测结果分别送入 LocalMapManager 和 GlobalMapManager，来更新局部和全局地图
-        """
-        while not self.stop_thread:
-            try:
-                # Get detection results from queue
-                # logger.info(f"Queue length: {len(self.detection_results_queue)}")
-                curr_obs_list, curr_frame_id = self.detection_results_queue.get(
-                    timeout=1
-                )  # Timeout exception
-                logger.info(
-                    f"[Core][MappingThread] Received data for frame {curr_frame_id}, Queue size {self.detection_results_queue.qsize()}"
-                )
-
-                # Set time stamp
-                self.visualizer.set_time_sequence("frame", self.curr_frame_id)
-
-                # Detection Visualization
-                if self.cfg.use_rerun:
-                    self.detector.visualize_detection()
-                self.detector.update_data()
-
-                # Local Mapping
-                with timing_context("Local Mapping", self):
-                    self.local_map_manager.set_curr_idx(curr_frame_id)
-                    self.local_map_manager.process_observations(curr_obs_list)
-
-                # Get global observations
-                with timing_context("Global Mapping", self):
-                    global_obs_list = self.local_map_manager.get_global_observations()
-                    self.local_map_manager.clear_global_observations()
-
-                    # Global Mapping
-                    self.global_map_manager.process_observations(global_obs_list)
-
-                    self.visualizer.mark_semantic_map_dirty(dirty=True)  # global_map 改变，需更新语义地图图像缓存
-
-                # Get memory usage statistics of local and global maps
-                # mem_stats = get_map_memory_usage(self.local_map_manager.local_map,
-                #                                 self.global_map_manager.global_map)
-
-                # logger.info(
-                #     f"[Core][MappingThread] Memory Usage - Local Map: {mem_stats['local_map_mb']} MB, "
-                #     f"Global Map: {mem_stats['global_map_mb']} MB"
-                # )
-
-            except queue.Empty:
-                continue
-
-    def end_process(self):
-        """
-        The process of ending the sequnce.
-        """
-        self.visualizer.shutdown()
-        end_frame_id = self.curr_frame_id
-
-        self.stop_threading()
-
-        # end duration
-        end_range: int = self.cfg.active_window_size + self.cfg.max_pending_count + 1
-
-        for i in range(end_range):
-            # Set timestamp for visualizer
-            logger.info("[Core][EndProcess] End Counter: %d", end_frame_id + i + 1)
-            self.visualizer.set_time_sequence("frame", end_frame_id + i + 1)
-
-            # local end_process
-            # set fake timestamp
-            self.local_map_manager.set_curr_idx(end_frame_id + i + 1)
-            self.local_map_manager.end_process()
-            local_map_obj_num = len(self.local_map_manager.local_map)
-            logger.info("[Core][EndProcess] Local Objects num: %d", local_map_obj_num)
-
-            # global process
-            global_obs_list = self.local_map_manager.get_global_observations()
-            self.local_map_manager.clear_global_observations()
-            self.global_map_manager.process_observations(global_obs_list)
-            global_map_obj_num = len(self.global_map_manager.global_map)
-            logger.info("[Core][EndProcess] Global Objects num: %d", global_map_obj_num)
-
-            if local_map_obj_num == 0:
-                logger.warning(
-                    "[EndProcess] End Processing End. to: %d", end_frame_id + i + 1
-                )
-                break
-
-        with timing_context("Merging", self):
-            if self.cfg.merge_local_map:
-                self.local_map_manager.merge_local_map()
-                self.visualizer.set_time_sequence("frame", end_range + 1)
-                logger.info("[Core][EndProcess] Local Map Merged")
-
-        # save the local mapping results
-        # self.save_map()
-
-        # Dualmap process timing
-        if hasattr(self, "timing_results"):
-            print_timing_results("Dualmap", self.timing_results)
-            system_time_path = f"{self.cfg.map_save_path}/../system_time.csv"
-            save_timing_results(self.timing_results, system_time_path)
-
-        # Detector process timing
-        if hasattr(self.detector, "timing_results"):
-            print_timing_results("Detector", self.detector.timing_results)
-            detector_time_path = self.cfg.map_save_path + "/../detector_time.csv"
-            save_timing_results(self.detector.timing_results, detector_time_path)
-
-    def stop_threading(self):
-        self.stop_thread = True
-
-        if self.cfg.use_parallel:
-            self.mapping_thread.join()
-
-        logger.info("[Core] Stopped monitoring config file and mapping thread.")
 
     def convert_inquiry_to_feat(self, inquiry_sentence: str):
         text_query_tokenized = self.detector.clip_tokenizer(inquiry_sentence).to("cuda")
@@ -629,29 +716,6 @@ class Dualmap:
 
         # set the global inquiry sentence to global map manager
         self.local_map_manager.inquiry = self.inquiry_feat
-
-        # logger.info("=====================================")
-        # dt, dr = self.local_map_manager.compute_pose_difference(self.curr_pose, self.prev_pose)
-
-        # if dt is not None and dr is not None:
-        #     logger.info(f"Translation Difference: {dt}")
-        #     logger.info(f"Rotation Difference: {dr}")
-
-        #     if dt < 0.10 and dr < 0.30:
-        #         self.wait_count += 1
-        #         logger.info(f"Wait Count: {self.wait_count}")
-        #     else:
-        #         self.wait_count -= 1
-        #         if self.wait_count < 0:
-        #             self.wait_count = 0
-
-        # if self.wait_count > 10:
-        #     logger.info("We cannot find the local path and global path is finished!")
-        #     logger.info("Now start a new global path planning!")
-        #     self.begin_local_planning = False
-        #     self.wait_count = 0
-        #     # retrigger the global path planning
-        #     self.set_calculate_path(self.cfg.config_file_path)
 
         # TEMP: Now explicitly pass the goal to local map to establish the workflow
         global_path = self.curr_global_path

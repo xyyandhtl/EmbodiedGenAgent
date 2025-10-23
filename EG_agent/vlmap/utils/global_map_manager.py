@@ -610,23 +610,22 @@ class GlobalMapManager(BaseMapManager):
         - goal_position: The selected goal position.
         """
         if goal_mode == GoalMode.RANDOM:
-            logger.info("[GlobalMap][Path] Goal mode: RANDOM")
+            # logger.info("[GlobalMap][Path] Goal mode: RANDOM")
             return nav_graph.sample_random_point()
 
         if goal_mode == GoalMode.CLICK:
-            logger.info("[GlobalMap][Path] Goal mode: CLICK")
+            # logger.info("[GlobalMap][Path] Goal mode: CLICK")
             return nav_graph.visualize_start_and_select_goal(start_position_grid)
 
         if goal_mode == GoalMode.POSE:
-            logger.info("[GlobalMap][Path] Goal mode: POSE")
+            # logger.info("[GlobalMap][Path] Goal mode: POSE")
             if goal_position_world is not None:
                 return nav_graph.calculate_pos_2d(goal_position_world)
             else:
                 return None
 
         if goal_mode == GoalMode.INQUIRY:
-            logger.info("[GlobalMap][Path] Goal mode: INQUIRY")
-
+            # logger.info("[GlobalMap][Path] Goal mode: INQUIRY")
             # Step 1, from gloabl map find the best candidate
             global_goal_candidate, score = self.find_best_candidate_with_inquiry()
 
