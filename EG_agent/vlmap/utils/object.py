@@ -16,6 +16,7 @@ from dynaconf import Dynaconf
 
 # Local module imports
 from EG_agent.vlmap.utils.types import Observation
+from EG_agent.vlmap.utils.pcd_utils import init_pcd_denoise_dbscan
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)
@@ -523,7 +524,6 @@ class LocalObject(BaseObject):
         # downsample pcd
         self.pcd = self.pcd.voxel_down_sample(voxel_size=self._cfg.downsample_voxel_size)
         # Group to majority
-        from utils.pcd_utils import init_pcd_denoise_dbscan
         self.pcd = init_pcd_denoise_dbscan(
             self.pcd, self._cfg.dbscan_eps, self._cfg.dbscan_min_points)
 

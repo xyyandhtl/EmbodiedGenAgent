@@ -2,6 +2,8 @@ import os
 import json
 import multiprocessing
 import logging
+import threading
+import time
 from pathlib import Path
 from typing import List
 import cv2
@@ -20,114 +22,7 @@ from EG_agent.vlmap.utils.navigation_helper import NavigationGraph, LayoutMap
 # Set up the module-level logger
 logger = logging.getLogger(__name__)
 
-def _generate_semantic_map_background_proc(pipe, objects_data, wall_points_data, obj_classes_data, resolution):
-    """
-    A separate process to generate the static background of the semantic map.
-    This function now handles all heavy computation, including point cloud aggregation and metadata calculation.
-    """
-    # 1. Aggregate all points to determine map boundaries
-    all_points_lists = [obj['points'] for obj in objects_data]
-    if wall_points_data is not None:
-        all_points_lists.append(wall_points_data)
 
-    if not all_points_lists:
-        pipe.send((None, None))
-        pipe.close()
-        return
-
-    all_points = np.vstack(all_points_lists)
-    all_points = all_points[np.isfinite(all_points).all(axis=1)]
-    if all_points.size == 0:
-        pipe.send((None, None))
-        pipe.close()
-        return
-
-    # 2. Determine map dimensions and create metadata
-    min_coords = np.min(all_points[:, :2], axis=0)
-    max_coords = np.max(all_points[:, :2], axis=0)
-    map_size = max_coords - min_coords
-    scale_factor = 2.0
-    padding = 100
-    width = int((map_size[0]) / resolution * scale_factor) + padding
-    height = int((map_size[1]) / resolution * scale_factor) + padding
-
-    metadata = {
-        'min_coords': min_coords, 'resolution': resolution, 'scale_factor': scale_factor,
-        'padding': padding, 'width': width, 'height': height
-    }
-
-    # 3. Create base image and draw static elements
-    pil_img = Image.new('RGB', (width, height), (255, 255, 255))
-    draw = ImageDraw.Draw(pil_img)
-
-    try:
-        font = ImageFont.truetype("DejaVuSans.ttf", size=int(12 * (scale_factor / 2)))
-    except IOError:
-        font = ImageFont.load_default()
-
-    def world_to_img(point):
-        point_img = ((point[:2] - metadata['min_coords']) / metadata['resolution'] * metadata['scale_factor']).astype(int)
-        point_img[0] += metadata['padding'] // 2
-        point_img[1] = metadata['height'] - point_img[1] - (metadata['padding'] // 2)
-        return tuple(point_img)
-
-    placed_label_boxes = []
-    if wall_points_data is not None and wall_points_data.shape[0] > 0:
-        wall_points_img = np.array([world_to_img(p) for p in wall_points_data if np.isfinite(p).all()])
-        radius = int(1 * (scale_factor / 2))
-        for p_img in wall_points_img:
-            draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=(100, 100, 100))
-
-    for obj_data in objects_data:
-        points = obj_data['points']
-        if points.shape[0] == 0: continue
-
-        obj_name = obj_classes_data['names'][obj_data['class_id']]
-        color_rgb_int = tuple(int(c * 255) for c in obj_classes_data['colors'][obj_name])
-
-        points_img = np.array([world_to_img(p) for p in points])
-        radius = int(1 * (scale_factor / 2))
-        for p_img in points_img:
-            draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=color_rgb_int)
-
-        obj_x_min, obj_y_min = np.min(points_img, axis=0)
-        obj_x_max, obj_y_max = np.max(points_img, axis=0)
-        centroid_img = np.mean(points_img, axis=0).astype(int)
-
-        text_bbox = draw.textbbox((0, 0), obj_name, font=font)
-        text_w, text_h = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
-
-        candidates = [
-            (centroid_img[0] - text_w // 2, centroid_img[1] - text_h // 2 - 5),
-            (obj_x_min + (obj_x_max - obj_x_min) // 2 - text_w // 2, obj_y_min - text_h),
-            (obj_x_max + 1, obj_y_min + text_h // 2),
-            (obj_x_min - text_w - 1, obj_y_min + text_h // 2),
-            (obj_x_max + 1, obj_y_max),
-            (obj_x_min - text_w - 1, obj_y_max),
-        ]
-
-        final_pos = None
-        for pos in candidates:
-            lx, ly = pos
-            label_box = (lx, ly, lx + text_w, ly + text_h)
-            if not (label_box[0] >= 0 and label_box[1] >= 0 and label_box[2] < width and label_box[3] < height):
-                continue
-            is_colliding = False
-            for placed_box in placed_label_boxes:
-                if not (label_box[2] < placed_box[0] or label_box[0] > placed_box[2] or label_box[3] < placed_box[1] or label_box[1] > placed_box[3]):
-                    is_colliding = True
-                    break
-            if not is_colliding:
-                final_pos = pos
-                placed_label_boxes.append(label_box)
-                break
-        if final_pos is None:
-            final_pos = candidates[0]
-        draw.text(final_pos, obj_name, font=font, fill=(0, 0, 0))
-
-    # 4. Send the generated image and metadata back to the main process
-    pipe.send((pil_img, metadata))
-    pipe.close()
 
 class GlobalMapManager(BaseMapManager):
     def __init__(
@@ -170,14 +65,21 @@ class GlobalMapManager(BaseMapManager):
         self.cached_semantic_map = None
         self.semantic_map_dirty = True
         self.semantic_map_metadata = {}
-        # Additions for multiprocessing
-        self._semantic_map_process = None
-        self._semantic_map_pipe_parent, self._semantic_map_pipe_child = multiprocessing.Pipe()
 
         # Caching for the traversable map
         self.cached_traversable_map = None
         self.traversable_map_dirty = True
         self.traversable_map_metadata = {}
+        
+        # Background thread for updating maps
+        self._map_update_thread = None
+        self._stop_map_update = threading.Event()
+        self._map_update_lock = threading.Lock()
+        self._last_update_time = 0
+        self._update_interval = 2.0  # Update every 2 seconds (low frequency)
+        
+        # Start background thread
+        self._start_background_update_thread()
 
         # Object classes
         # --- 加载指定的 要识别的 全部物体的 类别text ---
@@ -808,10 +710,8 @@ class GlobalMapManager(BaseMapManager):
         It compares the input query with all objects in the global map and selects the object with the highest similarity.
         """
         text_query_ft = self.inquiry
-
         cos_sim = []
-
-        obj_list = []   
+        obj_list = []
 
         # Loop through each object in the global map to calculate cosine similarity
         for obj in self.global_map:
@@ -832,7 +732,8 @@ class GlobalMapManager(BaseMapManager):
                 related_sims = []
                 for related_obj_ft in obj.related_objs:
                     related_obj_ft_tensor = torch.from_numpy(related_obj_ft).to("cuda")
-                    sim = F.cosine_similarity(text_query_ft.unsqueeze(0), related_obj_ft_tensor.unsqueeze(0), dim=-1).item()
+                    sim = F.cosine_similarity(text_query_ft.unsqueeze(0), related_obj_ft_tensor.unsqueeze(0),
+                                              dim=-1).item()
                     related_sims.append(sim)
                     logger.info(f"[GlobalMap][Inquiry] Related: \t{sim:.3f}")
 
@@ -889,6 +790,193 @@ class GlobalMapManager(BaseMapManager):
         # input("Press any key to continue...")
 
         return best_candidate, best_similarity
+    
+    def _start_background_update_thread(self):
+        """Start the background thread for updating maps."""
+        self._map_update_thread = threading.Thread(target=self._background_map_update_worker, daemon=True)
+        self._map_update_thread.start()
+        
+    def _background_map_update_worker(self):
+        """Background thread worker that updates both semantic and traversable maps at low frequency."""
+        while not self._stop_map_update.is_set():
+            try:
+                # Check if an update is needed based on dirty flags or time interval
+                current_time = time.time()
+                time_ok = current_time - self._last_update_time >= self._update_interval
+                sem_needs_update = self.semantic_map_dirty and time_ok
+                tra_needs_update = self.traversable_map_dirty and time_ok
+                
+                if sem_needs_update:
+                    with self._map_update_lock:
+                        self._last_update_time = current_time
+                        # Update semantic map if dirty
+                        if self.semantic_map_dirty and self.has_global_map():
+                            self._update_semantic_map_cache()
+                if tra_needs_update:
+                    self._last_update_time = current_time
+                    with self._map_update_lock:
+                        # Update traversable map if dirty
+                        if self.traversable_map_dirty and self.nav_graph:
+                            self._update_traversable_map_cache()
+                
+                # Sleep for a short time to prevent busy waiting
+                self._stop_map_update.wait(timeout=0.5)
+                
+            except Exception as e:
+                logger.error(f"[GlobalMapManager] Error in background map update thread: {e}")
+                # Sleep before retrying to avoid rapid error loops
+                self._stop_map_update.wait(timeout=1)
+    
+    def _update_semantic_map_cache(self, resolution=0.03):
+        """
+        Updates the cached semantic map image with static elements.
+        """
+        if not self.has_global_map():
+            self.cached_semantic_map = None
+            return
+
+        # 1. Aggregate all points to determine map boundaries
+        all_points_lists = []
+        for obj in self.global_map:
+            if not obj.pcd_2d.is_empty():
+                all_points_lists.append(np.asarray(obj.pcd_2d.points))
+        
+        wall_pcd = self.layout_map.wall_pcd if self.layout_map else None
+        if wall_pcd and not wall_pcd.is_empty():
+            all_points_lists.append(np.asarray(wall_pcd.points))
+
+        if not all_points_lists:
+            self.cached_semantic_map = None
+            return
+
+        all_points = np.vstack(all_points_lists)
+        all_points = all_points[np.isfinite(all_points).all(axis=1)]
+        if all_points.size == 0:
+            self.cached_semantic_map = None
+            return
+
+        # 2. Determine map dimensions and create metadata
+        min_coords = np.min(all_points[:, :2], axis=0)
+        max_coords = np.max(all_points[:, :2], axis=0)
+        map_size = max_coords - min_coords
+        scale_factor = 2.0
+        padding = 100
+        width = int((map_size[0]) / resolution * scale_factor) + padding
+        height = int((map_size[1]) / resolution * scale_factor) + padding
+
+        metadata = {
+            'min_coords': min_coords, 'resolution': resolution, 'scale_factor': scale_factor,
+            'padding': padding, 'width': width, 'height': height
+        }
+
+        # 3. Create base image and draw static elements
+        pil_img = Image.new('RGB', (width, height), (255, 255, 255))
+        draw = ImageDraw.Draw(pil_img)
+
+        try:
+            font = ImageFont.truetype("DejaVuSans.ttf", size=int(12 * (scale_factor / 2)))
+        except IOError:
+            font = ImageFont.load_default()
+
+        def world_to_img(point):
+            point_img = ((point[:2] - metadata['min_coords']) / metadata['resolution'] * metadata['scale_factor']).astype(int)
+            point_img[0] += metadata['padding'] // 2
+            point_img[1] = metadata['height'] - point_img[1] - (metadata['padding'] // 2)
+            return tuple(point_img)
+
+        placed_label_boxes = []
+        
+        # Draw walls if available
+        if wall_pcd and not wall_pcd.is_empty():
+            wall_points_data = np.asarray(wall_pcd.points)
+            wall_points_img = np.array([world_to_img(p) for p in wall_points_data if np.isfinite(p).all()])
+            radius = int(1 * (scale_factor / 2))
+            for p_img in wall_points_img:
+                draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=(100, 100, 100))
+
+        # Draw objects
+        for obj in self.global_map:
+            if obj.pcd_2d.is_empty():
+                continue
+
+            points = np.asarray(obj.pcd_2d.points)
+            if points.shape[0] == 0: 
+                continue
+
+            obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
+            color_rgb_int = tuple(int(c * 255) for c in self.obj_classes.get_class_color(obj_name))
+
+            points_img = np.array([world_to_img(p) for p in points])
+            radius = int(1 * (scale_factor / 2))
+            for p_img in points_img:
+                draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=color_rgb_int)
+
+            obj_x_min, obj_y_min = np.min(points_img, axis=0)
+            obj_x_max, obj_y_max = np.max(points_img, axis=0)
+            centroid_img = np.mean(points_img, axis=0).astype(int)
+
+            text_bbox = draw.textbbox((0, 0), obj_name, font=font)
+            text_w, text_h = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
+
+            candidates = [
+                (centroid_img[0] - text_w // 2, centroid_img[1] - text_h // 2 - 5),
+                (obj_x_min + (obj_x_max - obj_x_min) // 2 - text_w // 2, obj_y_min - text_h),
+                (obj_x_max + 1, obj_y_min + text_h // 2),
+                (obj_x_min - text_w - 1, obj_y_min + text_h // 2),
+                (obj_x_max + 1, obj_y_max),
+                (obj_x_min - text_w - 1, obj_y_max),
+            ]
+
+            final_pos = None
+            for pos in candidates:
+                lx, ly = pos
+                label_box = (lx, ly, lx + text_w, ly + text_h)
+                if not (label_box[0] >= 0 and label_box[1] >= 0 and label_box[2] < width and label_box[3] < height):
+                    continue
+                is_colliding = False
+                for placed_box in placed_label_boxes:
+                    if not (label_box[2] < placed_box[0] or label_box[0] > placed_box[2] or label_box[3] < placed_box[1] or label_box[1] > placed_box[3]):
+                        is_colliding = True
+                        break
+                if not is_colliding:
+                    final_pos = pos
+                    placed_label_boxes.append(label_box)
+                    break
+            if final_pos is None:
+                final_pos = candidates[0]
+            draw.text(final_pos, obj_name, font=font, fill=(0, 0, 0))
+
+        # 4. Update the cached image and metadata
+        self.cached_semantic_map = pil_img
+        self.semantic_map_metadata = metadata
+        self.semantic_map_dirty = False
+
+    def _update_traversable_map_cache(self):
+        """
+        Updates the cached traversable map image.
+        """
+        if not self.nav_graph:
+            return
+
+        free_grid = self.nav_graph.free_space
+        if free_grid is None:
+            return
+
+        h, w = free_grid.shape
+
+        image = np.zeros((h, w, 3), dtype=np.uint8)
+        image[free_grid == 1] = [255, 255, 255]  # White for free space
+        image[free_grid == 0] = [100, 100, 100]  # Gray for occupied
+
+        # Flip the image vertically to correct orientation
+        image = cv2.flip(image, 0)
+
+        # PIL expects RGB
+        self.cached_traversable_map = Image.fromarray(image, 'RGB')
+        self.traversable_map_metadata = {'origin': self.nav_graph.pcd_min,
+                                         'resolution': self.nav_graph.cell_size,
+                                         'height': h, 'width': w}
+        self.traversable_map_dirty = False
 
     def mark_semantic_map_dirty(self):
         """Marks the semantic map as dirty, forcing a redraw on next get."""
@@ -900,192 +988,133 @@ class GlobalMapManager(BaseMapManager):
 
     def get_semantic_map_image(self, resolution=0.03, curr_pose=None, traj_path=None, nav_path=None) -> None | np.ndarray:
         """
-        Generates a top-down 2D image of the global semantic map, including the navigation path and current robot position.
-        Uses a background process to generate the static map background to avoid blocking the main thread.
+        Returns the latest cached semantic map with dynamic elements drawn on top.
+        The static map elements are updated in the background thread.
         """
-        # 1. Check for new background image from the worker process
-        if self._semantic_map_pipe_parent.poll():
-            new_map, new_metadata = self._semantic_map_pipe_parent.recv()
-            if new_map is not None:
-                self.cached_semantic_map = new_map
-                self.semantic_map_metadata = new_metadata
-            if self._semantic_map_process and self._semantic_map_process.is_alive():
-                self._semantic_map_process.join(timeout=0.1)
-            self._semantic_map_process = None
-            logger.info("[Visualizer] Received new semantic map background from worker process.")
-
-        if not self.has_global_map():
-            self.cached_semantic_map = None
+        if not self.has_global_map() or self.cached_semantic_map is None:
             return None
 
-        # 2. If map is dirty and no worker is running, start a new one
-        is_worker_running = self._semantic_map_process and self._semantic_map_process.is_alive()
-        if self.semantic_map_dirty and not is_worker_running:
-            logger.info("[Visualizer] Semantic map is dirty, starting background regeneration...")
+        # Acquire lock to safely access cached data
+        with self._map_update_lock:
+            # Copy the cached image to draw dynamic elements
+            pil_img = self.cached_semantic_map.copy()
+            draw = ImageDraw.Draw(pil_img)
 
-            # Minimal data extraction in the main thread
-            objects_data = [{'points': np.asarray(obj.pcd_2d.points), 'class_id': obj.class_id} for obj in self.global_map if not obj.pcd_2d.is_empty()]
-            wall_pcd = self.layout_map.wall_pcd if self.layout_map else None
-            wall_points_data = np.asarray(wall_pcd.points) if wall_pcd and not wall_pcd.is_empty() else None
+            meta = self.semantic_map_metadata
+            if not meta: # If metadata is not ready yet, we can't draw dynamic elements
+                return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
-            class_names = self.obj_classes.get_classes_arr()
-            obj_classes_data = {
-                'names': class_names,
-                'colors': {name: self.obj_classes.get_class_color(name) for name in class_names}
-            }
+            def world_to_img_cached(point):
+                point_img = ((point[:2] - meta['min_coords']) / meta['resolution'] * meta['scale_factor']).astype(int)
+                point_img[0] += meta['padding'] // 2
+                point_img[1] = meta['height'] - point_img[1] - (meta['padding'] // 2)
+                return tuple(point_img)
 
-            # Start the background process with raw data
-            self._semantic_map_process = multiprocessing.Process(
-                target=_generate_semantic_map_background_proc,
-                args=(self._semantic_map_pipe_child, objects_data, wall_points_data, obj_classes_data, resolution)
-            )
-            self._semantic_map_process.start()
-            self.semantic_map_dirty = False # Mark as not dirty after starting the process
+            try:
+                coord_font = ImageFont.truetype("DejaVuSans.ttf", size=int(10 * (meta['scale_factor'] / 3)))
+            except IOError:
+                coord_font = ImageFont.load_default()
 
-        # --- 3. Drawing Dynamic Elements ---
-        if self.cached_semantic_map is None:
-            return None
+            # (1) Draw navigation path
+            if nav_path and len(nav_path) > 1:
+                path_points_img = [world_to_img_cached(np.array(p)) for p in nav_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
+                if len(path_points_img) > 1:
+                    draw.line(path_points_img, fill=(0, 255, 0), width=6)  # Green line
+                    for point in path_points_img:
+                        draw.ellipse([point[0]-3, point[1]-3, point[0]+3, point[1]+3], fill=(255, 0, 0))
 
-        # Copy the cached image to draw dynamic elements
-        pil_img = self.cached_semantic_map.copy()
-        draw = ImageDraw.Draw(pil_img)
+            # (2) Draw trajectory
+            if traj_path and len(traj_path) > 1:
+                traj_points_img = [world_to_img_cached(np.array(p)) for p in traj_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
+                if len(traj_points_img) > 1:
+                    draw.line(traj_points_img, fill=(0, 0, 255), width=4)  # Blue line
 
-        meta = self.semantic_map_metadata
-        if not meta: # If metadata is not ready yet, we can't draw dynamic elements
-            return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+            # (3) Draw current pose
+            if curr_pose is not None:
+                pos = curr_pose[:3, 3]
+                rot_matrix = curr_pose[:3, :3]
+                fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
+                pos_img = world_to_img_cached(pos)
 
-        def world_to_img_cached(point):
-            point_img = ((point[:2] - meta['min_coords']) / meta['resolution'] * meta['scale_factor']).astype(int)
-            point_img[0] += meta['padding'] // 2
-            point_img[1] = meta['height'] - point_img[1] - (meta['padding'] // 2)
-            return tuple(point_img)
+                arrow_length = 16 * (meta['scale_factor'] / 3)
+                arrow_color = (255, 0, 0)  # Red
+                fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
+                tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
+                tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]  # Subtract because Y is flipped
 
-        try:
-            coord_font = ImageFont.truetype("DejaVuSans.ttf", size=int(10 * (meta['scale_factor'] / 3)))
-        except IOError:
-            coord_font = ImageFont.load_default()
+                # Define triangle points for the arrow
+                perp_vec_2d = np.array([-fwd_vec_2d_normalized[1], fwd_vec_2d_normalized[0]])
+                base_width = 8 * (meta['scale_factor'] / 3)
 
-        # (1) Draw navigation path
-        if nav_path and len(nav_path) > 1:
-            path_points_img = [world_to_img_cached(np.array(p)) for p in nav_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
-            if len(path_points_img) > 1:
-                draw.line(path_points_img, fill=(0, 255, 0), width=6)  # Green line
-                for point in path_points_img:
-                    draw.ellipse([point[0]-3, point[1]-3, point[0]+3, point[1]+3], fill=(255, 0, 0))
+                base_center_x = pos_img[0] - 0.5 * arrow_length * fwd_vec_2d_normalized[0]
+                base_center_y = pos_img[1] + 0.5 * arrow_length * fwd_vec_2d_normalized[1]
 
-        # (2) Draw trajectory
-        if traj_path and len(traj_path) > 1:
-            traj_points_img = [world_to_img_cached(np.array(p)) for p in traj_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
-            if len(traj_points_img) > 1:
-                draw.line(traj_points_img, fill=(0, 0, 255), width=4)  # Blue line
+                p1 = (tip_x, tip_y)
+                p2 = (base_center_x + base_width * perp_vec_2d[0], base_center_y - base_width * perp_vec_2d[1])
+                p3 = (base_center_x - base_width * perp_vec_2d[0], base_center_y + base_width * perp_vec_2d[1])
 
-        # (3) Draw current pose
-        if curr_pose is not None:
-            pos = curr_pose[:3, 3]
-            rot_matrix = curr_pose[:3, :3]
-            fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
-            pos_img = world_to_img_cached(pos)
-
-            arrow_length = 16 * (meta['scale_factor'] / 3)
-            arrow_color = (255, 0, 0)  # Red
-            fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
-            tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
-            tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]  # Subtract because Y is flipped
-
-            # Define triangle points for the arrow
-            perp_vec_2d = np.array([-fwd_vec_2d_normalized[1], fwd_vec_2d_normalized[0]])
-            base_width = 8 * (meta['scale_factor'] / 3)
-
-            base_center_x = pos_img[0] - 0.5 * arrow_length * fwd_vec_2d_normalized[0]
-            base_center_y = pos_img[1] + 0.5 * arrow_length * fwd_vec_2d_normalized[1]
-
-            p1 = (tip_x, tip_y)
-            p2 = (base_center_x + base_width * perp_vec_2d[0], base_center_y - base_width * perp_vec_2d[1])
-            p3 = (base_center_x - base_width * perp_vec_2d[0], base_center_y + base_width * perp_vec_2d[1])
-
-            draw.polygon([p1, p2, p3], fill=arrow_color)
-            # Add coordinates text
-            coord_text = f"({pos[0]:.2f}, {pos[1]:.2f})"
-            draw.text((pos_img[0] + 15, pos_img[1]), coord_text, font=coord_font, fill=(0, 0, 0))
+                draw.polygon([p1, p2, p3], fill=arrow_color)
+                # Add coordinates text
+                coord_text = f"({pos[0]:.2f}, {pos[1]:.2f})"
+                draw.text((pos_img[0] + 15, pos_img[1]), coord_text, font=coord_font, fill=(0, 0, 0))
 
         return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)  # Convert PIL (RGB) image to numpy array (BGR) for OpenCV
 
     def get_traversable_map_image(self, curr_pose=None) -> None | np.ndarray:
         """
-        Generates a top-down 2D image of the traversable map from a given map manager (local or global).
+        Returns the latest cached traversable map with dynamic elements drawn on top.
+        The static map elements are updated in the background thread.
         """
-        if not self.nav_graph:
+        if not self.nav_graph or self.cached_traversable_map is None:
             return None
 
-        free_grid = self.nav_graph.free_space
-        if free_grid is None:
-            return None
+        # Acquire lock to safely access cached data
+        with self._map_update_lock:
+            # Copy the cached image to draw dynamic elements
+            pil_img = self.cached_traversable_map.copy()
+            draw = ImageDraw.Draw(pil_img)
+            meta = self.traversable_map_metadata
 
-        h, w = free_grid.shape
+            if not meta:  # If metadata is not ready, return the base image
+                return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
-        if self.traversable_map_dirty or self.cached_traversable_map is None:
-            logger.info("[Visualizer] Regenerating traversable map cache...")
-            image = np.zeros((h, w, 3), dtype=np.uint8)
-            image[free_grid == 1] = [255, 255, 255]  # White for free space
-            image[free_grid == 0] = [100, 100, 100]  # Gray for occupied
+            def world_to_grid_img(point):
+                # Transform world point to grid indices
+                grid_x = int((point[0] - meta['origin'][0]) / meta['resolution'])
+                grid_y = int((point[1] - meta['origin'][1]) / meta['resolution'])
+                # Transform grid indices to image coordinates (y is flipped)
+                return grid_x, meta['height'] - 1 - grid_y
 
-            # Flip the image vertically to correct orientation
-            image = cv2.flip(image, 0)
+            if curr_pose is not None:
+                pos = curr_pose[:3, 3]
+                rot_matrix = curr_pose[:3, :3]
+                fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
+                pos_img = world_to_grid_img(pos)
 
-            # PIL expects RGB
-            self.cached_traversable_map = Image.fromarray(image, 'RGB')
-            self.traversable_map_metadata = {'origin': self.nav_graph.pcd_min,
-                                             'resolution': self.nav_graph.cell_size,
-                                             'height': h, 'width': w}
-            self.traversable_map_dirty = False
+                arrow_length = 16
+                arrow_color = (255, 0, 0) # Red
 
-        # --- Drawing Dynamic Elements ---
-        pil_img = self.cached_traversable_map.copy()
-        draw = ImageDraw.Draw(pil_img)
-        meta = self.traversable_map_metadata
+                fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
 
-        def world_to_grid_img(point):
-            # Transform world point to grid indices
-            grid_x = int((point[0] - meta['origin'][0]) / meta['resolution'])
-            grid_y = int((point[1] - meta['origin'][1]) / meta['resolution'])
-            # Transform grid indices to image coordinates (y is flipped)
-            return grid_x, meta['height'] - 1 - grid_y
+                # Tip in image coordinates (y direction is flipped)
+                tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
+                tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]
 
-        if curr_pose is not None:
-            pos = curr_pose[:3, 3]
-            rot_matrix = curr_pose[:3, :3]
-            fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
-            pos_img = world_to_grid_img(pos)
-
-            arrow_length = 16
-            arrow_color = (255, 0, 0) # Red
-
-            fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
-
-            # Tip in image coordinates (y direction is flipped)
-            tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
-            tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]
-
-            draw.line([pos_img, (tip_x, tip_y)], fill=arrow_color, width=3)
-            draw.ellipse([pos_img[0]-4, pos_img[1]-4, pos_img[0]+4, pos_img[1]+4], fill=arrow_color)
+                draw.line([pos_img, (tip_x, tip_y)], fill=arrow_color, width=3)
+                draw.ellipse([pos_img[0]-4, pos_img[1]-4, pos_img[0]+4, pos_img[1]+4], fill=arrow_color)
 
         # Convert back to BGR for OpenCV
         return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
     def shutdown_semantic(self):
-        """Safely shuts down the visualizer and its background processes."""
-        logger.info("[Visualizer] Shutting down semantic map worker process.")
-        if self._semantic_map_process and self._semantic_map_process.is_alive():
-            try:
-                self._semantic_map_process.terminate() # Forcefully stop the process
-                self._semantic_map_process.join(timeout=1) # Wait for termination
-                logger.info("[Visualizer] Semantic map worker process terminated.")
-            except Exception as e:
-                logger.error(f"[Visualizer] Error terminating worker process: {e}")
-        # Close pipes
-        try:
-            self._semantic_map_pipe_parent.close()
-            self._semantic_map_pipe_child.close()
-        except Exception as e:
-            logger.error(f"[Visualizer] Error closing pipes: {e}")
-        self._semantic_map_process = None
+        """Safely shuts down the visualizer and its background thread."""
+        logger.info("[Visualizer] Shutting down semantic map background thread.")
+        
+        # Stop the background thread
+        if self._map_update_thread:
+            self._stop_map_update.set()
+            self._map_update_thread.join(timeout=2)  # Wait up to 2 seconds for thread to finish
+            if self._map_update_thread.is_alive():
+                logger.warning("[Visualizer] Background map update thread did not terminate gracefully.")
+            else:
+                logger.info("[Visualizer] Background map update thread terminated successfully.")
