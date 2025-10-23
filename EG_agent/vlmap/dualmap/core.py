@@ -127,10 +127,10 @@ class Dualmap:
     def start_threading(self):
         # Parallel for mapping thread
         # if self.cfg.use_parallel:
-        # self.detector_thread = threading.Thread(
-        #     target=self.run_detector_thread, daemon=True
-        # )
-        # self.detector_thread.start()
+        self.detector_thread = threading.Thread(
+            target=self.run_detector_thread, daemon=True
+        )
+        self.detector_thread.start()
         logger.info("[Core] Detector thread started.")
         self.mapping_thread = threading.Thread(
             target=self.run_mapping_thread, daemon=True
@@ -142,9 +142,8 @@ class Dualmap:
         self.stop_thread = True
         # if self.cfg.use_parallel:
         # Join detector thread
-        # if self.detector_thread and self.detector_thread.is_alive():
-        #     self.detector_thread.join()
-        # Join mapping thread
+        if self.detector_thread and self.detector_thread.is_alive():
+            self.detector_thread.join()
         if self.mapping_thread and self.mapping_thread.is_alive():
             self.mapping_thread.join()
         logger.info("[Core] Stopped monitoring config file and mapping thread.")
@@ -215,7 +214,7 @@ class Dualmap:
           - Run the full detector pipeline for keyframes
           - Push (curr_obs_list, curr_frame_id) to detection_results_queue
         """
-        # set_thread_priority()
+        set_thread_priority()
         while not self.stop_thread:
             data_input: DataInput = self.input_queue[-1]
             if data_input.idx == self.last_keyframe_idx:
@@ -267,6 +266,7 @@ class Dualmap:
             self.visualizer.set_camera_info(data_input.intrinsics, data_input.pose)
             self.visualizer.set_image(data_input.color)
 
+            logger.info(f"Detector processed frame {self.curr_frame_id} in {end_time - start_time} seconds")
             if self.cfg.use_rerun:
                 elapsed_time = end_time - start_time
                 self.detector.visualize_time(elapsed_time)
@@ -442,7 +442,7 @@ class Dualmap:
         ):  # > 0.5 s
             self.last_keyframe_time = time_stamp
             self.last_keyframe_pose = curr_pose
-            logger.debug("[Core][CheckKeyframe] New keyframe detected by time")
+            logger.info("[Core][CheckKeyframe] New keyframe detected by time")
             is_keyframe = True
 
         if is_keyframe:

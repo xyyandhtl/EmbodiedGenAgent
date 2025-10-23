@@ -60,7 +60,7 @@ class EGAgentSystem:
         # 运行控制
         self._running = False
         self._is_finished = False
-        self._thread: threading.Thread | None = None
+        self._thread_bt: threading.Thread | None = None
         self._stop_event = threading.Event()
 
         self._emit("conversation", self.get_conversation_text())
@@ -134,13 +134,13 @@ class EGAgentSystem:
             self.dm.start_threading()
             self._conv_info(f"检测和建图线程已启动。")
 
-        self._stop_event.clear()    
+        self._stop_event.clear()
         self._running = True
         self._is_finished = False
         self.agent_env.reset()
         self._log_info("Environment reset.")
-        self._thread = threading.Thread(target=self._run_loop, daemon=True)
-        self._thread.start()
+        self._thread_bt = threading.Thread(target=self._run_loop_bt, daemon=True)
+        self._thread_bt.start()
 
         self._emit("status", self.status)
 
@@ -150,10 +150,11 @@ class EGAgentSystem:
             self._log_warn("Agent system not running.")
             return
         self._log_info("Agent system stop requested.")
+        self._stop_event.set()
+        if self._thread_bt.is_alive():
+            self._thread_bt.join()
         if self.backend_ready:
             self.dm.end_process()
-
-        self._stop_event.set()
         self._is_finished = True
         self._running = False
         self._log_info("Agent loop stopped.")
@@ -206,17 +207,13 @@ class EGAgentSystem:
         """返回当前所有目标的全局位置 {target_name: [x,y,z]}"""
         return self.agent_env.get_cur_target_pos()
 
-    def _run_loop(self):
+    def _run_loop_bt(self):
         """Main loop: step environment, propagate events, and check completion."""
         try:
             bt_task_finshed = False
             while not self._stop_event.is_set() and not bt_task_finshed:
-                # VLM 建图后台处理一帧数据, 已弃用, 完全放在后台线程
-                self.vlmap_backend.run_once()
-
-                # TODO: 简单导航测试
+                # 简单导航测试
                 # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
-
                 # 最终行为树执行测试
                 bt_task_finshed = self.agent_env.step()
                 if self.agent_env.tick_updated:
@@ -224,9 +221,22 @@ class EGAgentSystem:
                     self.agent_env.tick_updated = False
         except Exception as e:
             tb = traceback.format_exc()
-            self._log_error(f"Run loop exception: {e}")
+            self._log_error(f"Run loop_bt exception: {e}")
             self._log(tb)
-            self._conv_err("运行循环异常，已停止。请查看日志窗口。")
+            self._conv_err("[行为树]运行循环异常，已停止。请查看日志窗口。")
+
+    def _run_loop_backend(self):
+        """Main loop: step environment, propagate events, and check completion."""
+        try:
+            while not self._stop_event.is_set():
+                # time.sleep(0.01)
+                # VLM 建图后台处理一帧数据
+                self.vlmap_backend.run_once()
+        except Exception as e:
+            tb = traceback.format_exc()
+            self._log_error(f"Run loop_backend exception: {e}")
+            self._log(tb)
+            self._conv_err("[地图后台]运行循环异常，已停止。请查看日志窗口。")
 
     # ---------------------- 输入接口 ----------------------
     def feed_instruction(self, text: str):

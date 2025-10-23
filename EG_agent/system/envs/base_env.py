@@ -35,7 +35,7 @@ class BaseAgentEnv:
         self.cur_target: str = ""
         self.condition_set = set()
 
-        self.init_statistics()
+        # self.init_statistics()
         self.create_behavior_lib()
 
         self._paren_pattern = re.compile(r'\((.*?)\)')
@@ -46,8 +46,10 @@ class BaseAgentEnv:
 
     def init_statistics(self):
         self.step_num = 1
-        self.next_tick_time = self.tick_interval
-        self.next_path_plan_time = self.path_plan_interval
+        self.time = 0.0
+        self.start_time = time.time()
+        self.next_tick_time = self.tick_interval  # relative time from start
+        self.next_path_plan_time = self.path_plan_interval  # relative time from start
         self.last_tick_output = ""
 
     def extract_targets(self, bt_node_name: str) -> str:
@@ -71,40 +73,42 @@ class BaseAgentEnv:
         raise NotImplementedError
 
     def step(self):
-        if self.bt is None:
-            return False
-        
         self.time = time.time() - self.start_time
+        
+        if self.bt is None or self.time < self.next_tick_time:
+            sleep_duration = max(0.01, self.next_tick_time - self.time)
+            time.sleep(sleep_duration)
+            return False
+
         # Integrated Agent.step logic
-        if self.bt is not None and self.time > self.next_tick_time:
-            self.step_num += 1
-            self.next_tick_time += self.tick_interval
+        self.step_num += 1
+        self.next_tick_time += self.tick_interval
 
-            self.bt.tick()
-            bt_output = self.bt.visitor.output_str
+        self.bt.tick()
+        bt_output = self.bt.visitor.output_str
+        parts = bt_output.split("Action", 1)
+        if len(parts) > 1:
+            bt_output = parts[1].strip()
+        else:
+            bt_output = ""
 
-            parts = bt_output.split("Action", 1)
-            if len(parts) > 1:
-                bt_output = parts[1].strip()
+        # Do some work that low-level env is not callable
+        self.cur_target = self.extract_targets(bt_output)
+        if bt_output.startswith("Walk") and self.time > self.next_path_plan_time:
+            self.next_path_plan_time += self.path_plan_interval
+            if self.cur_target:
+                self.find_path(self.get_target_pos(self.cur_target))
             else:
-                bt_output = ""
+                raise ValueError(f"Cannot parse walk object from BT output: {bt_output}")
 
-            # Do some work that low-level env is not callable
-            self.cur_target = self.extract_targets(bt_output)
-            if bt_output.startswith("Walk") and self.time > self.next_path_plan_time:
-                self.next_path_plan_time += self.path_plan_interval
-                if self.cur_target:
-                    self.find_path(self.get_target_pos(self.cur_target))
-                else:
-                    raise ValueError(f"Cannot parse walk object from BT output: {bt_output}")
-                
-            if bt_output != self.last_tick_output:    
-                self.last_tick_output = bt_output
-                self.tick_updated = True
-                
-                if self.print_ticks:
-                    print(f"==== time:{self.time:f}s ======")
-                    print(f"Action {self.step_num}: {bt_output}")
+        # when tick node changed
+        if bt_output != self.last_tick_output:
+            self.last_tick_output = bt_output
+            self.tick_updated = True
+
+            if self.print_ticks:
+                print(f"==== time:{self.time:f}s ======")
+                print(f"Action {self.step_num}: {bt_output}")
 
         # self.agent_env_step()
         return self.task_finished()

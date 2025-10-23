@@ -237,6 +237,7 @@ class IsaacsimEnv(BaseAgentEnv):
         """重置环境：清空内部状态、发布零速以停止，并等待首次同步观测（最多约2秒）。"""
         # Clear internal state
         self.goal_inview = {}
+        self.init_statistics()
 
     # ==========================================
     # 动作发布与执行（cmd_vel、nav_pose、枚举命令、mark）
