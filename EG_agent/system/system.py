@@ -39,7 +39,7 @@ class EGAgentSystem:
         # 逻辑 Goal 生成器：用于将用户的自然语言指令（如“找到椅子”）解析为结构化的 逻辑目标
         self.goal_generator = LogicGoalGenerator()
         self.goal_generator.prepare_prompt(object_set=None)
-        self._log(f"goal_generator prompt: \n{self.goal_generator.prompt}")
+        self._log(f"goal_generator prompt: \n{self.goal_generator.prompt_scene}")
 
         # 行为树规划器：用于根据逻辑目标，动态地生成一个 BT。连续任务时需即时更新 cur_cond_set 和 key_objects
         self.bt_generator = BTGenerator(env_name="embodied",
@@ -121,7 +121,7 @@ class EGAgentSystem:
         self._log_info("Configuring ROS...")
         self.agent_env.configure_ros(self.cfg)
         self._log_info("Backend created successfully.")
-        self._conv_info("后台创建成功，请启动智能体。")
+        self._conv_info("后台创建成功，ROS2通信已配置，请启动智能体。")
         return True
     
     def start(self):
@@ -130,11 +130,18 @@ class EGAgentSystem:
             self._log_warn("Agent system already running.")
             return
         self._log_info("Agent system started.")
-        self._stop_event.clear()
+        if self.backend_ready:
+            self.dm.start_threading()
+            self._conv_info(f"检测和建图线程已启动。")
+
+        self._stop_event.clear()    
         self._running = True
         self._is_finished = False
+        self.agent_env.reset()
+        self._log_info("Environment reset.")
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
+
         self._emit("status", self.status)
 
     def stop(self):
@@ -143,8 +150,13 @@ class EGAgentSystem:
             self._log_warn("Agent system not running.")
             return
         self._log_info("Agent system stop requested.")
+        if self.backend_ready:
+            self.dm.end_process()
+
         self._stop_event.set()
+        self._is_finished = True
         self._running = False
+        self._log_info("Agent loop stopped.")
         self._emit("status", self.status)
 
     def save(self, map_path: str | None = None):
@@ -197,18 +209,16 @@ class EGAgentSystem:
     def _run_loop(self):
         """Main loop: step environment, propagate events, and check completion."""
         try:
-            self.agent_env.reset()
-            self._log_info("Environment reset.")
-            is_finished = False
-            while not self._stop_event.is_set() and not is_finished:
-                # VLM 建图后台处理一帧数据
+            bt_task_finshed = False
+            while not self._stop_event.is_set() and not bt_task_finshed:
+                # VLM 建图后台处理一帧数据, 已弃用, 完全放在后台线程
                 self.vlmap_backend.run_once()
 
                 # TODO: 简单导航测试
                 # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
 
                 # 最终行为树执行测试
-                is_finished = self.agent_env.step()
+                bt_task_finshed = self.agent_env.step()
                 if self.agent_env.tick_updated:
                     self._conv_info(f"行为树执行节点更新: {self.get_last_tick_output()}")
                     self.agent_env.tick_updated = False
@@ -217,15 +227,6 @@ class EGAgentSystem:
             self._log_error(f"Run loop exception: {e}")
             self._log(tb)
             self._conv_err("运行循环异常，已停止。请查看日志窗口。")
-
-        if self.backend_ready:
-            self.dm.end_process()
-            self.vlmap_backend.shutdown_requested = True
-
-        self._is_finished = True
-        self._running = False
-        self._log_info("Agent loop stopped.")
-        self._emit("status", self.status)
 
     # ---------------------- 输入接口 ----------------------
     def feed_instruction(self, text: str):
