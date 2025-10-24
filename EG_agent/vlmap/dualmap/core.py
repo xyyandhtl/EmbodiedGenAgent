@@ -120,6 +120,14 @@ class Dualmap:
         self.detector_thread = None
         self.mapping_thread = None
 
+        # Exploration Control
+        self.exploration_thread = None
+        self.is_exploring = False
+        self._exploration_target: str | None = None
+        self._exploration_start_event = threading.Event()
+        self._exploration_stop_event = threading.Event()
+
+
     def start_threading(self):
         # Parallel for mapping thread
         # if self.cfg.use_parallel:
@@ -128,21 +136,106 @@ class Dualmap:
         )
         self.detector_thread.start()
         logger.info("[Core] Detector thread started.")
+
         self.mapping_thread = threading.Thread(
             target=self.run_mapping_thread, daemon=True
         )
         self.mapping_thread.start()
         logger.info("[Core] Mapping thread started.")
 
+        self.exploration_thread = threading.Thread(
+            target=self.run_exploration_thread, daemon=True
+        )
+        self.exploration_thread.start()
+        logger.info("[Core] Exploration thread started.")
+
     def stop_threading(self):
         self.stop_thread = True
+
+        self.stop_exploration()  # Ensure exploration is stopped
+
         # if self.cfg.use_parallel:
         # Join detector thread
         if self.detector_thread and self.detector_thread.is_alive():
             self.detector_thread.join()
         if self.mapping_thread and self.mapping_thread.is_alive():
             self.mapping_thread.join()
-        logger.info("[Core] Stopped monitoring config file and mapping thread.")
+        if self.exploration_thread and self.exploration_thread.is_alive():
+            self.exploration_thread.join()
+        logger.info("[Core] Stopped detector, mapping and exploration thread.")
+
+    def start_exploration(self, target_object: str | None = None):
+        """Starts the exploration mode to find a target object or to map the area."""
+        if self.is_exploring:
+            logger.warning("[Core] Exploration is already running.")
+            return
+        
+        logger.info(f"[Core] Starting exploration to find: {target_object}")
+        self.is_exploring = True
+        self._exploration_target = target_object
+        self._exploration_stop_event.clear()
+        self._exploration_start_event.set()
+
+    def stop_exploration(self):
+        """Stops the exploration mode."""
+        if not self.is_exploring:
+            return
+        
+        logger.info("[Core] Stopping exploration.")
+        self.is_exploring = False
+        self._exploration_stop_event.set()
+        # The worker will clear the start event upon stopping
+        self.curr_global_path = [] # Stop any ongoing movement
+
+    def run_exploration_thread(self):
+        """Independent thread: autonomous exploration."""
+        while not self.stop_thread:
+            # Wait until exploration is triggered
+            self._exploration_start_event.wait()
+
+            while not self._exploration_stop_event.is_set():
+                # 1. If target-oriented, check if the object is found
+                if self._exploration_target:
+                    logger.info(f"[Exploration] Querying for target '{self._exploration_target}'.")
+                    position = self.query_object(self._exploration_target)
+                    if position is not None:
+                        logger.info(f"[Exploration] Target '{self._exploration_target}' found! Stopping exploration.")
+                        self.stop_exploration()
+                        continue # End this loop iteration
+
+                # 2. Generate a random goal if no path is active
+                if not self.curr_global_path:
+                    logger.info("[Exploration] No global path, generating a new random goal.")
+                    if self.realtime_pose is None:
+                        logger.warning("[Exploration] Waiting for a valid agent pose.")
+                        time.sleep(1)
+                        continue
+                    
+                    # Create nav graph (it's relatively fast) and get a random goal
+                    self.global_map_manager.create_nav_graph(self.realtime_pose)
+                    random_goal = self.global_map_manager.get_random_walkable_goal()
+
+                    if random_goal is None:
+                        logger.warning("[Exploration] Could not get a random goal. Retrying...")
+                        time.sleep(2)
+                        continue
+                    
+                    # 3. Compute the path
+                    logger.info(f"[Exploration] New random goal at {random_goal[:2].tolist()}. Planning path...")
+                    self.compute_global_path(random_goal)
+
+                # 4. Wait for navigation cycle to complete (or for stop signal)
+                # The actual movement is handled by the main loop checking `is_exploring`
+                # We just need to wait here until the path is cleared.
+                while self.curr_global_path and not self._exploration_stop_event.is_set():
+                    time.sleep(1) # Check every second
+                
+                logger.info("[Exploration] Navigation cycle complete.")
+                time.sleep(1) # Brief pause before next cycle
+
+            # --- Cleanup after stopping ---
+            logger.info("[Exploration] Worker paused.")
+            self._exploration_start_event.clear()
 
     def end_process(self):
         """

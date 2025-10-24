@@ -66,7 +66,7 @@ ASSET_DICT = {
         spawn=UsdFileCfg(
             visible=True,
             # usd_path=f"{SIMULATION_DATA_DIR}/terrains/davinci/xx.usd",
-            usd_path=f"/media/lenovo/1/USD/distributable_2023_davinci_v2/Distributable_2023_Davinci/asset/assembly/Interior/Interior.usd",
+            usd_path=f"{SIMULATION_DATA_DIR}/terrains/distributable_2023_davinci_v2/Distributable_2023_Davinci/asset/assembly/Interior/Interior.usd",
             # usd_path=f"/media/lenovo/1/USD/distributable_2023_davinci_v2/Distributable_2023_Davinci/shot/rt/rt_010/pub/assembly/rt_010_assembly_create.usd",
             # https://developer.nvidia.com/downloads/usd/dataset/davinci_workshop/distributable_2023_davinci_v2.zip
         ),
