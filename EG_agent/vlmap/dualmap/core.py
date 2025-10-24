@@ -112,9 +112,6 @@ class Dualmap:
         # debug param: path counter
         self.path_counter = 0
 
-        # History of agent's actual traversed path
-        self.traj_path = deque(maxlen=60)
-
         # Queue provided by DualmapInterface for raw frames
         self.last_keyframe_idx = -1
         self.input_queue = deque(maxlen=1)
@@ -265,7 +262,7 @@ class Dualmap:
             self.visualizer.set_camera_info(data_input.intrinsics, data_input.pose)
             self.visualizer.set_image(data_input.color)
 
-            logger.info(f"Detector processed frame {self.curr_frame_id} in {end_time - start_time} seconds")
+            logger.info(f"Detector processed frame {self.curr_frame_id} in {end_time - start_time:.2f} seconds")
             if self.cfg.use_rerun:
                 elapsed_time = end_time - start_time
                 self.detector.visualize_time(elapsed_time)
@@ -481,9 +478,9 @@ class Dualmap:
     def reset_query_and_navigation(self):
         """重置导航状态，包括清除全局地图查询和重置路径规划器。"""
         self.inquiry_feat = None
-        self.action_path = None
-        self.curr_global_path = None
-        self.curr_local_path = None
+        self.action_path = []
+        self.curr_global_path = []
+        self.curr_local_path = []
 
     def query_object(self, query: str):
         # 1. 从查询（如："desk"/"RobotNear(ControlRoom)"）中提取物体名称
@@ -533,6 +530,7 @@ class Dualmap:
 
         self.global_map_manager.has_action_path = False
 
+        start = time.time()
         # Get Current layout information from detector
         layout_pcd = self.detector.get_layout_pointcloud()
         # (1) 将 点云数据 设置给 GlobalMapManager.layout_map
@@ -547,12 +545,13 @@ class Dualmap:
             resolution=self.cfg.resolution, goal_position=self.goal_pose
         )
 
-        self.global_map_manager.mark_semantic_map_dirty()  # wall_pcd 改变，需更新语义地图图像缓存
-        self.global_map_manager.mark_traversable_map_dirty()  # nav_graph 改变，需更新语义地图图像缓存
+        self.global_map_manager.update_pose_path(nav_path=self.curr_global_path)
 
         # Clear the local mapping results
         self.curr_local_path = None
         self.begin_local_planning = True
+
+        logger.info(f"[Core] Global path planning time: {time.time() - start:.4f} seconds.")
 
         if self.cfg.save_all_path:
             # Create a unique file name using the counter
@@ -715,22 +714,3 @@ class Dualmap:
             return None
         return cur_path[min(1, len(cur_path)-1)]
 
-    def get_semantic_map_image(self):
-        semantic_map = self.global_map_manager.get_semantic_map_image(
-            resolution=self.cfg.resolution,
-            curr_pose=self.curr_pose,
-            traj_path=self.traj_path,
-            nav_path=self.curr_global_path  # TODO: 后续更改为 self.action_path，或者传入 global_path 和 local_path，以不同颜色显示
-        )
-        # if semantic_map is not None:
-        #     save_dir = str(self.cfg.map_save_path)
-        #     save_path = f"{save_dir}/semantic_map.png"
-        #     if os.path.exists(save_dir) and not os.path.exists(save_path):
-        #         cv2.imwrite(save_path, semantic_map)
-        #         print(f"[visualizer] Semantic map saved to {save_path}")
-        return semantic_map
-    
-    def get_traversable_map_image(self):
-        return self.global_map_manager.get_traversable_map_image(
-            curr_pose=self.curr_pose
-        )

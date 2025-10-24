@@ -104,6 +104,7 @@ class DualmapInterface:
             pose=transformed_pose
         )
         self.dualmap.realtime_pose = data_input.pose
+        self.dualmap.global_map_manager.update_pose_path(curr_pose=data_input.pose)
         # 根据 时间戳和位姿 判断当前帧是否为 关键帧
         if not self.dualmap.check_keyframe(data_input.time_stamp, data_input.pose):
             return
