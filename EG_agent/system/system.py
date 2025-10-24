@@ -137,7 +137,6 @@ class EGAgentSystem:
         self._stop_event.clear()
         self._running = True
         self._is_finished = False
-        self.agent_env.reset()
         self._log_info("Environment reset.")
         self._thread_bt = threading.Thread(target=self._run_loop_bt, daemon=True)
         self._thread_bt.start()
@@ -183,7 +182,7 @@ class EGAgentSystem:
                        f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
         self.update_objects_from_map()
 
-        # # TODO: For quick test, directly set a goal pose
+        # For quick test, directly set a goal pose
         # self.vlmap_backend.get_global_path(goal_pose=np.array([3.5, 6.0, 0.0]))
         # self._log(f"Computed global_path: {self.dm.curr_global_path}")
 
@@ -210,6 +209,7 @@ class EGAgentSystem:
     def _run_loop_bt(self):
         """Main loop: step environment, propagate events, and check completion."""
         try:
+            self.agent_env.reset()
             bt_task_finshed = False
             while not self._stop_event.is_set() and not bt_task_finshed:
                 # 简单导航测试
