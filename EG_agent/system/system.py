@@ -372,7 +372,7 @@ class EGAgentSystem:
 
     def get_semantic_map_image(self) -> np.ndarray:
         """Semantic/path map from dualmap; fallback to detector annotated image."""
-        semantic_map = self.dm.get_semantic_map_image()
+        semantic_map = self.dm.global_map_manager.get_semantic_map_image()
         if semantic_map is not None:
             self.update_objects_from_map()
             return semantic_map
@@ -380,7 +380,7 @@ class EGAgentSystem:
 
     def get_traversable_map_image(self) -> np.ndarray:
         """Traversable map from dualmap."""
-        traversable_map = self.dm.get_traversable_map_image()
+        traversable_map = self.dm.global_map_manager.get_traversable_map_image()
         if traversable_map is not None:
             return traversable_map
         return self._gen_dummy_image(260, 180, "Traversable")

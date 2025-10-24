@@ -6,6 +6,7 @@ import threading
 import time
 from pathlib import Path
 from typing import List
+from collections import deque
 import cv2
 import numpy as np
 import open3d as o3d
@@ -74,7 +75,7 @@ class GlobalMapManager(BaseMapManager):
         # Background thread for updating maps
         self._map_update_thread = None
         self._stop_map_update = threading.Event()
-        self._map_update_lock = threading.Lock()
+        # self._map_update_lock = threading.Lock()
         self._last_update_time = 0
         self._update_interval = 2.0  # Update every 2 seconds (low frequency)
         
@@ -93,6 +94,14 @@ class GlobalMapManager(BaseMapManager):
             classes_file_path=classes_path,
             bg_classes=self.cfg.yolo.bg_classes,
             skip_bg=self.cfg.yolo.skip_bg)
+        
+        # Store dynamic parameters for background updates
+        self._curr_pose: np.ndarray = None
+        self._nav_path: list = []
+        self._traj_path = deque(maxlen=60)
+
+    def append_traj(self, pose: np.ndarray) -> None:
+        self._traj_path.append(pose)
 
     def has_global_map(self) -> bool:
         return len(self.global_map) > 0
@@ -807,17 +816,19 @@ class GlobalMapManager(BaseMapManager):
                 tra_needs_update = self.traversable_map_dirty and time_ok
                 
                 if sem_needs_update:
-                    with self._map_update_lock:
-                        self._last_update_time = current_time
-                        # Update semantic map if dirty
-                        if self.semantic_map_dirty and self.has_global_map():
-                            self._update_semantic_map_cache()
+                    # with self._map_update_lock:
+                    self._last_update_time = current_time
+                    # Update semantic map if dirty
+                    if self.semantic_map_dirty and self.has_global_map():
+                        self._update_semantic_map_cache(
+                            resolution=0.03,  # default resolution
+                        )
                 if tra_needs_update:
                     self._last_update_time = current_time
-                    with self._map_update_lock:
-                        # Update traversable map if dirty
-                        if self.traversable_map_dirty and self.nav_graph:
-                            self._update_traversable_map_cache()
+                    # with self._map_update_lock:
+                    # Update traversable map if dirty
+                    if self.traversable_map_dirty and self.nav_graph:
+                        self._update_traversable_map_cache()
                 
                 # Sleep for a short time to prevent busy waiting
                 self._stop_map_update.wait(timeout=0.5)
@@ -946,7 +957,62 @@ class GlobalMapManager(BaseMapManager):
                 final_pos = candidates[0]
             draw.text(final_pos, obj_name, font=font, fill=(0, 0, 0))
 
-        # 4. Update the cached image and metadata
+        # 4. Draw dynamic elements: nav path, trajectory, and current pose
+        def world_to_img_cached(point):
+            point_img = ((point[:2] - metadata['min_coords']) / metadata['resolution'] * metadata['scale_factor']).astype(int)
+            point_img[0] += metadata['padding'] // 2
+            point_img[1] = metadata['height'] - point_img[1] - (metadata['padding'] // 2)
+            return tuple(point_img)
+
+        try:
+            coord_font = ImageFont.truetype("DejaVuSans.ttf", size=int(10 * (scale_factor / 3)))
+        except IOError:
+            coord_font = ImageFont.load_default()
+
+        # (1) Draw navigation path
+        if self._nav_path and len(self._nav_path) > 1:
+            path_points_img = [world_to_img_cached(np.array(p)) for p in self._nav_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
+            if len(path_points_img) > 1:
+                draw.line(path_points_img, fill=(0, 255, 0), width=6)  # Green line
+                for point in path_points_img:
+                    draw.ellipse([point[0]-3, point[1]-3, point[0]+3, point[1]+3], fill=(255, 0, 0))
+
+        # (2) Draw trajectory
+        if self._traj_path and len(self._traj_path) > 1:
+            traj_points_img = [world_to_img_cached(np.array(p)) for p in self._traj_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
+            if len(traj_points_img) > 1:
+                draw.line(traj_points_img, fill=(0, 0, 255), width=4)  # Blue line
+
+        # (3) Draw current pose
+        if self._curr_pose is not None:
+            pos = self._curr_pose[:3, 3]
+            rot_matrix = self._curr_pose[:3, :3]
+            fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
+            pos_img = world_to_img_cached(pos)
+
+            arrow_length = 16 * (scale_factor / 3)
+            arrow_color = (255, 0, 0)  # Red
+            fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
+            tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
+            tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]  # Subtract because Y is flipped
+
+            # Define triangle points for the arrow
+            perp_vec_2d = np.array([-fwd_vec_2d_normalized[1], fwd_vec_2d_normalized[0]])
+            base_width = 8 * (scale_factor / 3)
+
+            base_center_x = pos_img[0] - 0.5 * arrow_length * fwd_vec_2d_normalized[0]
+            base_center_y = pos_img[1] + 0.5 * arrow_length * fwd_vec_2d_normalized[1]
+
+            p1 = (tip_x, tip_y)
+            p2 = (base_center_x + base_width * perp_vec_2d[0], base_center_y - base_width * perp_vec_2d[1])
+            p3 = (base_center_x - base_width * perp_vec_2d[0], base_center_y + base_width * perp_vec_2d[1])
+
+            draw.polygon([p1, p2, p3], fill=arrow_color)
+            # Add coordinates text
+            coord_text = f"({pos[0]:.2f}, {pos[1]:.2f})"
+            draw.text((pos_img[0] + 15, pos_img[1]), coord_text, font=coord_font, fill=(0, 0, 0))
+
+        # 5. Update the cached image and metadata
         self.cached_semantic_map = pil_img
         self.semantic_map_metadata = metadata
         self.semantic_map_dirty = False
@@ -972,10 +1038,40 @@ class GlobalMapManager(BaseMapManager):
         image = cv2.flip(image, 0)
 
         # PIL expects RGB
-        self.cached_traversable_map = Image.fromarray(image, 'RGB')
-        self.traversable_map_metadata = {'origin': self.nav_graph.pcd_min,
-                                         'resolution': self.nav_graph.cell_size,
-                                         'height': h, 'width': w}
+        pil_img = Image.fromarray(image, 'RGB')
+        draw = ImageDraw.Draw(pil_img)
+        
+        metadata = {'origin': self.nav_graph.pcd_min,
+                    'resolution': self.nav_graph.cell_size,
+                    'height': h, 'width': w}
+        
+        def world_to_grid_img(point):
+            # Transform world point to grid indices
+            grid_x = int((point[0] - metadata['origin'][0]) / metadata['resolution'])
+            grid_y = int((point[1] - metadata['origin'][1]) / metadata['resolution'])
+            # Transform grid indices to image coordinates (y is flipped)
+            return grid_x, metadata['height'] - 1 - grid_y
+
+        if self._curr_pose is not None:
+            pos = self._curr_pose[:3, 3]
+            rot_matrix = self._curr_pose[:3, :3]
+            fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
+            pos_img = world_to_grid_img(pos)
+
+            arrow_length = 16
+            arrow_color = (255, 0, 0) # Red
+
+            fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
+
+            # Tip in image coordinates (y direction is flipped)
+            tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
+            tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]
+
+            draw.line([pos_img, (tip_x, tip_y)], fill=arrow_color, width=3)
+            draw.ellipse([pos_img[0]-4, pos_img[1]-4, pos_img[0]+4, pos_img[1]+4], fill=arrow_color)
+
+        self.cached_traversable_map = pil_img
+        self.traversable_map_metadata = metadata
         self.traversable_map_dirty = False
 
     def mark_semantic_map_dirty(self):
@@ -986,125 +1082,47 @@ class GlobalMapManager(BaseMapManager):
         """Marks the traversable map as dirty, forcing a redraw on next get."""
         self.traversable_map_dirty = True
 
-    def get_semantic_map_image(self, resolution=0.03, curr_pose=None, traj_path=None, nav_path=None) -> None | np.ndarray:
+    def get_semantic_map_image(self) -> None | np.ndarray:
         """
-        Returns the latest cached semantic map with dynamic elements drawn on top.
-        The static map elements are updated in the background thread.
+        Returns the latest cached semantic map image.
+        The static map elements with dynamic elements are updated in the background thread.
         """
         if not self.has_global_map() or self.cached_semantic_map is None:
             return None
 
-        # Acquire lock to safely access cached data
-        with self._map_update_lock:
-            # Copy the cached image to draw dynamic elements
-            pil_img = self.cached_semantic_map.copy()
-            draw = ImageDraw.Draw(pil_img)
+        start = time.time()
+        # The image with all elements (static + dynamic) is already cached
+        result = cv2.cvtColor(np.array(self.cached_semantic_map), cv2.COLOR_RGB2BGR)  # Convert PIL (RGB) image to numpy array (BGR) for OpenCV
+        logger.info(f"[semantic] get_semantic_map_image: {time.time() - start:.4f} seconds")
+        return result
 
-            meta = self.semantic_map_metadata
-            if not meta: # If metadata is not ready yet, we can't draw dynamic elements
-                return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-
-            def world_to_img_cached(point):
-                point_img = ((point[:2] - meta['min_coords']) / meta['resolution'] * meta['scale_factor']).astype(int)
-                point_img[0] += meta['padding'] // 2
-                point_img[1] = meta['height'] - point_img[1] - (meta['padding'] // 2)
-                return tuple(point_img)
-
-            try:
-                coord_font = ImageFont.truetype("DejaVuSans.ttf", size=int(10 * (meta['scale_factor'] / 3)))
-            except IOError:
-                coord_font = ImageFont.load_default()
-
-            # (1) Draw navigation path
-            if nav_path and len(nav_path) > 1:
-                path_points_img = [world_to_img_cached(np.array(p)) for p in nav_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
-                if len(path_points_img) > 1:
-                    draw.line(path_points_img, fill=(0, 255, 0), width=6)  # Green line
-                    for point in path_points_img:
-                        draw.ellipse([point[0]-3, point[1]-3, point[0]+3, point[1]+3], fill=(255, 0, 0))
-
-            # (2) Draw trajectory
-            if traj_path and len(traj_path) > 1:
-                traj_points_img = [world_to_img_cached(np.array(p)) for p in traj_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
-                if len(traj_points_img) > 1:
-                    draw.line(traj_points_img, fill=(0, 0, 255), width=4)  # Blue line
-
-            # (3) Draw current pose
-            if curr_pose is not None:
-                pos = curr_pose[:3, 3]
-                rot_matrix = curr_pose[:3, :3]
-                fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
-                pos_img = world_to_img_cached(pos)
-
-                arrow_length = 16 * (meta['scale_factor'] / 3)
-                arrow_color = (255, 0, 0)  # Red
-                fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
-                tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
-                tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]  # Subtract because Y is flipped
-
-                # Define triangle points for the arrow
-                perp_vec_2d = np.array([-fwd_vec_2d_normalized[1], fwd_vec_2d_normalized[0]])
-                base_width = 8 * (meta['scale_factor'] / 3)
-
-                base_center_x = pos_img[0] - 0.5 * arrow_length * fwd_vec_2d_normalized[0]
-                base_center_y = pos_img[1] + 0.5 * arrow_length * fwd_vec_2d_normalized[1]
-
-                p1 = (tip_x, tip_y)
-                p2 = (base_center_x + base_width * perp_vec_2d[0], base_center_y - base_width * perp_vec_2d[1])
-                p3 = (base_center_x - base_width * perp_vec_2d[0], base_center_y + base_width * perp_vec_2d[1])
-
-                draw.polygon([p1, p2, p3], fill=arrow_color)
-                # Add coordinates text
-                coord_text = f"({pos[0]:.2f}, {pos[1]:.2f})"
-                draw.text((pos_img[0] + 15, pos_img[1]), coord_text, font=coord_font, fill=(0, 0, 0))
-
-        return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)  # Convert PIL (RGB) image to numpy array (BGR) for OpenCV
-
-    def get_traversable_map_image(self, curr_pose=None) -> None | np.ndarray:
+    def get_traversable_map_image(self) -> None | np.ndarray:
         """
-        Returns the latest cached traversable map with dynamic elements drawn on top.
-        The static map elements are updated in the background thread.
+        Returns the latest cached traversable map image.
+        The static map elements with dynamic elements are updated in the background thread.
         """
         if not self.nav_graph or self.cached_traversable_map is None:
             return None
 
-        # Acquire lock to safely access cached data
-        with self._map_update_lock:
-            # Copy the cached image to draw dynamic elements
-            pil_img = self.cached_traversable_map.copy()
-            draw = ImageDraw.Draw(pil_img)
-            meta = self.traversable_map_metadata
+        start = time.time()
+        # The image with all elements (static + dynamic) is already cached
+        result = cv2.cvtColor(np.array(self.cached_traversable_map), cv2.COLOR_RGB2BGR)  # Convert PIL (RGB) image to numpy array (BGR) for OpenCV
+        logger.info(f"[traversable] get_traversable_map_image: {time.time() - start:.4f} seconds")
+        return result
 
-            if not meta:  # If metadata is not ready, return the base image
-                return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-
-            def world_to_grid_img(point):
-                # Transform world point to grid indices
-                grid_x = int((point[0] - meta['origin'][0]) / meta['resolution'])
-                grid_y = int((point[1] - meta['origin'][1]) / meta['resolution'])
-                # Transform grid indices to image coordinates (y is flipped)
-                return grid_x, meta['height'] - 1 - grid_y
-
-            if curr_pose is not None:
-                pos = curr_pose[:3, 3]
-                rot_matrix = curr_pose[:3, :3]
-                fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
-                pos_img = world_to_grid_img(pos)
-
-                arrow_length = 16
-                arrow_color = (255, 0, 0) # Red
-
-                fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
-
-                # Tip in image coordinates (y direction is flipped)
-                tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
-                tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]
-
-                draw.line([pos_img, (tip_x, tip_y)], fill=arrow_color, width=3)
-                draw.ellipse([pos_img[0]-4, pos_img[1]-4, pos_img[0]+4, pos_img[1]+4], fill=arrow_color)
-
-        # Convert back to BGR for OpenCV
-        return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+    def update_pose_path(self, curr_pose=None, nav_path=None):
+        """
+        Updates the dynamic parameters that will be used by the background cache update functions.
+        TODO: when to mark_traversable_map_dirty() and mark_semantic_map_dirty()
+        """
+        if curr_pose is not None:
+            self._curr_pose = curr_pose
+            self.mark_traversable_map_dirty()
+            self._traj_path.append(curr_pose[:3, 3])
+            # self.mark_semantic_map_dirty()
+        if nav_path is not None:
+            self._nav_path = nav_path
+            self.mark_semantic_map_dirty()
 
     def shutdown_semantic(self):
         """Safely shuts down the visualizer and its background thread."""

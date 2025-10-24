@@ -47,7 +47,7 @@ show_global_map_3d_bbox: false
 restrict_unknown_labels: true
 
 # Save the calculcated local_path, global_path, and action_path
-save_all_path: true
+save_all_path: false
 
 # World axis rotation changing config
 # Setting RPY here to adjust the mapped results with XYZ axis
