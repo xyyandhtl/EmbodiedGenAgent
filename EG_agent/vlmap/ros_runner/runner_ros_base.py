@@ -108,7 +108,7 @@ class DualmapInterface:
         # 根据 时间戳和位姿 判断当前帧是否为 关键帧
         if not self.dualmap.check_keyframe(data_input.time_stamp, data_input.pose):
             return
-        
+
         data_input.idx = self.dualmap.get_keyframe_idx()
         # Push to Dualmap's input queue, waiting for detector thread to process
         self.dualmap.input_queue.append(data_input)
@@ -119,7 +119,7 @@ class DualmapInterface:
         data_input: DataInput = self.dualmap.input_queue[-1]
         if data_input.idx == self.dualmap.last_keyframe_idx:
             return
-        
+
         self.dualmap.last_keyframe_idx = data_input.idx
         self.logger.info("[Main] ============================================================")
         with timing_context("Time Per Frame", self.dualmap):

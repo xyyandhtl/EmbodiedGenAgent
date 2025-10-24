@@ -37,9 +37,31 @@ class VLMapNav(DualmapInterface):
         self.intrinsics = self.load_intrinsics(self.cfg)
         self.extrinsics = self.load_extrinsics(self.cfg)
 
+    @property
+    def is_exploring(self) -> bool:
+        """Returns the exploration status from the dualmap."""
+        return self.dualmap.is_exploring
+
     # ===============================================
     # High-level API for navigation and querying
     # ===============================================
+    def start_exploration_to_find(self, target_object: str | None = None):
+        """Delegates starting exploration to the Dualmap instance."""
+        log_msg = f"Starting exploration to find '{target_object}'." if target_object else "Starting directionless exploration."
+        self.logger.info(log_msg)
+        self.dualmap.start_exploration(target_object)
+
+    def stop_exploration(self):
+        """Delegates stopping exploration to the Dualmap instance."""
+        if not self.dualmap.is_exploring:
+            return
+        self.logger.info("Stopping exploration mode...")
+        self.dualmap.stop_exploration()
+
+    def get_random_goal(self):
+        """Pass-through method to get a random walkable goal from the dualmap."""
+        return self.dualmap.get_random_walkable_goal()
+
     def query_object(self, object: str):
         return self.dualmap.query_object(object)
     

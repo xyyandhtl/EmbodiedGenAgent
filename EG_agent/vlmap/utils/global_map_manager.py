@@ -71,14 +71,14 @@ class GlobalMapManager(BaseMapManager):
         self.cached_traversable_map = None
         self.traversable_map_dirty = True
         self.traversable_map_metadata = {}
-        
+
         # Background thread for updating maps
         self._map_update_thread = None
         self._stop_map_update = threading.Event()
         # self._map_update_lock = threading.Lock()
         self._last_update_time = 0
         self._update_interval = 2.0  # Update every 2 seconds (low frequency)
-        
+
         # Start background thread
         self._start_background_update_thread()
 
@@ -94,7 +94,7 @@ class GlobalMapManager(BaseMapManager):
             classes_file_path=classes_path,
             bg_classes=self.cfg.yolo.bg_classes,
             skip_bg=self.cfg.yolo.skip_bg)
-        
+
         # Store dynamic parameters for background updates
         self._curr_pose: np.ndarray = None
         self._nav_path: list = []
@@ -713,6 +713,30 @@ class GlobalMapManager(BaseMapManager):
         logger.warning(f"[GlobalMap][Path] Invalid goal mode: {goal_mode}")
         return None
 
+    def get_random_walkable_goal(self):
+        """
+        Samples a random walkable goal from the navigation graph's free space.
+
+        Returns:
+            np.ndarray: A 3D point representing a random goal, or None if not possible.
+        """
+        if self.nav_graph is None or self.nav_graph.graph is None:
+            logger.warning("[GlobalMapManager] Navigation graph not created. Cannot sample a random goal.")
+            return None
+
+        random_grid_point = self.nav_graph.sample_random_point()
+        if random_grid_point is None:
+            logger.warning("[GlobalMapManager] Failed to sample a random point from the navigation graph.")
+            return None
+
+        # Convert grid coordinates back to world coordinates
+        # TODO: Check if this is correct, 是否可以使用 self.nav_graph.calculate_pos_3d()
+        world_pos_2d = random_grid_point * self.nav_graph.cell_size + self.nav_graph.pcd_min
+        world_pos_3d = np.append(world_pos_2d, self.cfg.floor_height)
+
+        logger.info(f"[GlobalMapManager] Sampled random walkable goal at {world_pos_3d}")
+        return world_pos_3d
+
     def find_best_candidate_with_inquiry(self):
         """
         This function finds the best candidate in the global map based on cosine similarity.
@@ -799,12 +823,12 @@ class GlobalMapManager(BaseMapManager):
         # input("Press any key to continue...")
 
         return best_candidate, best_similarity
-    
+
     def _start_background_update_thread(self):
         """Start the background thread for updating maps."""
         self._map_update_thread = threading.Thread(target=self._background_map_update_worker, daemon=True)
         self._map_update_thread.start()
-        
+
     def _background_map_update_worker(self):
         """Background thread worker that updates both semantic and traversable maps at low frequency."""
         while not self._stop_map_update.is_set():
@@ -814,7 +838,7 @@ class GlobalMapManager(BaseMapManager):
                 time_ok = current_time - self._last_update_time >= self._update_interval
                 sem_needs_update = self.semantic_map_dirty and time_ok
                 tra_needs_update = self.traversable_map_dirty and time_ok
-                
+
                 if sem_needs_update:
                     # with self._map_update_lock:
                     self._last_update_time = current_time
@@ -832,12 +856,12 @@ class GlobalMapManager(BaseMapManager):
                 
                 # Sleep for a short time to prevent busy waiting
                 self._stop_map_update.wait(timeout=0.5)
-                
+
             except Exception as e:
                 logger.error(f"[GlobalMapManager] Error in background map update thread: {e}")
                 # Sleep before retrying to avoid rapid error loops
                 self._stop_map_update.wait(timeout=1)
-    
+
     def _update_semantic_map_cache(self, resolution=0.03):
         """
         Updates the cached semantic map image with static elements.
@@ -851,7 +875,7 @@ class GlobalMapManager(BaseMapManager):
         for obj in self.global_map:
             if not obj.pcd_2d.is_empty():
                 all_points_lists.append(np.asarray(obj.pcd_2d.points))
-        
+
         wall_pcd = self.layout_map.wall_pcd if self.layout_map else None
         if wall_pcd and not wall_pcd.is_empty():
             all_points_lists.append(np.asarray(wall_pcd.points))
@@ -896,14 +920,14 @@ class GlobalMapManager(BaseMapManager):
             return tuple(point_img)
 
         placed_label_boxes = []
-        
+
         # Draw walls if available
         if wall_pcd and not wall_pcd.is_empty():
             wall_points_data = np.asarray(wall_pcd.points)
             wall_points_img = np.array([world_to_img(p) for p in wall_points_data if np.isfinite(p).all()])
             radius = int(1 * (scale_factor / 2))
             for p_img in wall_points_img:
-                draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=(100, 100, 100))
+                draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=(160, 160, 160))
 
         # Draw objects
         for obj in self.global_map:
@@ -911,7 +935,7 @@ class GlobalMapManager(BaseMapManager):
                 continue
 
             points = np.asarray(obj.pcd_2d.points)
-            if points.shape[0] == 0: 
+            if points.shape[0] == 0:
                 continue
 
             obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
@@ -921,7 +945,7 @@ class GlobalMapManager(BaseMapManager):
             radius = int(1 * (scale_factor / 2))
             for p_img in points_img:
                 draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=color_rgb_int)
-
+            # Draw class text (with collision detection)
             obj_x_min, obj_y_min = np.min(points_img, axis=0)
             obj_x_max, obj_y_max = np.max(points_img, axis=0)
             centroid_img = np.mean(points_img, axis=0).astype(int)
@@ -937,7 +961,7 @@ class GlobalMapManager(BaseMapManager):
                 (obj_x_max + 1, obj_y_max),
                 (obj_x_min - text_w - 1, obj_y_max),
             ]
-
+            # Find a non-colliding position
             final_pos = None
             for pos in candidates:
                 lx, ly = pos
@@ -1040,11 +1064,11 @@ class GlobalMapManager(BaseMapManager):
         # PIL expects RGB
         pil_img = Image.fromarray(image, 'RGB')
         draw = ImageDraw.Draw(pil_img)
-        
+
         metadata = {'origin': self.nav_graph.pcd_min,
                     'resolution': self.nav_graph.cell_size,
                     'height': h, 'width': w}
-        
+
         def world_to_grid_img(point):
             # Transform world point to grid indices
             grid_x = int((point[0] - metadata['origin'][0]) / metadata['resolution'])
@@ -1127,7 +1151,7 @@ class GlobalMapManager(BaseMapManager):
     def shutdown_semantic(self):
         """Safely shuts down the visualizer and its background thread."""
         logger.info("[Visualizer] Shutting down semantic map background thread.")
-        
+
         # Stop the background thread
         if self._map_update_thread:
             self._stop_map_update.set()

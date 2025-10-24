@@ -212,13 +212,18 @@ class EGAgentSystem:
             self.agent_env.reset()
             bt_task_finshed = False
             while not self._stop_event.is_set() and not bt_task_finshed:
-                # 简单导航测试
-                # self.agent_env.run_action("cmd_vel", self.vlmap_backend.get_cmd_vel())
-                # 最终行为树执行测试
-                bt_task_finshed = self.agent_env.step()
-                if self.agent_env.tick_updated:
-                    self._conv_info(f"行为树执行节点更新: {self.get_last_tick_output()}")
-                    self.agent_env.tick_updated = False
+                if self.dm and self.dm.is_exploring:
+                    # 探索模式：直接计算并发送速度指令
+                    cmd_vel = self.vlmap_backend.get_cmd_vel()
+                    self._conv_info(f"探索模式，计算速度指令{cmd_vel}前往目标点")
+                    self.agent_env.run_action("cmd_vel", cmd_vel)
+                    time.sleep(self.agent_env.tick_interval) # Add a small delay
+                else:
+                    # 正常模式：通过行为树执行
+                    bt_task_finshed = self.agent_env.step()
+                    if self.agent_env.tick_updated:
+                        self._conv_info(f"行为树执行节点更新: {self.get_last_tick_output()}")
+                        self.agent_env.tick_updated = False
         except Exception as e:
             tb = traceback.format_exc()
             self._log_error(f"Run loop_bt exception: {e}")
