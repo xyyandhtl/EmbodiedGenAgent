@@ -233,7 +233,7 @@ class LocalMapManager(BaseMapManager):
         # 5. update the graph and map for insertion and elimination
         self.update_map_and_graph()
 
-        logger.info("[LocalMap] Current we have Global Observations num: " + str(len(self.global_observations)))
+        logger.debug("[LocalMap] Current we have Global Observations num: " + str(len(self.global_observations)))
 
         if self.cfg.use_rerun:
             self.visualize_local_map()

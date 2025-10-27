@@ -20,7 +20,7 @@ To deploy and test EG_agent in simulation:
 
 - Agent system isaacsim deployment: [SIMULATION.md](docs/SIMULATION.md), a detailed example of the env implementation
 
-### Guide
+## Guide
 After reading the guides above, follow these steps for the Isaac Sim demo:
 | Environment | Command | Description | Preview |
 |-------------|---------|-------------|---------|

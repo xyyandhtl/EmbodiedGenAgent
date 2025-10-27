@@ -37,36 +37,29 @@ class VLMapNav(DualmapInterface):
         self.intrinsics = self.load_intrinsics(self.cfg)
         self.extrinsics = self.load_extrinsics(self.cfg)
 
-    @property
-    def is_exploring(self) -> bool:
-        """Returns the exploration status from the dualmap."""
-        return self.dualmap.is_exploring
-
     # ===============================================
     # High-level API for navigation and querying
     # ===============================================
-    def start_exploration_to_find(self, target_object: str | None = None):
-        """Delegates starting exploration to the Dualmap instance."""
-        log_msg = f"Starting exploration to find '{target_object}'." if target_object else "Starting directionless exploration."
-        self.logger.info(log_msg)
-        self.dualmap.start_exploration(target_object)
+    def start_find(self, target_object: str):
+        # self.logger.info(f"Starting find '{target_object}'")
+        self.dualmap.goal_pose = None
+        self.dualmap.inquiry = target_object
+        self.dualmap.goal_mode = GoalMode.NONE  # 重置以使探索中可再次调用以重设探索点
+        self.dualmap.goal_event.set()           # 即时唤醒触发一次 path_plan
 
-    def stop_exploration(self):
-        """Delegates stopping exploration to the Dualmap instance."""
-        if not self.dualmap.is_exploring:
-            return
-        self.logger.info("Stopping exploration mode...")
-        self.dualmap.stop_exploration()
+    def object_found(self, target_object: str):
+        return target_object in self.dualmap.inquiry_found
 
-    def get_random_goal(self):
-        """Pass-through method to get a random walkable goal from the dualmap."""
-        return self.dualmap.get_random_walkable_goal()
+    def is_exploring(self, target_object: str):
+        return self.dualmap.goal_mode == GoalMode.RANDOM and self.dualmap.inquiry == target_object
 
     def query_object(self, object: str):
         return self.dualmap.query_object(object)
     
     def get_global_path(self, goal_pose: np.ndarray):
-        self.dualmap.compute_global_path(goal_pose)
+        """ 已弃用,全局路径规划已放至后台线程 """
+        self.dualmap.goal_pose = goal_pose
+        self.dualmap.compute_global_path()
 
     def get_local_path(self):
         self.dualmap.compute_local_path()
@@ -80,12 +73,7 @@ class VLMapNav(DualmapInterface):
     def get_cmd_vel(self) -> tuple:
         """
         Generate a single velocity command based on the next waypoint and current pose.
-
-        Args:
-            next_waypoint: The target 3D point [x, y, z] in ROS coordinate system.
-
-        Returns:
-            - A velocity command tuple (vx, vy, wz) in the robot's base frame.
+        TODO: if need to put this method to a sub-thread too
         """
         # dualmap.curr_pose 只有在判断为关键帧后运行 self.dualmap.parallel_process() 时才会被更新，所以该值为关键帧位姿
         # 而实时计算速度指令，应用实时位姿
@@ -97,6 +85,7 @@ class VLMapNav(DualmapInterface):
         next_waypoint = self.get_next_waypoint()
         if next_waypoint is None:
             self.logger.debug("[VLMapNav] [get_cmd_vel] get_next_waypoint failed!")
+            self.dualmap.goal_mode = GoalMode.NONE  # reset goal mode
             return (0.0, 0.0, 0.0)
         
         # Controller constants (tune as needed)
