@@ -88,8 +88,8 @@ class Dualmap:
         self.rotation_threshold = cfg.rotation_threshold
 
         # pose memory
-        self.realtime_pose: np.ndarray = np.eye(4)
-        self.curr_pose: np.ndarray = None
+        self.curr_pose: np.ndarray = np.eye(4)  # 建图帧（关键帧）位姿
+        self.realtime_pose: np.ndarray = None  # 实时帧位姿
         self.prev_pose: np.ndarray = None
         self.goal_pose: list = None
         self.wait_count = 0
@@ -428,7 +428,7 @@ class Dualmap:
         # if self.cfg.save_layout:
         self.detector.save_layout()
         layout_pcd = self.detector.get_layout_pointcloud()
-        self.global_map_manager.set_layout_info(layout_pcd)
+        self.global_map_manager.set_layout_info(layout_pcd, force_full_update=True)
         self.global_map_manager.save_wall_pcd()
 
     def load_map(self, map_path=None):
@@ -449,7 +449,7 @@ class Dualmap:
         self.global_map_manager.load_wall()
         # TODO: the dualmap save/load logic should be reorgainized
         layout_pcd = self.detector.get_layout_pointcloud()
-        self.global_map_manager.set_layout_info(layout_pcd)
+        self.global_map_manager.set_layout_info(layout_pcd, force_full_update=True)
 
     def get_keyframe_idx(self):
         return self.keyframe_counter
@@ -585,11 +585,15 @@ class Dualmap:
         self.global_map_manager.has_action_path = False
 
         start = time.time()
-        # Get Current layout information from detector
-        layout_pcd = self.detector.get_layout_pointcloud()
-        # (1) 将 点云数据 设置给 GlobalMapManager.layout_map
-        # (2) 如果没有墙壁点云，则提取墙壁点云
-        self.global_map_manager.set_layout_info(layout_pcd)
+        # Get Current layout information from Detector
+        # And send to GlobalMapManager.layout_map, extract wall_pcd
+        if not self.global_map_manager.layout_initialized:
+            layout_pcd = self.detector.get_layout_pointcloud()
+            self.global_map_manager.set_layout_info(layout_pcd)
+        else:
+            update_radius = self.cfg.get("layout_update_radius", 5.0)
+            layout_pcd_partial = self.detector.get_partial_layout_pcd(self.curr_pose, update_radius)
+            self.global_map_manager.set_layout_info(layout_pcd_partial, current_pose=self.curr_pose, update_radius=update_radius)
 
         # calculate the path based on current global map
         # Get 3D path point in world coordinate

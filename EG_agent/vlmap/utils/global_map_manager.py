@@ -100,15 +100,28 @@ class GlobalMapManager(BaseMapManager):
         self._nav_path: list = []
         self._traj_path = deque(maxlen=60)
 
+        self.layout_initialized = False
+
     def append_traj(self, pose: np.ndarray) -> None:
         self._traj_path.append(pose)
 
     def has_global_map(self) -> bool:
         return len(self.global_map) > 0
 
-    def set_layout_info(self, layout_pcd):
-        self.layout_map.set_layout_pcd(layout_pcd)
-        self.layout_map.extract_wall_pcd(num_samples_per_grid=10, z_value=self.cfg.floor_height)
+    def set_layout_info(self, layout_pcd, force_full_update=False, current_pose=None, update_radius=0):
+        if force_full_update or not self.layout_initialized:
+            # First time or forced: process the whole layout
+            self.layout_map.set_layout_pcd(layout_pcd)
+            self.layout_map.extract_wall_pcd(num_samples_per_grid=10, z_value=self.cfg.floor_height)
+            self.layout_initialized = True
+            logger.info("[GlobalMapManager] Initialized/updated layout map with full point cloud.")
+        else:
+            # Subsequent live updates: process only a local part
+            if current_pose is not None and update_radius > 0:
+                self.layout_map.update_local_layout_occmap_wallpcd(layout_pcd, current_pose, update_radius)
+                logger.info("[GlobalMapManager] Updated layout map with partial point cloud.")
+            else:
+                logger.warning("[GlobalMapManager] Skipping live layout update because current_pose is not provided or update_radius is 0.")
 
     def save_wall_pcd(self):
         self.layout_map.save_wall_pcd()
