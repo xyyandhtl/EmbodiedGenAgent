@@ -88,19 +88,21 @@ class Dualmap:
         self.rotation_threshold = cfg.rotation_threshold
 
         # pose memory
+        self.realtime_pose: np.ndarray = np.eye(4)
         self.curr_pose: np.ndarray = None
-        self.realtime_pose: np.ndarray = None
         self.prev_pose: np.ndarray = None
-        self.goal_pose: np.ndarray = None
+        self.goal_pose: list = None
         self.wait_count = 0
 
         # --- 2. Threads & Queues ---
         self.stop_thread = False  # Signal to stop threads
 
         # Mode for Getting the Goal
-        self.get_goal_mode = GoalMode.POSE
-        self.inquiry = ""
+        self.goal_mode = GoalMode.NONE
+        self.inquiry: str = ""
         self.inquiry_feat = None
+        self.inquiry_found = set()
+        self.goal_event = threading.Event()
 
         # Local planning flags & paths
         self.begin_local_planning = False
@@ -119,14 +121,7 @@ class Dualmap:
 
         self.detector_thread = None
         self.mapping_thread = None
-
-        # Exploration Control
-        self.exploration_thread = None
-        self.is_exploring = False
-        self._exploration_target: str | None = None
-        self._exploration_start_event = threading.Event()
-        self._exploration_stop_event = threading.Event()
-
+        self.path_planning_thread = None
 
     def start_threading(self):
         # Parallel for mapping thread
@@ -143,99 +138,23 @@ class Dualmap:
         self.mapping_thread.start()
         logger.info("[Core] Mapping thread started.")
 
-        self.exploration_thread = threading.Thread(
-            target=self.run_exploration_thread, daemon=True
+        self.path_planning_thread = threading.Thread(
+            target=self.run_path_planning_thread, daemon=True
         )
-        self.exploration_thread.start()
-        logger.info("[Core] Exploration thread started.")
+        self.path_planning_thread.start()
+        logger.info("[Core] Path planning thread started.")
 
     def stop_threading(self):
         self.stop_thread = True
-
-        self.stop_exploration()  # Ensure exploration is stopped
-
-        # if self.cfg.use_parallel:
+        self.goal_event.set()  # 唤醒线程以退出
         # Join detector thread
         if self.detector_thread and self.detector_thread.is_alive():
             self.detector_thread.join()
         if self.mapping_thread and self.mapping_thread.is_alive():
             self.mapping_thread.join()
-        if self.exploration_thread and self.exploration_thread.is_alive():
-            self.exploration_thread.join()
-        logger.info("[Core] Stopped detector, mapping and exploration thread.")
-
-    def start_exploration(self, target_object: str | None = None):
-        """Starts the exploration mode to find a target object or to map the area."""
-        if self.is_exploring:
-            logger.warning("[Core] Exploration is already running.")
-            return
-        
-        logger.info(f"[Core] Starting exploration to find: {target_object}")
-        self.is_exploring = True
-        self._exploration_target = target_object
-        self._exploration_stop_event.clear()
-        self._exploration_start_event.set()
-
-    def stop_exploration(self):
-        """Stops the exploration mode."""
-        if not self.is_exploring:
-            return
-        
-        logger.info("[Core] Stopping exploration.")
-        self.is_exploring = False
-        self._exploration_stop_event.set()
-        # The worker will clear the start event upon stopping
-        self.curr_global_path = [] # Stop any ongoing movement
-
-    def run_exploration_thread(self):
-        """Independent thread: autonomous exploration."""
-        while not self.stop_thread:
-            # Wait until exploration is triggered
-            self._exploration_start_event.wait()
-
-            while not self._exploration_stop_event.is_set():
-                # 1. If target-oriented, check if the object is found
-                if self._exploration_target:
-                    logger.info(f"[Exploration] Querying for target '{self._exploration_target}'.")
-                    position = self.query_object(self._exploration_target)
-                    if position is not None:
-                        logger.info(f"[Exploration] Target '{self._exploration_target}' found! Stopping exploration.")
-                        self.stop_exploration()
-                        continue # End this loop iteration
-
-                # 2. Generate a random goal if no path is active
-                if not self.curr_global_path:
-                    logger.info("[Exploration] No global path, generating a new random goal.")
-                    if self.realtime_pose is None:
-                        logger.warning("[Exploration] Waiting for a valid agent pose.")
-                        time.sleep(1)
-                        continue
-                    
-                    # Create nav graph (it's relatively fast) and get a random goal
-                    self.global_map_manager.create_nav_graph(self.realtime_pose)
-                    random_goal = self.global_map_manager.get_random_walkable_goal()
-
-                    if random_goal is None:
-                        logger.warning("[Exploration] Could not get a random goal. Retrying...")
-                        time.sleep(2)
-                        continue
-                    
-                    # 3. Compute the path
-                    logger.info(f"[Exploration] New random goal at {random_goal[:2].tolist()}. Planning path...")
-                    self.compute_global_path(random_goal)
-
-                # 4. Wait for navigation cycle to complete (or for stop signal)
-                # The actual movement is handled by the main loop checking `is_exploring`
-                # We just need to wait here until the path is cleared.
-                while self.curr_global_path and not self._exploration_stop_event.is_set():
-                    time.sleep(1) # Check every second
-                
-                logger.info("[Exploration] Navigation cycle complete.")
-                time.sleep(1) # Brief pause before next cycle
-
-            # --- Cleanup after stopping ---
-            logger.info("[Exploration] Worker paused.")
-            self._exploration_start_event.clear()
+        if self.path_planning_thread and self.path_planning_thread.is_alive():
+            self.path_planning_thread.join()
+        logger.info("[Core] Stopped detector, mapping and path planning thread.")
 
     def end_process(self):
         """
@@ -312,7 +231,7 @@ class Dualmap:
 
             # Get current frame id
             self.curr_frame_id = data_input.idx
-            logger.info(f"[Core][DetectorThread] Processing frame {self.curr_frame_id}")
+            logger.debug(f"[Core][DetectorThread] Processing frame {self.curr_frame_id}")
 
             # Get current pose（被判断作为关键帧的 位姿）
             self.curr_pose = data_input.pose
@@ -380,7 +299,7 @@ class Dualmap:
                 curr_obs_list, curr_frame_id = self.detection_results_queue.get(
                     timeout=1
                 )  # Timeout exception
-                logger.info(
+                logger.debug(
                     f"[Core][MappingThread] Received data for frame {curr_frame_id}, Queue size {self.detection_results_queue.qsize()}"
                 )
             except queue.Empty:
@@ -420,6 +339,46 @@ class Dualmap:
             # )
 
         logger.info("[Core] Mapping thread exiting.")
+
+    def run_path_planning_thread(self):
+        """
+        Independent thread: path planning with low-frequency execution and switching.
+        This thread covers the "find" and "walk" action.
+        Currently, after goal_mode is set first time, path_plan is always running
+        TODO: check if goal_inview, reset_query_and_navigation()
+        """
+        loop_interval = 8.0
+
+        while not self.stop_thread:
+            logger.info(f"[PathPlanningThread] Loop begins.")
+            self.goal_event.wait(timeout=loop_interval)
+            self.goal_event.clear()  # 重置为未触发状态
+            if self.stop_thread:
+                break
+
+            if self.goal_pose:
+                self.goal_mode = GoalMode.POSE
+                logger.info(f"[PathPlanningThread] goal_pose exists, "
+                            f"directly compute path to {self.goal_pose}")
+            elif self.inquiry:
+                self.goal_pose = self.query_object(self.inquiry)
+                if self.goal_pose:
+                    self.goal_mode = GoalMode.POSE
+                    self.inquiry_found.add(self.inquiry)
+                    logger.info(f"[PathPlanningThread] compute path to {self.inquiry} "
+                                f"with query position {self.goal_pose}")
+                else:
+                    if self.goal_mode != GoalMode.RANDOM:         # 避免多次设定随机探索目标点
+                        self.goal_mode = GoalMode.RANDOM
+                        self.inquiry_found.discard(self.inquiry)    # 静态环境不存在这种情况
+                        logger.info(f"[PathPlanningThread] compute path to {self.inquiry} "
+                                    f"with random goal")
+            else:
+                logger.debug(f"[PathPlanningThread] No need to plan path.")
+
+            self.compute_global_path()
+
+        logger.info("[Core] Path_planning thread exiting.")
 
     def print_cfg(self):
 
@@ -509,7 +468,7 @@ class Dualmap:
             if translation_diff >= self.pose_threshold:  # 0.1 m
                 self.last_keyframe_time = time_stamp
                 self.last_keyframe_pose = curr_pose
-                logger.info(
+                logger.debug(
                     "[Core][CheckKeyframe] New keyframe detected by translation"
                 )
                 is_keyframe = True
@@ -523,7 +482,7 @@ class Dualmap:
             if angle_diff >= self.rotation_threshold:  # > 3 degrees
                 self.last_keyframe_time = time_stamp
                 self.last_keyframe_pose = curr_pose
-                logger.info("[Core][CheckKeyframe] New keyframe detected by rotation")
+                logger.debug("[Core][CheckKeyframe] New keyframe detected by rotation")
                 is_keyframe = True
 
         # Time check
@@ -533,7 +492,7 @@ class Dualmap:
         ):  # > 0.5 s
             self.last_keyframe_time = time_stamp
             self.last_keyframe_pose = curr_pose
-            logger.info("[Core][CheckKeyframe] New keyframe detected by time")
+            logger.debug("[Core][CheckKeyframe] New keyframe detected by time")
             is_keyframe = True
 
         if is_keyframe:
@@ -569,11 +528,14 @@ class Dualmap:
     # Public API for navigation and querying
     # ===============================================
     def reset_query_and_navigation(self):
-        """重置导航状态，包括清除全局地图查询和重置路径规划器。"""
-        self.inquiry_feat = None
-        self.action_path = []
-        self.curr_global_path = []
-        self.curr_local_path = []
+        """重置 Find 涉及的导航状态，包括清除索引目标和已索引到的目标位置。"""
+        self.inquiry = ""
+        self.goal_mode = GoalMode.NONE
+        self.goal_pose = None
+        # self.inquiry_feat = None
+        # self.action_path = []
+        # self.curr_global_path = []
+        # self.curr_local_path = []
 
     def query_object(self, query: str):
         # 1. 从查询（如："desk"/"RobotNear(ControlRoom)"）中提取物体名称
@@ -587,7 +549,7 @@ class Dualmap:
 
         # 2. 检查全局地图是否存在
         if not self.global_map_manager.has_global_map():
-            logger.warning("[VLMapNav] [query_object] Global map is empty. Cannot find object.")
+            logger.debug("[VLMapNav] [query_object] Global map is empty. Cannot find object.")
             return None
 
         # 3. 将对象名称转换为 CLIP 特征向量，并传给 global_map_manager 为在 INQUIRY 模式下获取目标点坐标
@@ -610,16 +572,15 @@ class Dualmap:
             logger.warning(f"[VLMapNav] [query_object] No object found for query '{object_name}' in the global map.")
             return None
 
-    def compute_global_path(self, goal_pose: np.ndarray):
+    def compute_global_path(self):
         """
         计算全局路径，存入 self.curr_global_path
         """
-        self.goal_pose = goal_pose
-
         if not self.global_map_manager.has_global_map():
             logger.warning("[Core] No global map available for path planning.")
             return None
-        logger.info(f"[Core] calculating global_path to: {goal_pose}")
+        logger.info(f"[Core] calculating global_path with goal_mode {self.goal_mode}, "
+                    f"goal_pose {self.goal_pose}, inquiry_name {self.inquiry}")
 
         self.global_map_manager.has_action_path = False
 
@@ -634,7 +595,7 @@ class Dualmap:
         # Get 3D path point in world coordinate
         # 计算 全局路径
         self.curr_global_path = self.global_map_manager.calculate_global_path(
-            self.curr_pose, goal_mode=self.get_goal_mode,
+            self.curr_pose, goal_mode=self.goal_mode,
             resolution=self.cfg.resolution, goal_position=self.goal_pose
         )
 
@@ -708,7 +669,7 @@ class Dualmap:
 
         # calculate the path based on current global map
         self.curr_local_path = self.local_map_manager.calculate_local_path(
-            start_pose, goal_mode=self.get_goal_mode, resolution=self.cfg.resolution, goal_position=self.goal_pose
+            start_pose, goal_mode=GoalMode.POSE, resolution=self.cfg.resolution, goal_position=self.goal_pose
         )
 
         if self.curr_local_path is not None:
@@ -800,10 +761,10 @@ class Dualmap:
             cur_path = self.action_path
         if not cur_path:
             logger.debug("[Core] No path available for next waypoint computation.")
-            return None
+            return False, None
         cur_path = remaining_path(cur_path, self.curr_pose)
         if not cur_path:
-            logger.debug("[Core] No remaining path available for next waypoint computation.")
-            return None
-        return cur_path[min(1, len(cur_path)-1)]
+            logger.info("[Core] Already reached the last waypoint: goal reached.")
+            return True, None
+        return False, cur_path[min(1, len(cur_path)-1)]
 

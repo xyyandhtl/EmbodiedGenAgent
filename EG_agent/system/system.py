@@ -122,6 +122,11 @@ class EGAgentSystem:
         self.agent_env.configure_ros(self.cfg)
         self._log_info("Backend created successfully.")
         self._conv_info("后台创建成功，ROS2通信已配置，请启动智能体。")
+        # For test goal_inview
+        # self.agent_env.set_object_places({"flag1": [5, 0, 0]})
+        # self.agent_env.set_object_places({"flag2": [0, 5, 0]})
+        # self.agent_env.run_action("mark", (5, 0, 0))
+        # self.agent_env.run_action("mark", (0, 5, 0))
         return True
     
     def start(self):
@@ -200,30 +205,22 @@ class EGAgentSystem:
 
     def get_agent_pose(self) -> tuple:
         """返回当前机器人位姿 [x,y,z,qw,qx,qy,qz]"""
-        return self.agent_env.cur_agent_pose
+        return tuple(self.dm.realtime_pose[:3, 3]) if self.backend_ready else (0, 0, 0)
 
     def get_cur_target_pos(self) -> list:
         """返回当前所有目标的全局位置 {target_name: [x,y,z]}"""
         return self.agent_env.get_cur_target_pos()
 
     def _run_loop_bt(self):
-        """Main loop: step environment, propagate events, and check completion."""
+        """BT Main loop: step environment, propagate events, and check completion."""
         try:
             self.agent_env.reset()
             bt_task_finshed = False
             while not self._stop_event.is_set() and not bt_task_finshed:
-                if self.dm and self.dm.is_exploring:
-                    # 探索模式：直接计算并发送速度指令
-                    cmd_vel = self.vlmap_backend.get_cmd_vel()
-                    self._conv_info(f"探索模式，计算速度指令{cmd_vel}前往目标点")
-                    self.agent_env.run_action("cmd_vel", cmd_vel)
-                    time.sleep(self.agent_env.tick_interval) # Add a small delay
-                else:
-                    # 正常模式：通过行为树执行
-                    bt_task_finshed = self.agent_env.step()
-                    if self.agent_env.tick_updated:
-                        self._conv_info(f"行为树执行节点更新: {self.get_last_tick_output()}")
-                        self.agent_env.tick_updated = False
+                bt_task_finshed = self.agent_env.step()
+                if self.agent_env.tick_updated:
+                    self._conv_info(f"行为树执行节点更新: {self.get_last_tick_output()}")
+                    self.agent_env.tick_updated = False
         except Exception as e:
             tb = traceback.format_exc()
             self._log_error(f"Run loop_bt exception: {e}")
@@ -231,7 +228,7 @@ class EGAgentSystem:
             self._conv_err("[行为树]运行循环异常，已停止。请查看日志窗口。")
 
     def _run_loop_backend(self):
-        """Main loop: step environment, propagate events, and check completion."""
+        """(已弃用,移至后台线程) Backend loop: backend run_once detector frontend"""
         try:
             while not self._stop_event.is_set():
                 # time.sleep(0.01)
@@ -289,23 +286,6 @@ class EGAgentSystem:
             self._log_warn("[system] Backend not created, cannot query object positions.")
             self._conv_warn("VLMap后台未创建，无法执行行为树，请先点击右侧“创建后台”。")
             return
-        # 以下注释代码块已迁移至 Action (Find)作为行为树一个动作节点执行
-        # (a) 调用 vlmap 查询目标
-        # self._log_info(f"[system] [update_cur_target_set] self.target_set: {self.target_set}")
-        # cur_goal_places = {}
-        # for obj in self.target_set:
-        #     target_position = self.vlmap_backend.query_object(obj)
-        #     self._log_info(f"[system] [update_cur_target_set] query {obj} result: {target_position}")
-        #     if target_position is not None:
-        #         cur_goal_places[obj] = target_position
-        # # (b) 将 目标位置 传递给 IsaacsimEnv，并更新可视性（每个目标是否在当前相机的视锥内）
-        # if not cur_goal_places:
-        #     self._conv_warn("无法在当前地图中找到目标对象或相似目标，请确认目标对象是否存在于场景中。")
-        #     self._log_warn("[system] [update_cur_target_set] No target positions found for current targets.")
-        #     return
-        # self.agent_env.set_object_places(cur_goal_places)
-        # self._log(f"[system] [update_cur_target_set] set cur_goal_places to env: {cur_goal_places}")
-        # self._conv_info(f"已更新当前目标位置为 \n{cur_goal_places}")
 
         # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定
         self.agent_env.bind_bt(self.bt)

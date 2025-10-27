@@ -168,7 +168,7 @@ def main():
                     reports_dir=REPORTS_DIR,
                     marks=marks,
                 )
-            # 新增：处理独立的 mark 动作
+            # 3) Handle mark action
             if zmq.mark_pos is not None:
                 handle_mark_action(
                     mark_pos_or_none=zmq.mark_pos,
@@ -193,7 +193,8 @@ def main():
                     data_to_send['rgb'] = rgb_tensor[0, :, :, :3].to("cpu", non_blocking=False).numpy().astype(np.uint8)
                 if depth_tensor is not None:
                     depth_data = (depth_tensor[0] * 1000).to("cpu", non_blocking=False).numpy()
-                    depth_data[depth_data > 65535] = 0
+                    # depth_data[depth_data > 65535] = 0    # uint16 truncate
+                    depth_data[depth_data > 20000] = 0      # depth camera max range truncate (set 10m)
                     data_to_send['depth'] = depth_data.astype(np.uint16)
                 if pose_camera_tuple is not None:
                     data_to_send['pose'] = (pose_camera_tuple[0][0].cpu().numpy(), pose_camera_tuple[1][0].cpu().numpy())

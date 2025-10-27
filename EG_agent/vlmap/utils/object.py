@@ -26,7 +26,7 @@ class LocalObjStatus(Enum):
     PENDING = "pending for updating"  # 对象已不在活跃窗口内，但尚未稳定
     ELIMINATION = "elimination"  # 对象需要被删除
     LM_ELIMINATION = "elimination for low mobility"  # 低移动性对象的删除状态
-    HM_ELIMINATION = "elimination for high mpbility"  # 高移动性对象的删除状态
+    HM_ELIMINATION = "elimination for high mobility"  # 高移动性对象的删除状态
     WAITING = "waiting for stable obj process"  # 对象已稳定，等待进一步处理
 
 class BaseObject:

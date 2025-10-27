@@ -186,3 +186,4 @@ class GoalMode(Enum):
     CLICK = "click"
     INQUIRY = "inquiry"
     POSE = "pose"
+    NONE = "none"

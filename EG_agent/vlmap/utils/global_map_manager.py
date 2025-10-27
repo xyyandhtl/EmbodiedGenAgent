@@ -665,10 +665,9 @@ class GlobalMapManager(BaseMapManager):
 
         if goal_mode == GoalMode.POSE:
             # logger.info("[GlobalMap][Path] Goal mode: POSE")
-            if goal_position_world is not None:
-                return nav_graph.calculate_pos_2d(goal_position_world)
-            else:
+            if not goal_position_world:
                 return None
+            return nav_graph.calculate_pos_2d(goal_position_world)
 
         if goal_mode == GoalMode.INQUIRY:
             # logger.info("[GlobalMap][Path] Goal mode: INQUIRY")
@@ -757,8 +756,8 @@ class GlobalMapManager(BaseMapManager):
             obj_feat = torch.from_numpy(obj.clip_ft).to("cuda")
             max_sim = F.cosine_similarity(text_query_ft.unsqueeze(0), obj_feat.unsqueeze(0), dim=-1).item()
             obj_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
-            logger.info(f"[GlobalMap][Inquiry] =========={obj_name}==============")
-            logger.info(f"[GlobalMap][Inquiry] Itself: \t{max_sim:.3f}")
+            logger.debug(f"[GlobalMap][Inquiry] =========={obj_name}==============")
+            logger.debug(f"[GlobalMap][Inquiry] Itself: \t{max_sim:.3f}")
 
             # Check if there are related objects, if so calculate cosine similarity with related_objs
             if obj.related_objs:
@@ -768,7 +767,7 @@ class GlobalMapManager(BaseMapManager):
                     sim = F.cosine_similarity(text_query_ft.unsqueeze(0), related_obj_ft_tensor.unsqueeze(0),
                                               dim=-1).item()
                     related_sims.append(sim)
-                    logger.info(f"[GlobalMap][Inquiry] Related: \t{sim:.3f}")
+                    logger.debug(f"[GlobalMap][Inquiry] Related: \t{sim:.3f}")
 
                 # Update max_sim with the largest similarity from related_objs
                 max_sim = max(max_sim, max(related_sims))
@@ -782,7 +781,7 @@ class GlobalMapManager(BaseMapManager):
 
         # --- FIX: Check if any candidates were found before accessing the list ---
         if not sorted_candidates:
-            logger.warning("[GlobalMap][Inquiry] No matching object candidates found for the query.")
+            logger.debug("[GlobalMap][Inquiry] No matching object candidates found for the query.")
             return None, 0.0
         # --- END FIX ---
 
@@ -808,14 +807,13 @@ class GlobalMapManager(BaseMapManager):
         # Output the best candidate and its similarity
         best_candidate_name = self.visualizer.obj_classes.get_classes_arr()[best_candidate.class_id]
 
-        logger.info(f"[GlobalMap][Inquiry] We ignore {len(self.ignore_global_obj_list)} objects in this global query.")
-        logger.info(f"[GlobalMap][Inquiry] Best Candidate: '{best_candidate_name}' with similarity: {best_similarity:.3f}")
+        logger.debug(f"[GlobalMap][Inquiry] We ignore {len(self.ignore_global_obj_list)} objects in this global query.")
+        logger.debug(f"[GlobalMap][Inquiry] Best Candidate: '{best_candidate_name}' with similarity: {best_similarity:.3f}")
 
         if self.best_candidate_name is None:
             self.best_candidate_name = best_candidate_name
 
-        logger.info(f"[GlobalMap][Inquiry] Memory Best Candidate '{self.best_candidate_name}'")
-        print(f"[GlobalMap][Inquiry] Memory Best Candidate '{self.best_candidate_name}'")
+        logger.debug(f"[GlobalMap][Inquiry] Memory Best Candidate '{self.best_candidate_name}'")
 
         # Set flag to the best candidate for visualization
         best_candidate.nav_goal = True
