@@ -563,13 +563,10 @@ class NavigationGraph:
         # 2. Handle point cloud with negative values
         point_cloud = np.asarray(self.pcd.points)  # Get the point cloud as a numpy array
 
-        # Adjust only x and y coordinates to positive values
-        point_cloud[:, 0] -= self.pcd_min[0]  # Adjust x-coordinate
-        point_cloud[:, 1] -= self.pcd_min[1]  # Adjust y-coordinate
-
         # 3. Iterate through the point cloud and mark the corresponding cells as occupied (1)
-        x_cells = np.floor(point_cloud[:, 0] / self.cell_size).astype(int)
-        y_cells = np.floor(point_cloud[:, 1] / self.cell_size).astype(int)
+        # needs adjusting x,y coordinates to positive values)
+        x_cells = np.floor((point_cloud[:, 0] - self.pcd_min[0]) / self.cell_size).astype(int)
+        y_cells = np.floor((point_cloud[:, 1] - self.pcd_min[1]) / self.cell_size).astype(int)
 
         # Mark occupied cells
         occupancy_grid_map[y_cells, x_cells] = 1
