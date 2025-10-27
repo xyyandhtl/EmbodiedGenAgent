@@ -88,10 +88,10 @@ class Dualmap:
         self.rotation_threshold = cfg.rotation_threshold
 
         # pose memory
+        self.realtime_pose: np.ndarray = np.eye(4)
         self.curr_pose: np.ndarray = None
-        self.realtime_pose: np.ndarray = None
         self.prev_pose: np.ndarray = None
-        self.goal_pose: np.ndarray = None
+        self.goal_pose: list = None
         self.wait_count = 0
 
         # --- 2. Threads & Queues ---
@@ -344,8 +344,10 @@ class Dualmap:
         """
         Independent thread: path planning with low-frequency execution and switching.
         This thread covers the "find" and "walk" action.
+        Currently, after goal_mode is set first time, path_plan is always running
+        TODO: check if goal_inview, reset_query_and_navigation()
         """
-        loop_interval = 5.0
+        loop_interval = 8.0
 
         while not self.stop_thread:
             logger.info(f"[PathPlanningThread] Loop begins.")
@@ -526,11 +528,14 @@ class Dualmap:
     # Public API for navigation and querying
     # ===============================================
     def reset_query_and_navigation(self):
-        """重置导航状态，包括清除全局地图查询和重置路径规划器。"""
-        self.inquiry_feat = None
-        self.action_path = []
-        self.curr_global_path = []
-        self.curr_local_path = []
+        """重置 Find 涉及的导航状态，包括清除索引目标和已索引到的目标位置。"""
+        self.inquiry = ""
+        self.goal_mode = GoalMode.NONE
+        self.goal_pose = None
+        # self.inquiry_feat = None
+        # self.action_path = []
+        # self.curr_global_path = []
+        # self.curr_local_path = []
 
     def query_object(self, query: str):
         # 1. 从查询（如："desk"/"RobotNear(ControlRoom)"）中提取物体名称
@@ -756,10 +761,10 @@ class Dualmap:
             cur_path = self.action_path
         if not cur_path:
             logger.debug("[Core] No path available for next waypoint computation.")
-            return None
+            return False, None
         cur_path = remaining_path(cur_path, self.curr_pose)
         if not cur_path:
             logger.info("[Core] Already reached the last waypoint: goal reached.")
-            return None
-        return cur_path[min(1, len(cur_path)-1)]
+            return True, None
+        return False, cur_path[min(1, len(cur_path)-1)]
 

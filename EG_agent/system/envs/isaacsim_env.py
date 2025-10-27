@@ -37,7 +37,7 @@ class IsaacsimEnv(BaseAgentEnv):
         self.cam_forward_axis = "z"  # hardcoded: camera's +Z faces forward
         # Real-time visibility state: {goal_name_lower: bool}
         self.goal_inview = {}
-        self.near_dist = 2.0  # meters
+        self.near_dist = 3.0  # meters
 
         # Defer ROS init to configure_ros
         self.ros_node: Node | None = None
@@ -71,7 +71,6 @@ class IsaacsimEnv(BaseAgentEnv):
         self._cur_path: list = []
         self._action_count: int = 0
         self.cur_goal_places = dict()  # str -> [x,y,z]
-        self.cur_agent_pose: tuple = (0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0)  # [x,y,z,qw,qx,qy,qz]
         self.cur_cmd_vel: tuple = (0.0, 0.0, 0.0)  # vx, vy, wz
 
         # 可扩展动作分发表（运行时绑定）
@@ -202,13 +201,8 @@ class IsaacsimEnv(BaseAgentEnv):
         # Forward to backend directly
         self._vlmap_backend.push_data(rgb_img, depth_img, pose, timestamp)
 
-        # Update env state 
-        self.cur_agent_pose = (t[0], t[1], t[2], qw, qx, qy, qz)
-        # TODO: if need more status updates
-
         # Recompute real-time FOV visibility check using cam_pose_w
         self._update_goal_inview()
-        # self.cur_cmd_vel = self._vlmap_backend.get_cmd_vel()
 
     def _ros_pub_tick(self):
         """Timer tick to publish all visualizations via ROSPublisher."""
@@ -218,10 +212,6 @@ class IsaacsimEnv(BaseAgentEnv):
     # ==========================================
     # 环境状态与目标管理（状态更新、目标位置、完成判定）
     # ==========================================
-    def agent_env_update(self, env_data: dict):
-        """更新环境态并实时刷新目标可视性。"""
-        self.cur_agent_states = {**env_data}
-
     def get_inview_goals(self) -> list[str]:
         """返回当前在相机视锥内的目标名称列表）。"""
         return [name for name, inview in self.goal_inview.items() if inview]
@@ -232,6 +222,9 @@ class IsaacsimEnv(BaseAgentEnv):
         self.cur_goal_places.update(places)
         # Recompute visibility when goal set changes
         self._update_goal_inview()
+
+    def get_cur_target(self):
+        return self._vlmap_backend.dualmap.goal_pose
 
     def reset(self):
         """重置环境：清空内部状态、发布零速以停止，并等待首次同步观测（最多约2秒）。"""
@@ -343,85 +336,36 @@ class IsaacsimEnv(BaseAgentEnv):
     # ==========================================
     # 相机几何与可视性辅助（旋转、视锥检测）
     # ==========================================
-    def _quat_to_rotmat(self, qw: float, qx: float, qy: float, qz: float) -> _np.ndarray:
-        """单位四元数 (w,x,y,z) -> 旋转矩阵 (3x3)。"""
-        # Normalize to be safe
-        n = math.sqrt(qw*qw + qx*qx + qy*qy + qz*qz)
-        if n == 0.0:
-            return _np.eye(3, dtype=_np.float64)
-        qw, qx, qy, qz = qw/n, qx/qx, qy/qy, qz/qz
-        xx, yy, zz = qx*qx, qy*qy, qz*qz
-        xy, xz, yz = qx*qy, qx*qz, qy*qz
-        wx, wy, wz = qw*qx, qw*qy, qw*qz
-        R = _np.array([
-            [1.0 - 2.0*(yy + zz),     2.0*(xy - wz),         2.0*(xz + wy)],
-            [    2.0*(xy + wz),   1.0 - 2.0*(xx + zz),       2.0*(yz - wx)],
-            [    2.0*(xz - wy),       2.0*(yz + wx),     1.0 - 2.0*(xx + yy)]
-        ], dtype=_np.float64)
-        return R
-
-    def _point_in_cam_fov(
-        self,
-        cam_pose: _np.ndarray | list | tuple,
-        point_world: _np.ndarray,
-        fov_x_deg: float,
-        aspect: float,
-        forward_axis: str = "z",
-    ) -> bool:
-        """判断点是否处于相机视锥内。"""
-        cx, cy, cz, qw, qx, qy, qz = map(float, cam_pose)
-        cam_pos = _np.array([cx, cy, cz], dtype=_np.float64)
-        R_wc = self._quat_to_rotmat(qw, qx, qy, qz)  # world-from-camera
-        R_cw = R_wc.T  # camera-from-world
-        v = point_world - cam_pos
-        v_cam = R_cw @ v  # point in camera coordinates
-
-        # Choose axes according to forward
-        if forward_axis.lower().startswith("x"):
-            f_idx, h_idx, v_idx = 0, 1, 2
-        else:  # "z" default
-            f_idx, h_idx, v_idx = 2, 0, 1
-
-        depth = v_cam[f_idx]
-        # Only require point to be in front of the camera; ignore near/far planes
-        if depth <= 0.0:
-            return False
-
-        half_x = math.radians(fov_x_deg) * 0.5
-        # Derive vertical half FOV from aspect = width/height
-        half_y = math.atan(math.tan(half_x) / float(aspect))
-
-        # Projected half-width/height at current depth
-        max_h = math.tan(half_x) * depth
-        max_v = math.tan(half_y) * depth
-        return (abs(v_cam[h_idx]) <= max_h) and (abs(v_cam[v_idx]) <= max_v)
-
     def _update_goal_inview(self):
         """根据当前相机位姿与目标位置，实时更新目标是否在视野内。"""
         # Default: no goals or no pose => all False
         self.goal_inview = {name: False for name in self.cur_goal_places.keys()}
-        cam_pose = self.cur_agent_pose
-        if not cam_pose or len(cam_pose) != 7:
-            return
+        cam_pose = self._vlmap_backend.dualmap.realtime_pose
         
-        cam_pos = _np.array(cam_pose[:3])
+        cam_pos = cam_pose[:3, 3]
+        cam_rot = cam_pose[:3, :3]
         for name, pt in self.cur_goal_places.items():
             point = _np.array(pt[:3])
-            
             # 先进行距离阀值判断
             dist = float(_np.linalg.norm(point - cam_pos))
             if dist > float(self.near_dist):
                 self.goal_inview[name] = False
                 continue
-
             # 再根据当前目标点的3D坐标，判断是否在相机视锥内
-            self.goal_inview[name] = self._point_in_cam_fov(
-                cam_pose,
-                point,
-                fov_x_deg=self.cam_fov_x_deg,
-                aspect=self.cam_aspect,
-                forward_axis=self.cam_forward_axis,
-            )
+            # 计算目标方向向量（世界坐标系）
+            delta_world = point - cam_pos
+            # 将目标方向投影到相机局部坐标系
+            delta_body = cam_rot.T @ delta_world
+            # 计算偏航角
+            # 在相机坐标系中，+Z轴为前方，X-Z平面的偏航角
+            goal_yaw = _np.arctan2(delta_body[0], delta_body[2])  # atan2(x, z) for yaw around Y axis
+            # 计算水平FOV的一半（弧度）
+            fov_x_rad = _np.radians(self.cam_fov_x_deg / 2.0)
+            # 检查目标是否在水平FOV内
+            if abs(goal_yaw) <= fov_x_rad:
+                self.goal_inview[name] = True
+            else:
+                self.goal_inview[name] = False
 
     # ==========================================
     # ROS 生命周期（关闭/清理）

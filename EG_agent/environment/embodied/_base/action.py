@@ -25,10 +25,11 @@ class EmbodiedAction(Action):
         if cur_action == "find":
             if self.agent_env._vlmap_backend.object_found(self.args[0]):
                 self.logger.info(f"Executing action: {cur_action} on target: {target_obj} done")
+                self.agent_env.set_object_places({self.args[0]: self.agent_env.get_cur_target()})
                 cur_action_done = True
             elif self.agent_env._vlmap_backend.is_exploring(self.args[0]):
                 # self.logger.info(f"Executing action: {cur_action} on target: {target_obj} running")
-                pass    # TODO: 加上自主探索一次仍失败后再调一次start_find
+                pass
             else:
                 self.logger.info(f"Executing action: {cur_action} on target: {target_obj} begin")
                 self.agent_env._vlmap_backend.start_find(self.args[0])

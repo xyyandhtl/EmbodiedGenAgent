@@ -122,6 +122,11 @@ class EGAgentSystem:
         self.agent_env.configure_ros(self.cfg)
         self._log_info("Backend created successfully.")
         self._conv_info("后台创建成功，ROS2通信已配置，请启动智能体。")
+        # For test goal_inview
+        # self.agent_env.set_object_places({"flag1": [5, 0, 0]})
+        # self.agent_env.set_object_places({"flag2": [0, 5, 0]})
+        # self.agent_env.run_action("mark", (5, 0, 0))
+        # self.agent_env.run_action("mark", (0, 5, 0))
         return True
     
     def start(self):
@@ -200,7 +205,7 @@ class EGAgentSystem:
 
     def get_agent_pose(self) -> tuple:
         """返回当前机器人位姿 [x,y,z,qw,qx,qy,qz]"""
-        return self.agent_env.cur_agent_pose
+        return tuple(self.dm.realtime_pose[:3, 3]) if self.backend_ready else (0, 0, 0)
 
     def get_cur_target_pos(self) -> list:
         """返回当前所有目标的全局位置 {target_name: [x,y,z]}"""

@@ -44,8 +44,7 @@ class VLMapNav(DualmapInterface):
         # self.logger.info(f"Starting find '{target_object}'")
         self.dualmap.goal_pose = None
         self.dualmap.inquiry = target_object
-        self.dualmap.goal_mode = GoalMode.NONE  # 重置以使探索中可再次调用以重设探索点
-        self.dualmap.goal_event.set()           # 即时唤醒触发一次 path_plan
+        self.dualmap.goal_event.set()   # 即时唤醒触发一次 path_plan
 
     def object_found(self, target_object: str):
         return target_object in self.dualmap.inquiry_found
@@ -67,9 +66,6 @@ class VLMapNav(DualmapInterface):
     def get_action_path(self):
         self.dualmap.compute_action_path()
 
-    def get_next_waypoint(self):
-        return self.dualmap.compute_next_waypoint()
-
     def get_cmd_vel(self) -> tuple:
         """
         Generate a single velocity command based on the next waypoint and current pose.
@@ -77,15 +73,19 @@ class VLMapNav(DualmapInterface):
         """
         # dualmap.curr_pose 只有在判断为关键帧后运行 self.dualmap.parallel_process() 时才会被更新，所以该值为关键帧位姿
         # 而实时计算速度指令，应用实时位姿
-        if self.dualmap.realtime_pose is None:
-            self.logger.debug("[VLMapNav] [get_cmd_vel] realtime_pose is None, please ensure start!")
-            return (0.0, 0.0, 0.0)
+        # if self.dualmap.realtime_pose is None:
+        #     self.logger.debug("[VLMapNav] [get_cmd_vel] realtime_pose is None, please ensure start!")
+        #     return (0.0, 0.0, 0.0)
 
         start = time.time()
-        next_waypoint = self.get_next_waypoint()
+        arrived, next_waypoint = self.dualmap.compute_next_waypoint()
+        if arrived:
+            self.logger.info("[VLMapNav] goal_pose arrived")
+            # reset to trigger another 'find' workflow to avoid stuck
+            self.dualmap.reset_query_and_navigation()
+            return (0.0, 0.0, 0.0)
         if next_waypoint is None:
             self.logger.debug("[VLMapNav] [get_cmd_vel] get_next_waypoint failed!")
-            self.dualmap.goal_mode = GoalMode.NONE  # reset goal mode
             return (0.0, 0.0, 0.0)
         
         # Controller constants (tune as needed)
