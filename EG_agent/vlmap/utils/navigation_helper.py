@@ -205,6 +205,93 @@ class LayoutMap:
         self.wall_pcd.points = o3d.utility.Vector3dVector(wall_points)
         # self.visualize_wall_pcd()
         print(f"Extracted wall point cloud with {len(self.wall_pcd.points)} points.")
+
+    def convert_local_binary_map_to_3d(self, local_binary_map, x_offset, y_offset, num_samples_per_grid=10, z_value=0.0):
+        wall_points_3d = []
+        for i in range(local_binary_map.shape[0]):
+            for j in range(local_binary_map.shape[1]):
+                if local_binary_map[i, j] == 1:
+                    # Global grid indices
+                    global_i = i + x_offset
+                    global_j = j + y_offset
+
+                    x_samples = np.random.uniform(
+                        self.x_edges[global_i], self.x_edges[global_i + 1], num_samples_per_grid
+                    )
+                    y_samples = np.random.uniform(
+                        self.y_edges[global_j], self.y_edges[global_j + 1], num_samples_per_grid
+                    )
+                    z_samples = np.full_like(x_samples, z_value)
+                    grid_points = np.stack((x_samples, y_samples, z_samples), axis=1)
+                    wall_points_3d.append(grid_points)
+
+        if wall_points_3d:
+            return np.vstack(wall_points_3d)
+        else:
+            return np.empty((0, 3))
+
+    def update_local_layout_occmap_wallpcd(self, partial_pcd, current_pose, update_radius):
+        """
+        Update the layout map with a partial point cloud in a local region.
+        """
+        if self.occ_map is None:
+            print("[LayoutMap] Occupancy map not initialized. Cannot perform local update.")
+            return
+
+        # 1. Define world and grid boundaries for the update region
+        center_world = current_pose[:3, 3]
+        min_bound_world = center_world - update_radius
+        max_bound_world = center_world + update_radius
+
+        min_x_grid = np.floor((min_bound_world[0] - self.x_edges[0]) / self.resolution).astype(int)
+        min_y_grid = np.floor((min_bound_world[1] - self.y_edges[0]) / self.resolution).astype(int)
+        max_x_grid = np.ceil((max_bound_world[0] - self.x_edges[0]) / self.resolution).astype(int)
+        max_y_grid = np.ceil((max_bound_world[1] - self.y_edges[0]) / self.resolution).astype(int)
+
+        # Clamp to map boundaries
+        min_x = max(0, min_x_grid)
+        min_y = max(0, min_y_grid)
+        max_x = min(self.occ_map.shape[0] - 1, max_x_grid)
+        max_y = min(self.occ_map.shape[1] - 1, max_y_grid)
+
+        # 2. Remove old wall points in the update region
+        if self.wall_pcd is not None and not self.wall_pcd.is_empty():
+            bbox = o3d.geometry.AxisAlignedBoundingBox(min_bound_world[:3], max_bound_world[:3])
+            indices_to_remove = bbox.get_point_indices_within_bounding_box(self.wall_pcd.points)
+            self.wall_pcd = self.wall_pcd.select_by_index(indices_to_remove, invert=True)
+
+        # 3. Update local occ_map
+        self.occ_map[min_x:max_x+1, min_y:max_y+1] = 0
+        points = np.asarray(partial_pcd.points)
+        if points.shape[0] > 0:
+            xy_points = points[:, :2]
+            new_occ, _, _ = np.histogram2d(
+                xy_points[:, 0],
+                xy_points[:, 1],
+                bins=[self.x_edges, self.y_edges]
+            )
+            self.occ_map += new_occ
+
+        # 4. Extract new local_wall_pcd
+        local_occ_map = self.occ_map[min_x:max_x+1, min_y:max_y+1]
+        # (1) process_local_binary_map
+        threshold = self.calculate_threshold()
+        local_binary_map = (local_occ_map > threshold).astype(np.uint8)
+        local_cleaned_map = self.remove_small_components(local_binary_map)
+        local_processed_map = self.apply_morphological_operations(local_cleaned_map)
+        # (2) cconvert as 3D wall_pcd
+        new_wall_points = self.convert_local_binary_map_to_3d(local_processed_map, min_x, min_y,
+                                                              num_samples_per_grid=10, z_value=self.cfg.floor_height)
+
+        # 5. Add new local_wall_pcd to the global
+        if new_wall_points.shape[0] > 0:
+            new_wall_pcd = o3d.geometry.PointCloud()
+            new_wall_pcd.points = o3d.utility.Vector3dVector(new_wall_points)
+            if self.wall_pcd is None:
+                self.wall_pcd = new_wall_pcd
+            else:
+                self.wall_pcd += new_wall_pcd
+        print(f"[LayoutMap] Updated local layout. Total wall points: {len(self.wall_pcd.points)}")
     
     def save_wall_pcd(self):
         """
@@ -476,13 +563,10 @@ class NavigationGraph:
         # 2. Handle point cloud with negative values
         point_cloud = np.asarray(self.pcd.points)  # Get the point cloud as a numpy array
 
-        # Adjust only x and y coordinates to positive values
-        point_cloud[:, 0] -= self.pcd_min[0]  # Adjust x-coordinate
-        point_cloud[:, 1] -= self.pcd_min[1]  # Adjust y-coordinate
-
         # 3. Iterate through the point cloud and mark the corresponding cells as occupied (1)
-        x_cells = np.floor(point_cloud[:, 0] / self.cell_size).astype(int)
-        y_cells = np.floor(point_cloud[:, 1] / self.cell_size).astype(int)
+        # needs adjusting x,y coordinates to positive values)
+        x_cells = np.floor((point_cloud[:, 0] - self.pcd_min[0]) / self.cell_size).astype(int)
+        y_cells = np.floor((point_cloud[:, 1] - self.pcd_min[1]) / self.cell_size).astype(int)
 
         # Mark occupied cells
         occupancy_grid_map[y_cells, x_cells] = 1

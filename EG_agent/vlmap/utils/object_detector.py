@@ -344,6 +344,22 @@ class Detector:
         with self.layout_lock:
             return self.layout_pointcloud
 
+    def get_partial_layout_pcd(self, current_pose, update_radius):
+        """
+        Return a part of the layout_pointcloud within a certain radius of the current_pose.
+        """
+        full_pcd = self.get_layout_pointcloud()
+        if full_pcd.is_empty():
+            return full_pcd
+
+        center = current_pose[:3, 3]
+        min_bound = center - update_radius
+        max_bound = center + update_radius
+        bounding_box = o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
+
+        partial_pcd = full_pcd.crop(bounding_box)
+        return partial_pcd
+
     def save_layout(self):
         if self.layout_pointcloud is not None:
             layout_pcd = self.get_layout_pointcloud()
