@@ -1,9 +1,12 @@
 import numpy as np
 import threading
 import time
+import copy
+import math
 from typing import Callable, Dict, List, Any, Iterable
 from pathlib import Path
 from PIL import Image
+import open3d as o3d
 from dynaconf import Dynaconf
 import traceback
 
@@ -393,11 +396,99 @@ class EGAgentSystem:
         return self._gen_dummy_image(260, 180, "Instance 2D")
 
     def get_current_instance_3d_image(self) -> np.ndarray:
-        """3D instance visualization image from dualmap."""
-        # TODO: 3D实例分割可视化
-        # if dm.visualizer.last_instance3d_image is not None:
-        #     return dm.visualizer.last_instance3d_image
-        return self._gen_dummy_image(260, 180, "Instance 3D")
+        """
+        3D instance visualization image from dualmap.
+        TODO: 实现真正的 3D 实例分割框渲染图
+        """
+        # 自适应相机视角的点云离屏渲染（无 try，倾斜视角，视场更大，光心对准机器人）
+        if not self.backend_ready:
+            return self._gen_dummy_image(260, 180, "Instance 3D")
+
+        pc: o3d.geometry.PointCloud = self.dm.detector.layout_pointcloud
+        if pc is None:
+            return self._gen_dummy_image(260, 180, "Instance 3D")
+
+        # 1) 清理数据并复制，避免修改全局地图
+        pts = np.asarray(pc.points)
+        if pts.size == 0:
+            return self._gen_dummy_image(260, 180, "Instance 3D")
+
+        valid_mask = np.isfinite(pts).all(axis=1)
+        if not valid_mask.all():
+            pc_use = o3d.geometry.PointCloud()
+            pc_use.points = o3d.utility.Vector3dVector(pts[valid_mask])
+            if pc.has_colors():
+                cols = np.asarray(pc.colors)
+                if cols.shape[0] == pts.shape[0]:
+                    pc_use.colors = o3d.utility.Vector3dVector(cols[valid_mask])
+        else:
+            pc_use = copy.deepcopy(pc)
+
+        # 2) 如果没有颜色，用高度快速着色（蓝->青->黄 渐变）
+        if not pc_use.has_colors():
+            z = np.asarray(pc_use.points)[:, 2]
+            zmin, zmax = float(np.min(z)), float(np.max(z))
+            if not math.isfinite(zmin) or not math.isfinite(zmax) or abs(zmax - zmin) < 1e-6:
+                colors = np.tile(np.array([[0.3, 0.6, 0.9]], dtype=np.float64), (z.shape[0], 1))
+            else:
+                t = (z - zmin) / (zmax - zmin)
+                colors = np.stack([t, 0.8 * (1.0 - t), 1.0 - 0.5 * t], axis=1).astype(np.float64)
+            pc_use.colors = o3d.utility.Vector3dVector(colors)
+
+        # 3) 仅取机器人附近约 20m 的区域（XY ±10m，Z ±5m）
+        ax, ay, az = self.get_agent_pose()
+        half_xy, half_z = 10.0, 5.0
+        crop_box = o3d.geometry.AxisAlignedBoundingBox(
+            np.array([ax - half_xy, ay - half_xy, az - half_z], dtype=float),
+            np.array([ax + half_xy, ay + half_xy, az + half_z], dtype=float),
+        )
+        pc_crop = pc_use.crop(crop_box)
+        if len(pc_crop.points) > 0:
+            pc_use = pc_crop
+
+        # 3) 自适应参数：包围盒、半径与降采样
+        aabb = pc_use.get_axis_aligned_bounding_box()
+        extent = np.asarray(aabb.get_extent())
+        radius = float(np.linalg.norm(extent) * 0.5)
+        if not math.isfinite(radius) or radius <= 1e-6:
+            radius = 1.0
+
+        n_pts = len(pc_use.points)
+        if n_pts > 300_000:
+            vx = max(float(np.max(extent)) / 600.0, 0.01) if np.all(np.isfinite(extent)) else 0.02
+            pc_use = pc_use.voxel_down_sample(vx)
+            aabb = pc_use.get_axis_aligned_bounding_box()
+            extent = np.asarray(aabb.get_extent())
+            radius = float(np.linalg.norm(extent) * 0.5) if np.all(np.isfinite(extent)) else radius
+        n_pts = len(pc_use.points)
+
+        # 4) 离屏渲染（更大 FOV、更近距离，倾斜视角，光心对准机器人）
+        w, h = 260, 180
+        renderer = o3d.visualization.rendering.OffscreenRenderer(w, h)
+        scene = renderer.scene
+        scene.set_background([1.0, 1.0, 1.0, 1.0])  # 白色背景
+
+        mat = o3d.visualization.rendering.MaterialRecord()
+        mat.shader = "defaultUnlit"
+        mat.point_size = 3.0 if n_pts < 150_000 else 1.5
+        scene.add_geometry("scene_pc", pc_use, mat)
+
+        # 倾斜视角：XY 偏移 + 抬高，朝向机器人
+        center = np.array([ax, ay, az], dtype=float)  # look-at：机器人位置
+        dir_xy = np.array([1.0, 1.0, 0.0], dtype=float)
+        dir_xy /= np.linalg.norm(dir_xy)
+        up = np.array([0.0, 0.0, 1.0], dtype=float)
+
+        fov = 90.0
+        dist = max(radius * 1.2, 1.5)
+        eye = center + dir_xy * dist + np.array([0.0, 0.0, 0.6 * radius], dtype=float)
+
+        renderer.setup_camera(fov, center, eye, up)
+        img = renderer.render_to_image()
+        np_img = np.asarray(img)
+        if np_img.ndim == 3 and np_img.shape[2] == 4:
+            np_img = np_img[:, :, :3]
+        return np_img
 
     # ---------------------- 占位内部工具 ----------------------
     def _append_conversation(self, line: str):
