@@ -576,7 +576,7 @@ class Detector:
 
         # if detection is empty, return
         if len(confidence) == 0:
-            logger.warning("[Detector] No detections found in curr frame.")
+            logger.debug("[Detector] No detections found in curr frame.")
             # set current results as empty dict
             self.curr_results = {}
             self.curr_detections = sv.Detections.empty()
@@ -1641,7 +1641,7 @@ class Filter:
                 "[Detector][Filter] After filtering, no detection result remains..."
             )
             return None
-        logger.info(
+        logger.debug(
             f"[Detector][Filter] Filtered {self.get_len()} out of {original_num}"
         )
 
@@ -1759,13 +1759,13 @@ class Filter:
                         ):
                             keep[j] = False
                             self.merge_detections(j, i)
-                            logger.info(
+                            logger.debug(
                                 f"[Detector][Filter] Merging {class_j} into {class_i}"
                             )
                         else:
                             keep[i] = False
                             self.merge_detections(i, j)
-                            logger.info(
+                            logger.debug(
                                 f"[Detector][Filter] Merging {class_i} into {class_j}"
                             )
 

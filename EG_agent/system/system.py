@@ -39,7 +39,7 @@ class EGAgentSystem:
         # 逻辑 Goal 生成器：用于将用户的自然语言指令（如“找到椅子”）解析为结构化的 逻辑目标
         self.goal_generator = LogicGoalGenerator()
         self.goal_generator.prepare_prompt(object_set=None)
-        self._log(f"goal_generator prompt: \n{self.goal_generator.prompt_scene}")
+        self._log_info(f"goal_generator prompt: \n{self.goal_generator.prompt_scene}")
 
         # 行为树规划器：用于根据逻辑目标，动态地生成一个 BT。连续任务时需即时更新 cur_cond_set 和 key_objects
         self.bt_generator = BTGenerator(env_name="embodied",
@@ -111,7 +111,7 @@ class EGAgentSystem:
         if self.vlmap_backend is not None:
             self._log_warn("Backend already created.")
             return True
-        self._conv("智能体: 正在创建后台，请稍候...")
+        self._conv_debug("正在创建后台，请稍候...")
         self._log_info("Creating backend...")
         self.vlmap_backend = VLMapNav()
         self.agent_env.set_vlmap_backend(self.vlmap_backend)
@@ -135,17 +135,16 @@ class EGAgentSystem:
             self._log_warn("Agent system already running.")
             return
         self._log_info("Agent system started.")
-        if self.backend_ready:
-            self.dm.start_threading()
-            self._conv_info(f"检测和建图线程已启动。")
-
         self._stop_event.clear()
         self._running = True
         self._is_finished = False
-        self._log_info("Environment reset.")
+        if self.backend_ready:
+            self.dm.start_threading()
+            self._conv_debug(f"检测和建图线程已启动。")
+            self._conv_info(f"智能体已启动成功!")
         self._thread_bt = threading.Thread(target=self._run_loop_bt, daemon=True)
         self._thread_bt.start()
-
+        self._conv_debug(f"行为树执行循环已开始工作。")
         self._emit("status", self.status)
 
     def stop(self):
@@ -155,8 +154,10 @@ class EGAgentSystem:
             return
         self._log_info("Agent system stop requested.")
         self._stop_event.set()
-        if self._thread_bt.is_alive():
-            self._thread_bt.join()
+        if self._thread_bt and self._thread_bt.is_alive():
+            self._thread_bt.join(timeout=5)
+            if self._thread_bt.is_alive():
+                self._log_warn("Agent loop did not stop cleanly.")
         if self.backend_ready:
             self.dm.end_process()
         self._is_finished = True
@@ -190,7 +191,6 @@ class EGAgentSystem:
         # For quick test, directly set a goal pose
         # self.vlmap_backend.get_global_path(goal_pose=np.array([3.5, 6.0, 0.0]))
         # self._log(f"Computed global_path: {self.dm.curr_global_path}")
-
         self._conv_info("地图加载完成。")
 
     def get_last_tick_output(self) -> str:
@@ -215,12 +215,29 @@ class EGAgentSystem:
         """BT Main loop: step environment, propagate events, and check completion."""
         try:
             self.agent_env.reset()
-            bt_task_finshed = False
-            while not self._stop_event.is_set() and not bt_task_finshed:
+            self._log_info("Environment reset.")
+            # bt_task_finshed = False
+            while not self._stop_event.is_set():
                 bt_task_finshed = self.agent_env.step()
                 if self.agent_env.tick_updated:
-                    self._conv_info(f"行为树执行节点更新: {self.get_last_tick_output()}")
+                    self._conv_debug(f"行为树执行节点更新: {self.get_last_tick_output()}")
                     self.agent_env.tick_updated = False
+                    if self.agent_env.last_tick_output.startswith("Find"):
+                        self._conv_info(f"目标 {self.agent_env.cur_target}: 正在从地图中搜寻!")
+                    elif self.agent_env.last_tick_output.startswith("Walk"):
+                        self._conv_debug(f"目标 {self.agent_env.cur_target}: 已在场景中找到最相似目标 {self.dm.found_obj_name}!")
+                        self._conv_info(f"目标 {self.agent_env.cur_target}: 正在前往!")
+                    elif self.agent_env.last_tick_output.startswith("Mark"):
+                        self._conv_info(f"目标 {self.agent_env.cur_target}: 已插旗标记!")
+                    elif self.agent_env.last_tick_output.startswith("Capture"):
+                        self._conv_info(f"目标 {self.agent_env.cur_target}: 已拍摄，请检查图片窗口!")
+                    elif self.agent_env.last_tick_output.startswith("Report"):
+                        self._conv_info(f"目标 {self.agent_env.cur_target}: 已生成报告，请检查报告窗口!")
+                if bt_task_finshed:
+                    self._conv_debug(f"任务目标: {self.agent_env.cur_goal_set}")
+                    self._conv_debug(f"当前状态: {self.agent_env.condition_set}")
+                    self._conv_info(f"当前任务已执行完毕!")
+                    self.agent_env.reset()
         except Exception as e:
             tb = traceback.format_exc()
             self._log_error(f"Run loop_bt exception: {e}")
@@ -249,7 +266,7 @@ class EGAgentSystem:
         # self.goal = "RobotNear_Equipment"  # 调试测试
         self._log_info(f"User instruction: {text}")
         self._log_info(f"[system] [feed_instruction] goal is: {self.goal}")
-        self._conv(f"智能体: 已解析指令为逻辑目标: {self.goal}")
+        self._conv_debug(f"已解析指令为逻辑目标: {self.goal}")
         if not self.goal:
             self._conv_err("无法理解指令，已中断指令下发")
             return
@@ -267,7 +284,7 @@ class EGAgentSystem:
             return
         self._log_info(f"[system] [feed_instruction] target_set is: {self.target_set}")
         self.bt_generator.set_key_objects(list(self.target_set))
-        self._conv(f"智能体: 准备从逻辑目标生成以 {self.target_set} 为目标集的行为树")
+        self._conv_debug(f"准备从逻辑目标生成以 {self.target_set} 为目标集的行为树")
         # Generate BehaviorTree
         self.bt = self.bt_generator.generate(btml_name="tree")
         if not self.bt:
@@ -278,7 +295,7 @@ class EGAgentSystem:
         # load the saved behavior tree image into memory for GUI
         img_path = Path(self.bt_name + ".png")
         self._last_bt_image = np.array(Image.open(img_path).convert("RGB"))
-        self._log(f"Behavior tree image updated: {img_path.resolve()}")
+        self._log_info(f"Behavior tree image updated: {img_path.resolve()}")
         self._conv_info("已生成行为树并显示在左下窗口")
 
         # 3-pre. 检查 VLMap 后台是否已创建, 若未创建, 则直接返回
@@ -347,13 +364,13 @@ class EGAgentSystem:
         if entites:
             self.bt_objects = {name.split('/', 1)[1].capitalize() for name, _ in entites if name.startswith("global/")}
             self.goal_generator.prepare_prompt(self.bt_objects)
-            # self._log(f"Updated goal_generator with scene_prompt: {self.goal_generator.prompt_scene}")
+            # self._log_info(f"Updated goal_generator with scene_prompt: {self.goal_generator.prompt_scene}")
             # self.bt_generator.set_key_objects(list(self.bt_objects))
-            # self._log(f"已设置原子动作: \n{[action.name for action in self.bt_generator.planner.actions]}")
+            # self._log_info(f"已设置原子动作: \n{[action.name for action in self.bt_generator.planner.actions]}")
             if self.cfg['caring_mode']:
                 chinese_objs = self.goal_generator.ask_question(
                     f"请用中文列出以下英文目标集合：{self.bt_objects}", use_system_prompt=False)
-                self._conv(f"智能体: 可以参考的任务对象有 {chinese_objs}")
+                self._conv_debug(f"可以参考的任务对象有 {chinese_objs}")
 
     def get_semantic_map_image(self) -> np.ndarray:
         """Semantic/path map from dualmap; fallback to detector annotated image."""
@@ -389,12 +406,18 @@ class EGAgentSystem:
         self._conversation.append(line)
         if len(self._conversation) > 2000:
             self._conversation = self._conversation[-1000:]
+            # 新增：通知前端对话被截断，需要重置 UI 计数/视图
+            self._emit("conversation_reset", True)
 
     # 简洁的对话分级包装
     def _conv(self, line: str):
         """Append a line to the conversation buffer with trimming."""
         self._append_conversation(line)
         self._emit("conversation", self.get_conversation_text())
+
+    def _conv_debug(self, message: str):
+        """Emit an agent error message with a tag for GUI styling."""
+        self._conv(f"智能体: {message}")
 
     def _conv_err(self, message: str):
         """Emit an agent error message with a tag for GUI styling."""
