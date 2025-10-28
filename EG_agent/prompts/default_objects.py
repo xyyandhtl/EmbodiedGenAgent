@@ -11,4 +11,4 @@
 #     "Victim", "Rescuer", "Visitor", "Staff"
 # }
 
-AllCondition = 'RobotNear_<AllObject>, IsCaptured_<AllObject>, IsMarked_<AllObject>, IsReported_<AllObject>'
+AllCondition = 'RobotNear_<Object>, IsCaptured_<Object>, IsMarked_<Object>, IsReported_<Object>'

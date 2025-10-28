@@ -143,7 +143,7 @@ class LocalMapManager(BaseMapManager):
     ) -> None:
 
         # if first, then just insert
-        if self.is_initialized == False:
+        if not self.is_initialized:
             # Init the local map
             logger.info("[LocalMap] Init Local Map by first observation")
 
@@ -156,7 +156,7 @@ class LocalMapManager(BaseMapManager):
             return
 
         if len(curr_observations) == 0:
-            logger.warning("[LocalMap] No observation in this frame")
+            logger.debug("[LocalMap] No observation in this frame")
             self.update_local_map(curr_observations)
             return
 

@@ -37,7 +37,7 @@ class IsaacsimEnv(BaseAgentEnv):
         self.cam_forward_axis = "z"  # hardcoded: camera's +Z faces forward
         # Real-time visibility state: {goal_name_lower: bool}
         self.goal_inview = {}
-        self.near_dist = 3.0  # meters
+        self.near_dist = 2.0  # meters
 
         # Defer ROS init to configure_ros
         self.ros_node: Node | None = None
@@ -68,7 +68,6 @@ class IsaacsimEnv(BaseAgentEnv):
         self._ros_pub_executor: ThreadPoolExecutor = None
         self._ros_pub_timer = None
 
-        self._cur_path: list = []
         self._action_count: int = 0
         self.cur_goal_places = dict()  # str -> [x,y,z]
         self.cur_cmd_vel: tuple = (0.0, 0.0, 0.0)  # vx, vy, wz
@@ -229,7 +228,7 @@ class IsaacsimEnv(BaseAgentEnv):
     def reset(self):
         """重置环境：清空内部状态、发布零速以停止，并等待首次同步观测（最多约2秒）。"""
         # Clear internal state
-        self.goal_inview = {}
+        # self.goal_inview = {}
         self.init_statistics()
 
     # ==========================================

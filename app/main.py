@@ -24,20 +24,19 @@ def np_to_qpix(img: np.ndarray) -> QtGui.QPixmap:
     else:
         h, w, c = img.shape
         if c == 3:
-            qimg = QtGui.QImage(img.data, w, h, 3 * w, QtGui.QImage.Format_RGB888)
+            qimg = QtGui.QImage(img.data, w, h, 3 * w, QtGui.QImage.Format_BGR888)
         else:
             img = img[..., :3]
-            qimg = QtGui.QImage(img.data, w, h, 3 * w, QtGui.QImage.Format_RGB888)
+            qimg = QtGui.QImage(img.data, w, h, 3 * w, QtGui.QImage.Format_BGR888)
     return QtGui.QPixmap.fromImage(qimg.rgbSwapped())
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    # ---- 新增: 跨线程通信信号 ----
     logSignal = QtCore.pyqtSignal(str)
     convSignal = QtCore.pyqtSignal(str)
     entitiesSignal = QtCore.pyqtSignal(list)   # list of (name, info)
     statusSignal = QtCore.pyqtSignal(bool)
-    # 新增：通用任务完成信号（desc, ok, err）
+    convResetSignal = QtCore.pyqtSignal()
     taskFinished = QtCore.pyqtSignal(str, bool, str)
 
     def __init__(self):
@@ -54,9 +53,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # 连接信号到槽 (主线程更新 UI)
         self.logSignal.connect(self._on_log_update)
         self.convSignal.connect(self._on_conv_update)
+        self.convResetSignal.connect(self._on_conv_reset)
         self.entitiesSignal.connect(self._on_entities_update)
         self.statusSignal.connect(self._on_status_update)
-        # 新增：任务完成通知
         self.taskFinished.connect(self._on_task_finished)
 
         # 按钮绑定
@@ -64,7 +63,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stopBtn.clicked.connect(self.on_stop)
         self.sendInstructionBtn.clicked.connect(self.on_send_instruction)
         self.instructionEdit.returnPressed.connect(self.on_send_instruction)
-        # 新增：保存/载入地图
+        # 保存/载入地图
         self.saveMapBtn.clicked.connect(self.on_save_map)
         self.loadMapBtn.clicked.connect(self.on_load_map)
 
@@ -88,13 +87,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer_bt.timeout.connect(self.update_bt)
         self.timer_bt.start(5000)
 
-        # --- 新增：聊天视图初始化（替换对话文本框为聊天气泡） ---
+        # --- 聊天视图初始化（替换对话文本框为聊天气泡） ---
         self._conv_msg_seen = 0  # 改为按消息计数，而不是按行
         self._init_chat_view()
 
         # 替换原直接更新 UI 的监听器 -> 仅发射信号
         self.agent_system.add_listener("log", lambda data: self.logSignal.emit(data))
         self.agent_system.add_listener("conversation", lambda data: self.convSignal.emit(data))
+        # 监听对话重置事件
+        self.agent_system.add_listener("conversation_reset", lambda _data: self.convResetSignal.emit())
         self.agent_system.add_listener("entities", lambda data: self.entitiesSignal.emit(list(data)))
         self.agent_system.add_listener("status", lambda data: self.statusSignal.emit(bool(data)))
 
@@ -104,15 +105,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.entityTable.verticalHeader().setVisible(False)
 
         self.update_statusbar()
-        # 新增：初始化分段状态栏（状态/BT节点/在视野目标）
+        # 初始化分段状态栏（状态/BT节点/在视野目标）
         self._init_statusbar()
         self.update_statusbar()
 
-        # --- 新增：初始化图像与报告浏览器 ---
+        # --- 初始化图像与报告浏览器 ---
         self._setup_image_browser()
         self._setup_report_browser()
 
-        # --- 新增：将 semanticMapLabel ==> semanticMapWidget，以实现用鼠标左键拖拽和滚轮平移 ---
+        # --- 将 semanticMapLabel ==> semanticMapWidget，以实现用鼠标左键拖拽和滚轮平移 ---
         self.semanticMapWidget = ZoomableImageWidget()
         # Assuming the placeholder is in a layout within its parent
         if self.semanticMapLabel.parentWidget().layout() is not None:
@@ -126,7 +127,7 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             print("Warning: Could not find layout to replace semantic map placeholder.")
 
-        # --- 新增：将 behaviorTreeLabel ==> behaviorTreeWidget，同样支持拖拽/缩放 ---
+        # --- 将 behaviorTreeLabel ==> behaviorTreeWidget，同样支持拖拽/缩放 ---
         self.behaviorTreeWidget = ZoomableImageWidget()
         if hasattr(self, "behaviorTreeLabel") and self.behaviorTreeLabel.parentWidget().layout() is not None:
             bt_layout = self.behaviorTreeLabel.parentWidget().layout()
@@ -207,7 +208,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def update_slow(self):
         if not self.agent_system.backend_ready:
             return
-        """低频: 3D实例 + 语义/路径地图"""
+        """低频: 3D实例 + 语义/路径地图 + 图片和报告目录刷新"""
         # 3D实例
         self.instance3DLabel.setPixmap(
             np_to_qpix(self.agent_system.get_current_instance_3d_image())
@@ -216,6 +217,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.semanticMapWidget.setPixmap(
             np_to_qpix(self.agent_system.get_semantic_map_image())
         )
+        # 自动刷新图片和报告目录内容
+        self._refresh_image_and_report_dirs()
+
+    def _refresh_image_and_report_dirs(self):
+        """定期刷新图片和报告目录内容"""
+        # 刷新图像目录
+        if hasattr(self, "imageDirEdit"):
+            current_image_path = self.imageDirEdit.text().strip()
+            if current_image_path and os.path.isdir(current_image_path):
+                self.load_image_folder(current_image_path)
+        
+        # 刷新报告目录
+        if hasattr(self, "reportDirEdit"):
+            current_report_path = self.reportDirEdit.text().strip()
+            if current_report_path and os.path.isdir(current_report_path):
+                self.load_report_folder(current_report_path)
 
     def update_bt(self):
         # if not self.agent_system.backend_ready:
@@ -236,13 +253,20 @@ class MainWindow(QtWidgets.QMainWindow):
         if not hasattr(self, "conversationList"):
             return
         groups = self._group_messages(txt)
-        if len(groups) < self._conv_msg_seen:
-            self._conv_msg_seen = 0
-            self.conversationList.clear()
+        # 修复：忽略过期/乱序快照，避免覆盖已渲染的新消息
+        if len(groups) <= self._conv_msg_seen:
+            return
+        # 仅追加新增的消息
         for msg in groups[self._conv_msg_seen:]:
-            self._append_chat_line(msg)  # 传入带角色前缀的整条消息
+            self._append_chat_line(msg)
         self._conv_msg_seen = len(groups)
         self.conversationList.scrollToBottom()
+
+    # 收到后端对话被截断后，清空 UI 并重置计数
+    def _on_conv_reset(self):
+        self._conv_msg_seen = 0
+        if hasattr(self, "conversationList"):
+            self.conversationList.clear()
 
     def _on_entities_update(self, rows):
         self.entityTable.setRowCount(len(rows))
@@ -271,7 +295,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._avatar_user = self._make_avatar(QtGui.QColor("#3d7cff"), "你")
         self._avatar_agent = self._make_avatar(QtGui.QColor("#6a7a8a"), "智")
 
-        # 新增：可复用的聊天主题与严重级别标签
+        # 可复用的聊天主题与严重级别标签
         self._severity_tags = {"[!error]": "error", "[!warn]": "warn", "[!info]": "info"}
         self._chat_theme = {
             "user":        {"bg": "#3d7cff", "fg": "#ffffff", "border": "none"},
@@ -347,7 +371,7 @@ class MainWindow(QtWidgets.QMainWindow):
             is_user = False
             content = line.split(":", 1)[1].strip()
 
-        # 新增：解析严重级别标签
+        # 解析严重级别标签
         kind = None
         for tag, k in self._severity_tags.items():
             if content.startswith(tag):
@@ -362,7 +386,7 @@ class MainWindow(QtWidgets.QMainWindow):
         item.setSizeHint(QtCore.QSize(row_w, widget.sizeHint().height()))
         self.conversationList.addItem(item)
         self.conversationList.setItemWidget(item, widget)
-        # 新增：确保添加后行宽正确（处理偶发的延迟布局）
+        # 确保添加后行宽正确（处理偶发的延迟布局）
         self._update_chat_item_widths()
 
     def _build_chat_item(self, text: str, is_user: bool, kind: str | None = None) -> QtWidgets.QWidget:
@@ -381,7 +405,7 @@ class MainWindow(QtWidgets.QMainWindow):
         bubble.setWordWrap(False)
         bubble.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
 
-        # 新增：根据主题与严重级别设置样式
+        # 根据主题与严重级别设置样式
         if is_user:
             theme = self._chat_theme.get("user")
         else:
@@ -409,7 +433,7 @@ class MainWindow(QtWidgets.QMainWindow):
             h.addStretch(1)
         return w
 
-    # 新增：根据列表视口宽度，更新所有行宽以确保用户消息贴右边缘
+    # 根据列表视口宽度，更新所有行宽以确保用户消息贴右边缘
     def _update_chat_item_widths(self):
         if not hasattr(self, "conversationList"):
             return
@@ -424,7 +448,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 continue
             it.setSizeHint(QtCore.QSize(row_w, w.sizeHint().height()))
 
-    # 新增：监听 conversationList 的尺寸变化
+    # 监听 conversationList 的尺寸变化
     def eventFilter(self, obj, event):
         if hasattr(self, "conversationList") and obj is self.conversationList:
             if event.type() == QtCore.QEvent.Resize:
@@ -479,7 +503,7 @@ class MainWindow(QtWidgets.QMainWindow):
         formatted_targets = [f"{coord:.2f}" for coord in target_pos]
         self._set_status_segment("goals", f"TargetPos: {formatted_targets}")
 
-    # --- 新增：分段状态栏（可扩展） ---
+    # --- 分段状态栏（可扩展） ---
     def _init_statusbar(self):
         if not hasattr(self, "statusbar"):
             return
@@ -512,7 +536,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if seg is not None:
             seg.setText(text)
 
-    # --- 新增：图像浏览器初始化与行为 ---
+    # --- 图像浏览器初始化与行为 ---
     def _setup_image_browser(self):
         # 允许 UI 里不存在时安全跳过（若未合并 .ui 修改）
         if not hasattr(self, "imageList"):
@@ -631,7 +655,7 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg.resize(min(max(pix.width(), 640), 1200), min(max(pix.height(), 480), 900))
         dlg.exec_()
 
-    # --- 新增：报告浏览器初始化与行为 ---
+    # --- 报告浏览器初始化与行为 ---
     def _setup_report_browser(self):
         if not hasattr(self, "reportList"):
             return
@@ -754,7 +778,7 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(path))
 
-    # --- 新增：后台任务执行与状态回调 ---
+    # --- 后台任务执行与状态回调 ---
     def _set_busy(self, busy: bool, msg: str | None = None):
         if msg:
             # 让状态文字立刻可见
@@ -778,7 +802,7 @@ class MainWindow(QtWidgets.QMainWindow):
             try:
                 func()
             except Exception:
-                # 新增：捕获完整堆栈，便于定位问题
+                # 捕获完整堆栈，便于定位问题
                 ok, err = False, traceback.format_exc()
             finally:
                 # 通知主线程结束
@@ -792,7 +816,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.statusbar.showMessage(f"{desc}完成", 3000)
         else:
             self.statusbar.showMessage(f"{desc}失败: {err.splitlines()[-1] if err else ''}", 5000)
-            # 新增：将完整异常堆栈追加到日志窗口
+            # 将完整异常堆栈追加到日志窗口
             if hasattr(self, "logText") and self.logText is not None:
                 try:
                     cur = self.logText.toPlainText()

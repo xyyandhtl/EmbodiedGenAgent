@@ -1,3 +1,5 @@
+import time
+
 from EG_agent.planning.btpg.behavior_tree.base_nodes import Action
 from EG_agent.planning.btpg.behavior_tree import Status
 
@@ -40,18 +42,22 @@ class EmbodiedAction(Action):
             self.agent_env.run_action("cmd_vel", cur_cmd_vel)
             # If current target has entered camera FOV, consider walk complete
             if self.agent_env.goal_inview.get(target_obj, False):
+                time.sleep(1.0)
                 cur_action_done = True
         elif cur_action == "mark":
             self.logger.info(f"Executing action: {cur_action} on target: {target_obj}")
             self.agent_env.run_action("mark", None)
+            time.sleep(2.0)
             cur_action_done = True
         elif cur_action == "capture":
             self.logger.info(f"Executing action: {cur_action} on target: {target_obj}")
             self.agent_env.run_action("enum_command", (0,))
+            time.sleep(2.0)
             cur_action_done = True
         elif cur_action == "report":
             self.logger.info(f"Executing action: {cur_action} on target: {target_obj}")
             self.agent_env.run_action("enum_command", (1,))
+            time.sleep(2.0)
             cur_action_done = True
         else:
             raise ValueError(f"Unknown action type: {cur_action}")

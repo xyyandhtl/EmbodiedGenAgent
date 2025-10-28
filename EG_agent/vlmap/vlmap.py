@@ -108,7 +108,7 @@ class VLMapNav(DualmapInterface):
         # Distance to goal
         dist_to_goal = np.linalg.norm(delta_world[:2])
         if dist_to_goal <= goal_reached_threshold:
-            self.logger.info(f"[VLMapNav] [get_cmd_vel] Waypoint reached (distance = {dist_to_goal: .2f}m).")
+            # self.logger.debug(f"[VLMapNav] [get_cmd_vel] Waypoint reached (distance = {dist_to_goal: .2f}m).")
             return (0.0, 0.0, 0.0)
 
         # 2. 将 目标方向 投影到 机器人局部坐标系

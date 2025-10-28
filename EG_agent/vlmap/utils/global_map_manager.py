@@ -1128,7 +1128,7 @@ class GlobalMapManager(BaseMapManager):
         start = time.time()
         # The image with all elements (static + dynamic) is already cached
         result = cv2.cvtColor(np.array(self.cached_semantic_map), cv2.COLOR_RGB2BGR)  # Convert PIL (RGB) image to numpy array (BGR) for OpenCV
-        logger.info(f"[semantic] get_semantic_map_image: {time.time() - start:.4f} seconds")
+        logger.debug(f"[semantic] get_semantic_map_image: {time.time() - start:.4f} seconds")
         return result
 
     def get_traversable_map_image(self) -> None | np.ndarray:
@@ -1142,7 +1142,7 @@ class GlobalMapManager(BaseMapManager):
         start = time.time()
         # The image with all elements (static + dynamic) is already cached
         result = cv2.cvtColor(np.array(self.cached_traversable_map), cv2.COLOR_RGB2BGR)  # Convert PIL (RGB) image to numpy array (BGR) for OpenCV
-        logger.info(f"[traversable] get_traversable_map_image: {time.time() - start:.4f} seconds")
+        logger.debug(f"[traversable] get_traversable_map_image: {time.time() - start:.4f} seconds")
         return result
 
     def update_pose_path(self, curr_pose=None, nav_path=None):

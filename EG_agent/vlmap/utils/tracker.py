@@ -356,7 +356,7 @@ class Tracker:
                 self.curr_frame[idx].matched_obj_uid = None
                 add_new_obj += 1
 
-        logger.info(f"[Tracker] Added {add_new_obj} new objects, current detections: {len_curr_obs}")
+        logger.debug(f"[Tracker] Added {add_new_obj} new objects, current detections: {len_curr_obs}")
 
     def update_global_obs_with_sim_mat(
         self,
