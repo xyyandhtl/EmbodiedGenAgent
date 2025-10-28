@@ -820,8 +820,7 @@ class GlobalMapManager(BaseMapManager):
         # Output the best candidate and its similarity
         best_candidate_name = self.visualizer.obj_classes.get_classes_arr()[best_candidate.class_id]
 
-        logger.debug(f"[GlobalMap][Inquiry] We ignore {len(self.ignore_global_obj_list)} objects in this global query.")
-        logger.debug(f"[GlobalMap][Inquiry] Best Candidate: '{best_candidate_name}' with similarity: {best_similarity:.3f}")
+        # logger.debug(f"[GlobalMap][Inquiry] We ignore {len(self.ignore_global_obj_list)} objects in this global query.")
 
         if self.best_candidate_name is None:
             self.best_candidate_name = best_candidate_name

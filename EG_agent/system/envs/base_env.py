@@ -84,7 +84,7 @@ class BaseAgentEnv:
 
         self.bt.tick()
         bt_output = self.bt.visitor.output_str
-        parts = bt_output.split("Action", 1)
+        parts = bt_output.rsplit("Action", 1)
         if len(parts) > 1:
             bt_output = parts[1].strip()
         else:

@@ -374,7 +374,8 @@ class Dualmap:
                     logger.debug(f"[PathPlanningThread] compute path to {self.inquiry} "
                                  f"with query position {self.goal_pose}")
                 else:
-                    if self.goal_mode != GoalMode.RANDOM:         # 避免多次设定随机探索目标点
+                    if self.goal_mode != GoalMode.RANDOM: # 避免多次设定随机探索目标点
+                        path_exist = False  # First time begin explore
                         self.goal_mode = GoalMode.RANDOM
                         self.inquiry_found.discard(self.inquiry)    # 静态环境不存在这种情况
                         logger.debug(f"[PathPlanningThread] compute path to {self.inquiry} "
@@ -571,21 +572,19 @@ class Dualmap:
         # 4. 调用 GlobalMapManager 的 find_best_candidate_with_inquiry 来寻找最佳匹配
         #    这将返回 GlobalObject 实例和分数
         best_candidate, best_similarity = self.global_map_manager.find_best_candidate_with_inquiry()
-
+        
         # 5. 处理结果
         if best_candidate is not None:
             # 提取物体边界框的中心点作为其位置
-            position = best_candidate.bbox_2d.get_center().tolist()
             self.found_obj_name = self.global_map_manager.obj_classes.get_classes_arr()[best_candidate.class_id]
-            
             logger.info(f"[VLMapNav] [query_object] Found best match '{self.found_obj_name}' "
-                        f"for query '{object_name}' with score {best_similarity:.4f} "
-                        f"at position {position}.")
-            return position
-        else:
-            logger.warning(f"[VLMapNav] [query_object] No object found for query '{object_name}'"
-                           f" in the global map.")
-            return None
+                        f"for query '{object_name}' with score {best_similarity:.4f}")
+            if best_similarity > 0.5:
+                position = best_candidate.bbox_2d.get_center().tolist()
+                return position
+        
+        logger.warning(f"[VLMapNav] [query_object] No object found for query '{object_name}'")
+        return None
 
     def compute_global_path(self):
         """
