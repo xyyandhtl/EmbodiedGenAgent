@@ -187,7 +187,6 @@ class EGAgentSystem:
                        f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
                        f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
         self.update_objects_from_map()
-
         # For quick test, directly set a goal pose
         # self.vlmap_backend.get_global_path(goal_pose=np.array([3.5, 6.0, 0.0]))
         # self._log(f"Computed global_path: {self.dm.curr_global_path}")
@@ -296,7 +295,7 @@ class EGAgentSystem:
         img_path = Path(self.bt_name + ".png")
         self._last_bt_image = np.array(Image.open(img_path).convert("RGB"))
         self._log_info(f"Behavior tree image updated: {img_path.resolve()}")
-        self._conv_info("已生成行为树并显示在左下窗口")
+        self._conv_info("已生成行为树在左下窗口!")
 
         # 3-pre. 检查 VLMap 后台是否已创建, 若未创建, 则直接返回
         if not self.backend_ready:
