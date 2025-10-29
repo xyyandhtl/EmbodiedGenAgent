@@ -208,11 +208,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def update_slow(self):
         if not self.agent_system.backend_ready:
             return
-        """低频: 3D实例 + 语义/路径地图 + 图片和报告目录刷新"""
-        # 3D实例
-        self.instance3DLabel.setPixmap(
-            np_to_qpix(self.agent_system.get_current_instance_3d_image())
-        )
+        """低频: 语义/路径地图 + 图片和报告目录刷新"""
         # 语义地图
         self.semanticMapWidget.setPixmap(
             np_to_qpix(self.agent_system.get_semantic_map_image())

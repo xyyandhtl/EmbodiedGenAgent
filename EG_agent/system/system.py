@@ -396,12 +396,7 @@ class EGAgentSystem:
             return self.dm.detector.annotated_image
         return self._gen_dummy_image(260, 180, "Instance 2D")
 
-    def get_current_instance_3d_image(self) -> np.ndarray:
-        """3D instance visualization image from dualmap."""
-        # TODO: 3D实例分割可视化
-        # if dm.visualizer.last_instance3d_image is not None:
-        #     return dm.visualizer.last_instance3d_image
-        return self._gen_dummy_image(260, 180, "Instance 3D")
+
 
     # ---------------------- 占位内部工具 ----------------------
     def _append_conversation(self, line: str):

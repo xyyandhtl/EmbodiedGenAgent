@@ -1,5 +1,5 @@
 # EmbodiedGenAgent
-A Generative Embodied Agent that transforms open-ended instructions into behavior trees for autonomous decision-making and action execution loop
+A generative embodied agent translating open-ended instructions into behavior trees for autonomous execution with map-text cross-modal goal indexing
 
 ## Dependencies
 EG_agent:
