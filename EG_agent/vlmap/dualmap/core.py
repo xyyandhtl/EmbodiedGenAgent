@@ -327,8 +327,8 @@ class Dualmap:
                 # Global Mapping
                 self.global_map_manager.process_observations(global_obs_list)
 
-                if len(global_obs_list) > 0:
-                    self.global_map_manager.mark_semantic_map_dirty()
+                # if len(global_obs_list) > 0:
+                self.global_map_manager.mark_semantic_map_dirty()
 
             # Get memory usage statistics of local and global maps
             # mem_stats = get_map_memory_usage(self.local_map_manager.local_map,
@@ -545,12 +545,18 @@ class Dualmap:
         self.inquiry = ""
         self.goal_mode = GoalMode.NONE
         self.goal_pose = None
-        # self.inquiry_feat = None
-        # self.action_path = []
-        # self.curr_global_path = []
-        # self.curr_local_path = []
+        
+        self.inquiry_feat = None
+        self.action_path = []
+        self.curr_global_path = []
+        self.curr_local_path = []
+
+        self.global_map_manager.mark_semantic_map_dirty()
 
     def query_object(self, query: str):
+        if query == "explore":
+            logger.info("[Core][Query] set explore mode")
+            return None
         # 1. 从查询（如："desk"/"RobotNear(ControlRoom)"）中提取物体名称
         match = re.search(r'\((.*?)\)', query)
         if match:

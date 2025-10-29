@@ -61,6 +61,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # 按钮绑定
         self.startBtn.clicked.connect(self.on_start)
         self.stopBtn.clicked.connect(self.on_stop)
+        self.startExploreBtn.clicked.connect(self.on_start_explore)
+        self.stopExploreBtn.clicked.connect(self.on_stop_explore)
         self.sendInstructionBtn.clicked.connect(self.on_send_instruction)
         self.instructionEdit.returnPressed.connect(self.on_send_instruction)
         # 保存/载入地图
@@ -142,8 +144,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._run_in_background("创建后台", self.agent_system.create_backend)
 
     def _set_controls_enabled(self, enabled: bool):
-        # 仅控制右侧四个按钮变灰/启用
-        for name in ("startBtn", "stopBtn", "saveMapBtn", "loadMapBtn"):
+        # 控制右侧按钮启用状态（含探索按钮）
+        for name in ("startBtn", "stopBtn", "startExploreBtn", "stopExploreBtn", "saveMapBtn", "loadMapBtn"):
             w = getattr(self, name, None)
             if w is not None:
                 w.setEnabled(enabled)
@@ -181,6 +183,15 @@ class MainWindow(QtWidgets.QMainWindow):
         if not path:
             return
         self._run_in_background("载入地图", lambda: self.agent_system.load(map_path=path))
+
+    # 新增：探索开始/停止
+    def on_start_explore(self):
+        self.agent_system.begin_explore()
+        self.update_statusbar()
+
+    def on_stop_explore(self):
+        self.agent_system.stop_explore()
+        self.update_statusbar()
 
     # ----------------- Periodic Updates -----------------
     def update_fast(self):

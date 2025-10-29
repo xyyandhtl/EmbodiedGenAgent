@@ -111,7 +111,8 @@ class EGAgentSystem:
         if self.vlmap_backend is not None:
             self._log_warn("Backend already created.")
             return True
-        self._conv_debug("正在创建后台，请稍候...")
+        self._conv_info("正在创建后台，请稍候...")
+        self._conv_debug("提示：使用期间任何时候，可以手动操探键盘方向键和ZX转向键控制智能体移动！")
         self._log_info("Creating backend...")
         self.vlmap_backend = VLMapNav()
         self.agent_env.set_vlmap_backend(self.vlmap_backend)
@@ -164,6 +165,31 @@ class EGAgentSystem:
         self._running = False
         self._log_info("Agent loop stopped.")
         self._emit("status", self.status)
+
+    def begin_explore(self):
+        """Request the agent to begin exploring the environment."""
+        if not self.backend_ready:
+            self._log_warn("Backend not created, cannot explore.")
+            return
+        self.dm.reset_query_and_navigation()
+        self.dm.inquiry = "explore"
+        self.dm.goal_event.set()
+        self.agent_env.is_explore = True
+        self._conv_info("自主探索已启动。")
+        self._log_info("Agent system exploration requested.")
+        self._emit("explore", True)
+
+    def stop_explore(self):
+        """Request the agent to stop exploring the environment."""
+        if not self.backend_ready:
+            self._log_warn("Backend not created, cannot stop explore.")
+            return
+        self.agent_env.bt = None  # Clear any existing BT
+        self.agent_env.is_explore = False
+        self.dm.reset_query_and_navigation()
+        self._conv_info("自主探索已停止。")
+        self._log_info("Agent system stop exploration requested.")
+        self._emit("explore", False)
 
     def save(self, map_path: str | None = None):
         """Save the current global map to the given path or default cfg.map_save_path."""

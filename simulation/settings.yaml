@@ -1,5 +1,5 @@
 defaults:
-  - _self_
+  - _self_2.0
 #  - override hydra/job_logging: stdout
 
 # scene config

@@ -865,12 +865,12 @@ class GlobalMapManager(BaseMapManager):
                         self._update_traversable_map_cache()
                 
                 # Sleep for a short time to prevent busy waiting
-                self._stop_map_update.wait(timeout=0.5)
+                self._stop_map_update.wait(timeout=1.0)
 
             except Exception as e:
                 logger.error(f"[GlobalMapManager] Error in background map update thread: {e}")
                 # Sleep before retrying to avoid rapid error loops
-                self._stop_map_update.wait(timeout=1)
+                self._stop_map_update.wait(timeout=2.0)
 
     def _update_semantic_map_cache(self, resolution=0.03):
         """

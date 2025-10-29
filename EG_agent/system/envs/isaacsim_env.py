@@ -234,7 +234,7 @@ class IsaacsimEnv(BaseAgentEnv):
     # ==========================================
     # 动作发布与执行（cmd_vel、nav_pose、枚举命令、mark）
     # ==========================================
-    def run_action(self, action_type: str, action: tuple | None, verbose=True):
+    def run_action(self, action_type: str, action: tuple | None, verbose=False):
         """
         严格动作格式：
           - 'cmd_vel': [vx, vy, wz]

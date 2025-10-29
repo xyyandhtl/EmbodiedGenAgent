@@ -48,6 +48,7 @@ Base Version:
 - [x] An interactive GUI `app` to demo, providing real-time visualization of key system information such as the global semantic map, behavior tree, planned paths and etc.
 
 Future Work:
+- [ ] Continue optimize system logic to run long-time stable
 - [ ] Enhance the prompts engineering with memory / map for better reasoning and interactive task
 - [ ] Support user-defined object classes in the GUI window, and some preset scene classes templates
 - [ ] More scenes in the Isaacsim simulator
