@@ -1000,7 +1000,7 @@ class GlobalMapManager(BaseMapManager):
             return tuple(point_img)
 
         try:
-            coord_font = ImageFont.truetype("DejaVuSans.ttf", size=int(10 * (scale_factor / 3)))
+            coord_font = ImageFont.truetype("DejaVuSans.ttf", size=int(10 * (scale_factor / 2)))
         except IOError:
             coord_font = ImageFont.load_default()
 
