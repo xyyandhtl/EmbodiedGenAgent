@@ -1,0 +1,13 @@
+StorageTank
+Pipeline
+WindTurbine
+Dock
+CargoShip
+HydrogenTank
+CompressorStation
+Warehouse
+PowerGenerator
+PipeRack
+GasCylinder
+Chimney
+Container
