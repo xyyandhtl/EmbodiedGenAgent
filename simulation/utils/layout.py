@@ -7,7 +7,7 @@ def setup_isaacsim_settings():
     # carb_settings_iface.set("/persistent/isaac/asset_root/cloud", 
     #                         "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0")
     carb_settings_iface.set("/app/window/maximized", False)
-    carb_settings_iface.set("/app/window/fullscreen", False)
+    carb_settings_iface.set("/app/window/fullscreen", True)
     # carb_settings_iface.set("/app/window/width", 1280)
     # carb_settings_iface.set("/app/window/height", 720)
     carb_settings_iface.set("/app/window/hideUi", True)

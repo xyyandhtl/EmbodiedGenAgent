@@ -1,47 +1,10 @@
 check_mobility: false
 
 # low mobility examples
-lm_examples:
-  - "Building"
-  - "Apartment"
-  - "Window"
-  - "Balcony"
-  - "Door"
-  - "Awning"
-  - "AirConditioner"
-  - "Signboard"
-  - "Billboard"
-  - "Shop"
-  - "Restaurant"
-  - "Cafe"
-  - "Stairs"
-  - "Gate"
-  - "Fence"
-  - "Sidewalk"
-  - "Crosswalk"
-  - "Streetlight"
-  - "ElectricPole"
-  - "FireHydrant"
-  - "TrafficLight"
-  - "TrafficSign"
-  - "BusStop"
-  - "TrafficCone"
-  - "TrafficBarrier"
-  - "ConstructionSign"
-  - "Tree"
-  - "Bush"
-  - "Bench"
-  - "Flowerpot"
-  - "TrashBin"
-  - "Mailbox"
+lm_examples: []
 
 # high mobility examples
-hm_examples:
-  - "Car"
-  - "Truck"
-  - "Bicycle"
-  - "Motorcycle"
-  - "Person"
+hm_examples: []
 
 # Extra descriptions for low mobility examples
 lm_descriptions:

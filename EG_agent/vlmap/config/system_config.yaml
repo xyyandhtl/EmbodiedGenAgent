@@ -29,7 +29,7 @@ yolo:
   # given_classes_path: ./config/class_list/gpt_indoor_classroom.txt
 
   ## Outdoor Classes List
-  given_classes_path: ./config/class_list/city_road.txt
+  given_classes_path: ./config/class_list
 
   ## Dataset Classes List (_ycb add the classes from YCB)
   # given_classes_path: ./config/class_list/hm3d300_classes.txt
@@ -183,7 +183,7 @@ save_cropped: False
 ### LAYOUT CONFIG
 layout_voxel_size: 0.05 
 save_layout: True
-layout_update_radius: 5.0  # m
+layout_update_radius: 10.0  # m
 
 # ============================================================
 # PRELOADING CONFIG
@@ -209,6 +209,9 @@ given_path_dir: ""
 # ============================================================
 # ACTIONS CONFIG
 # ============================================================
+# Path planning interval (seconds)
+path_planning_interval: 10.0
+
 # Monitoring the incoming actions
 config_file_path: config/actions.yaml
 monitor_interval: 0.1

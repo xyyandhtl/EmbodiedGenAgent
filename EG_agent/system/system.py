@@ -111,7 +111,8 @@ class EGAgentSystem:
         if self.vlmap_backend is not None:
             self._log_warn("Backend already created.")
             return True
-        self._conv_debug("正在创建后台，请稍候...")
+        self._conv_info("正在创建后台，请稍候...")
+        self._conv_debug("提示：使用期间任何时候，可以手动操探键盘方向键和ZX转向键控制智能体移动！")
         self._log_info("Creating backend...")
         self.vlmap_backend = VLMapNav()
         self.agent_env.set_vlmap_backend(self.vlmap_backend)
@@ -165,6 +166,31 @@ class EGAgentSystem:
         self._log_info("Agent loop stopped.")
         self._emit("status", self.status)
 
+    def begin_explore(self):
+        """Request the agent to begin exploring the environment."""
+        if not self.backend_ready:
+            self._log_warn("Backend not created, cannot explore.")
+            return
+        self.dm.reset_query_and_navigation()
+        self.dm.inquiry = "explore"
+        self.dm.goal_event.set()
+        self.agent_env.is_explore = True
+        self._conv_info("自主探索已启动。")
+        self._log_info("Agent system exploration requested.")
+        self._emit("explore", True)
+
+    def stop_explore(self):
+        """Request the agent to stop exploring the environment."""
+        if not self.backend_ready:
+            self._log_warn("Backend not created, cannot stop explore.")
+            return
+        self.agent_env.bt = None  # Clear any existing BT
+        self.agent_env.is_explore = False
+        self.dm.reset_query_and_navigation()
+        self._conv_info("自主探索已停止。")
+        self._log_info("Agent system stop exploration requested.")
+        self._emit("explore", False)
+
     def save(self, map_path: str | None = None):
         """Save the current global map to the given path or default cfg.map_save_path."""
         if not self.backend_ready:
@@ -183,11 +209,12 @@ class EGAgentSystem:
         path = map_path or getattr(self.vlmap_backend.cfg, "preload_path", None)
         self._log_info(f"Loading global map from: {path}")
         self.dm.load_map(map_path=path)
-        self._log_info(f"Map loaded with {len(self.dm.global_map_manager.global_map)} objects and "
-                       f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
-                       f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
+        self._log_info(
+            f"Map loaded with {len(self.dm.global_map_manager.global_map)} objects and "
+            f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
+            # f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points"
+        )
         self.update_objects_from_map()
-
         # For quick test, directly set a goal pose
         # self.vlmap_backend.get_global_path(goal_pose=np.array([3.5, 6.0, 0.0]))
         # self._log(f"Computed global_path: {self.dm.curr_global_path}")
@@ -222,17 +249,19 @@ class EGAgentSystem:
                 if self.agent_env.tick_updated:
                     self._conv_debug(f"行为树执行节点更新: {self.get_last_tick_output()}")
                     self.agent_env.tick_updated = False
-                    if self.agent_env.last_tick_output.startswith("Find"):
-                        self._conv_info(f"目标 {self.agent_env.cur_target}: 正在从地图中搜寻!")
-                    elif self.agent_env.last_tick_output.startswith("Walk"):
-                        self._conv_debug(f"目标 {self.agent_env.cur_target}: 已在场景中找到最相似目标 {self.dm.found_obj_name}!")
-                        self._conv_info(f"目标 {self.agent_env.cur_target}: 正在前往!")
-                    elif self.agent_env.last_tick_output.startswith("Mark"):
-                        self._conv_info(f"目标 {self.agent_env.cur_target}: 已插旗标记!")
-                    elif self.agent_env.last_tick_output.startswith("Capture"):
-                        self._conv_info(f"目标 {self.agent_env.cur_target}: 已拍摄，请检查图片窗口!")
-                    elif self.agent_env.last_tick_output.startswith("Report"):
-                        self._conv_info(f"目标 {self.agent_env.cur_target}: 已生成报告，请检查报告窗口!")
+                    if self.get_last_tick_output().startswith("Find"):
+                        self._conv_info(f"目标 {self.agent_env.cur_target} 正在从地图中搜寻!")
+                    elif self.get_last_tick_output().startswith("Walk"):
+                        self._conv_debug(f"目标 {self.agent_env.cur_target} 已在场景中找到最相似目标 {self.dm.found_obj_name}!")
+                        self._conv_info(f"目标 {self.agent_env.cur_target} 正在前往!")
+                    elif self.get_last_tick_output().startswith("Mark"):
+                        self._conv_info(f"目标 {self.agent_env.cur_target} 已插旗标记!")
+                    elif self.get_last_tick_output().startswith("Capture"):
+                        self._conv_info(f"目标 {self.agent_env.cur_target} 已拍摄，请检查图片窗口!")
+                    elif self.get_last_tick_output().startswith("Report"):
+                        self._conv_info(f"目标 {self.agent_env.cur_target} 已生成报告，请检查报告窗口!")
+                    # 每次切换节点时等待2秒等前端刷新 _conv_info 对话窗口
+                    time.sleep(2.0)
                 if bt_task_finshed:
                     self._conv_debug(f"任务目标: {self.agent_env.cur_goal_set}")
                     self._conv_debug(f"当前状态: {self.agent_env.condition_set}")
@@ -296,7 +325,7 @@ class EGAgentSystem:
         img_path = Path(self.bt_name + ".png")
         self._last_bt_image = np.array(Image.open(img_path).convert("RGB"))
         self._log_info(f"Behavior tree image updated: {img_path.resolve()}")
-        self._conv_info("已生成行为树并显示在左下窗口")
+        self._conv_info("已生成行为树在左下窗口!")
 
         # 3-pre. 检查 VLMap 后台是否已创建, 若未创建, 则直接返回
         if not self.backend_ready:
@@ -305,6 +334,7 @@ class EGAgentSystem:
             return
 
         # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定
+        # self.agent_env.reset()
         self.agent_env.bind_bt(self.bt)
         self._log_info("[system] [feed_instruction] Binding BT to agent_env.")
 
@@ -364,7 +394,7 @@ class EGAgentSystem:
         if entites:
             self.bt_objects = {name.split('/', 1)[1].capitalize() for name, _ in entites if name.startswith("global/")}
             self.goal_generator.prepare_prompt(self.bt_objects)
-            # self._log_info(f"Updated goal_generator with scene_prompt: {self.goal_generator.prompt_scene}")
+            # self._log_info(f"Updated goal_generator with bt_objects: {self.bt_objects}")
             # self.bt_generator.set_key_objects(list(self.bt_objects))
             # self._log_info(f"已设置原子动作: \n{[action.name for action in self.bt_generator.planner.actions]}")
             if self.cfg['caring_mode']:
@@ -374,6 +404,7 @@ class EGAgentSystem:
 
     def get_semantic_map_image(self) -> np.ndarray:
         """Semantic/path map from dualmap; fallback to detector annotated image."""
+        # self._log_info(f"Current bt tick node: {self.get_last_tick_output()}, cmd_vel: {self.get_cur_cmd_vel()}")
         semantic_map = self.dm.global_map_manager.get_semantic_map_image()
         if semantic_map is not None:
             self.update_objects_from_map()
@@ -393,12 +424,7 @@ class EGAgentSystem:
             return self.dm.detector.annotated_image
         return self._gen_dummy_image(260, 180, "Instance 2D")
 
-    def get_current_instance_3d_image(self) -> np.ndarray:
-        """3D instance visualization image from dualmap."""
-        # TODO: 3D实例分割可视化
-        # if dm.visualizer.last_instance3d_image is not None:
-        #     return dm.visualizer.last_instance3d_image
-        return self._gen_dummy_image(260, 180, "Instance 3D")
+
 
     # ---------------------- 占位内部工具 ----------------------
     def _append_conversation(self, line: str):

@@ -178,7 +178,7 @@ QStatusBar QLabel {
          <item>
           <widget class="QLineEdit" name="instructionEdit">
            <property name="text">
-            <string>请前往红绿灯处标记，并拍摄路面汽车</string>
+            <string></string>
            </property>
            <property name="placeholderText">
             <string>输入指令...</string>
@@ -391,76 +391,58 @@ QStatusBar QLabel {
      </widget>
     </item>
 
-    <!-- 中部三幅图 -->
-    <item row="3" column="1">
-     <widget class="QGroupBox" name="groupTraversable">
-      <property name="title">
-       <string>可通行地图</string>
+    <!-- 中部两幅图 - 用水平分割器承载，两者均分宽度，并横跨中间三列以占满右下角 -->
+    <item row="3" column="1" colspan="3">
+     <widget class="QSplitter" name="splitBottom">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
       </property>
-      <layout class="QVBoxLayout" name="vboxTrav">
-       <item>
-        <widget class="QLabel" name="traversableMapLabel">
-         <property name="minimumSize">
-          <size><width>200</width><height>160</height></size>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-         <property name="text">
-          <string>Traversable Map</string>
-         </property>
-         <property name="scaledContents"><bool>true</bool></property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-    </item>
 
-    <item row="3" column="2">
-     <widget class="QGroupBox" name="groupInstance2d">
-      <property name="title">
-       <string>当前视野实例分割</string>
-      </property>
-      <layout class="QVBoxLayout" name="vboxIns2d">
-       <item>
-        <widget class="QLabel" name="instanceSegLabel">
-         <property name="minimumSize">
-          <size><width>200</width><height>160</height></size>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-         <property name="text">
-          <string>Instance 2D</string>
-         </property>
-         <property name="scaledContents"><bool>true</bool></property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-    </item>
+      <!-- moved: groupInstance2d -->
+      <widget class="QGroupBox" name="groupInstance2d">
+       <property name="title">
+        <string>当前视野实例分割</string>
+       </property>
+       <layout class="QVBoxLayout" name="vboxIns2d">
+        <item>
+         <widget class="QLabel" name="instanceSegLabel">
+          <property name="minimumSize">
+           <size><width>200</width><height>160</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+          <property name="text">
+           <string>Instance 2D</string>
+          </property>
+          <property name="scaledContents"><bool>true</bool></property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
 
-    <item row="3" column="3">
-     <widget class="QGroupBox" name="groupInstance3d">
-      <property name="title">
-       <string>3D实例分割可视化</string>
-      </property>
-      <layout class="QVBoxLayout" name="vboxIns3d">
-       <item>
-        <widget class="QLabel" name="instance3DLabel">
-         <property name="minimumSize">
-          <size><width>200</width><height>160</height></size>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-         <property name="text">
-          <string>Instance 3D</string>
-         </property>
-         <property name="scaledContents"><bool>true</bool></property>
-        </widget>
-       </item>
-      </layout>
+      <!-- moved: groupTraversable -->
+      <widget class="QGroupBox" name="groupTraversable">
+       <property name="title">
+        <string>可通行地图</string>
+       </property>
+       <layout class="QVBoxLayout" name="vboxTrav">
+        <item>
+         <widget class="QLabel" name="traversableMapLabel">
+          <property name="minimumSize">
+           <size><width>200</width><height>160</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+          <property name="text">
+           <string>Traversable Map</string>
+          </property>
+          <property name="scaledContents"><bool>true</bool></property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
      </widget>
     </item>
 
@@ -526,6 +508,19 @@ QStatusBar QLabel {
           <property name="text"><string>关闭智能体</string></property>
          </widget>
         </item>
+
+        <!-- 探索控制 -->
+        <item>
+         <widget class="QPushButton" name="startExploreBtn">
+          <property name="text"><string>开始自主探索</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="stopExploreBtn">
+          <property name="text"><string>停止当前任务</string></property>
+         </widget>
+        </item>
+
         <item>
          <widget class="QPushButton" name="saveMapBtn">
           <property name="text"><string>保存地图</string></property>

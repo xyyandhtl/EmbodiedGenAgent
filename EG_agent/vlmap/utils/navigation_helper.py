@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 
 from scipy.spatial import Voronoi, KDTree
 from scipy.ndimage import binary_erosion
-from scipy.spatial import KDTree
 from dynaconf import Dynaconf
 
 class LayoutMap:
@@ -29,11 +28,9 @@ class LayoutMap:
         self.kernel_size = kernel_size
 
         self.point_cloud: o3d.geometry.PointCloud = None
-        self.occ_map = None
-        self.x_edges = None
-        self.y_edges = None
-        self.wall_pcd: o3d.geometry.PointCloud = None  # Store extracted wall point cloud
-        self.free_space: np.ndarray = None
+        self.occ_map: np.ndarray = None
+        self.x_edges: np.ndarray = None
+        self.y_edges: np.ndarray = None
 
     def set_layout_pcd(self, layout_pcd):
         """
@@ -51,6 +48,8 @@ class LayoutMap:
         Create Occupancy Map from point cloud data.
         """
         points = np.asarray(self.point_cloud.points)
+        # 只保留 z 在 0.15 ~ 0.65 的点
+        points = points[(points[:, 2] > 0.15) & (points[:, 2] < 0.65)]
         xy_points = points[:, :2]
         x_min, y_min = np.min(xy_points, axis=0)
         x_max, y_max = np.max(xy_points, axis=0)
@@ -86,8 +85,9 @@ class LayoutMap:
         Process binary map with connected component filtering and morphological operations.
         """
         # Binarization
-        threshold = self.calculate_threshold()
-        binary_map = (self.occ_map > threshold).astype(np.uint8)
+        # threshold = self.calculate_threshold()
+        # print(f"[LayoutMap] Binarization threshold: {threshold}")
+        binary_map = (self.occ_map > 0).astype(np.uint8)
 
         # Remove small connected components
         cleaned_map = self.remove_small_components(binary_map)
@@ -161,84 +161,16 @@ class LayoutMap:
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (self.kernel_size, self.kernel_size))
         return cv2.morphologyEx(binary_map, cv2.MORPH_CLOSE, kernel)
 
-    def convert_binary_map_to_3d_points(self, binary_map, num_samples_per_grid=10, z_value=0.0):
+    def update_local_layout_occmap(self, partial_pcd, current_pose, update_radius):
         """
-        Convert wall grid cells in the binary map to 3D point cloud.
-        """
-        wall_points_3d = []
-        # x和y方向上网格单元的中心坐标
-        x_centers = (self.x_edges[:-1] + self.x_edges[1:]) / 2
-        y_centers = (self.y_edges[:-1] + self.y_edges[1:]) / 2
-
-        # 遍历二值地图中的每个网格单元
-        for i in range(binary_map.shape[0]):
-            for j in range(binary_map.shape[1]):
-                if binary_map[i, j] == 1:  # 当前网格单元被占据（值为1，即点云个数 > 阈值）
-                    # 当前网格内 随机生成 10个点的x,y坐标
-                    x_samples = np.random.uniform(
-                        self.x_edges[i], self.x_edges[i + 1], num_samples_per_grid
-                    )
-                    y_samples = np.random.uniform(
-                        self.y_edges[j], self.y_edges[j + 1], num_samples_per_grid
-                    )
-                    z_samples = np.full_like(x_samples, z_value)
-                    # 组合
-                    grid_points = np.stack((x_samples, y_samples, z_samples), axis=1)
-                    wall_points_3d.append(grid_points)
-
-        if wall_points_3d:
-            wall_points_3d = np.vstack(wall_points_3d)
-        else:
-            wall_points_3d = np.empty((0, 3))
-
-        return wall_points_3d
-
-    def extract_wall_pcd(self, num_samples_per_grid=10, z_value=0.0):
-        """
-        Extract wall points and save to self.wall_pcd.
-        """
-        binary_map = self.process_binary_map()
-        wall_points = self.convert_binary_map_to_3d_points(
-            binary_map, num_samples_per_grid=num_samples_per_grid, z_value=self.cfg.floor_height
-        )
-        self.wall_pcd = o3d.geometry.PointCloud()
-        self.wall_pcd.points = o3d.utility.Vector3dVector(wall_points)
-        # self.visualize_wall_pcd()
-        print(f"Extracted wall point cloud with {len(self.wall_pcd.points)} points.")
-
-    def convert_local_binary_map_to_3d(self, local_binary_map, x_offset, y_offset, num_samples_per_grid=10, z_value=0.0):
-        wall_points_3d = []
-        for i in range(local_binary_map.shape[0]):
-            for j in range(local_binary_map.shape[1]):
-                if local_binary_map[i, j] == 1:
-                    # Global grid indices
-                    global_i = i + x_offset
-                    global_j = j + y_offset
-
-                    x_samples = np.random.uniform(
-                        self.x_edges[global_i], self.x_edges[global_i + 1], num_samples_per_grid
-                    )
-                    y_samples = np.random.uniform(
-                        self.y_edges[global_j], self.y_edges[global_j + 1], num_samples_per_grid
-                    )
-                    z_samples = np.full_like(x_samples, z_value)
-                    grid_points = np.stack((x_samples, y_samples, z_samples), axis=1)
-                    wall_points_3d.append(grid_points)
-
-        if wall_points_3d:
-            return np.vstack(wall_points_3d)
-        else:
-            return np.empty((0, 3))
-
-    def update_local_layout_occmap_wallpcd(self, partial_pcd, current_pose, update_radius):
-        """
-        Update the layout map with a partial point cloud in a local region.
+        Update the layout occ_map with a partial point cloud in a local region.
+        注：不再生成/维护 wall_pcd；形态学与连通域在全局 process_binary_map 时统一处理。
         """
         if self.occ_map is None:
             print("[LayoutMap] Occupancy map not initialized. Cannot perform local update.")
             return
 
-        # 1. Define world and grid boundaries for the update region
+        # 1) 计算局部区域在网格上的索引范围（基于 x_edges/y_edges 与 resolution）
         center_world = current_pose[:3, 3]
         min_bound_world = center_world - update_radius
         max_bound_world = center_world + update_radius
@@ -248,21 +180,17 @@ class LayoutMap:
         max_x_grid = np.ceil((max_bound_world[0] - self.x_edges[0]) / self.resolution).astype(int)
         max_y_grid = np.ceil((max_bound_world[1] - self.y_edges[0]) / self.resolution).astype(int)
 
-        # Clamp to map boundaries
+        # Clamp 到地图边界；注意 occ_map 形状为 [x_bins, y_bins]
         min_x = max(0, min_x_grid)
         min_y = max(0, min_y_grid)
         max_x = min(self.occ_map.shape[0] - 1, max_x_grid)
         max_y = min(self.occ_map.shape[1] - 1, max_y_grid)
 
-        # 2. Remove old wall points in the update region
-        if self.wall_pcd is not None and not self.wall_pcd.is_empty():
-            bbox = o3d.geometry.AxisAlignedBoundingBox(min_bound_world[:3], max_bound_world[:3])
-            indices_to_remove = bbox.get_point_indices_within_bounding_box(self.wall_pcd.points)
-            self.wall_pcd = self.wall_pcd.select_by_index(indices_to_remove, invert=True)
-
-        # 3. Update local occ_map
+        # 2) 清零局部区域后，根据 partial_pcd 重新统计直方图再叠加（与原逻辑一致）
         self.occ_map[min_x:max_x+1, min_y:max_y+1] = 0
+
         points = np.asarray(partial_pcd.points)
+        points = points[(points[:, 2] > 0.15) & (points[:, 2] < 0.65)]
         if points.shape[0] > 0:
             xy_points = points[:, :2]
             new_occ, _, _ = np.histogram2d(
@@ -270,49 +198,10 @@ class LayoutMap:
                 xy_points[:, 1],
                 bins=[self.x_edges, self.y_edges]
             )
+            # 与原始实现相同：直接将局部点云的直方图累加回全局 occ_map
             self.occ_map += new_occ
 
-        # 4. Extract new local_wall_pcd
-        local_occ_map = self.occ_map[min_x:max_x+1, min_y:max_y+1]
-        # (1) process_local_binary_map
-        threshold = self.calculate_threshold()
-        local_binary_map = (local_occ_map > threshold).astype(np.uint8)
-        local_cleaned_map = self.remove_small_components(local_binary_map)
-        local_processed_map = self.apply_morphological_operations(local_cleaned_map)
-        # (2) cconvert as 3D wall_pcd
-        new_wall_points = self.convert_local_binary_map_to_3d(local_processed_map, min_x, min_y,
-                                                              num_samples_per_grid=10, z_value=self.cfg.floor_height)
-
-        # 5. Add new local_wall_pcd to the global
-        if new_wall_points.shape[0] > 0:
-            new_wall_pcd = o3d.geometry.PointCloud()
-            new_wall_pcd.points = o3d.utility.Vector3dVector(new_wall_points)
-            if self.wall_pcd is None:
-                self.wall_pcd = new_wall_pcd
-            else:
-                self.wall_pcd += new_wall_pcd
-        print(f"[LayoutMap] Updated local layout. Total wall points: {len(self.wall_pcd.points)}")
-    
-    def save_wall_pcd(self):
-        """
-        Save wall point cloud to disk.
-        """
-        save_dir = self.cfg.map_save_path
-        layout_pcd_path = save_dir + "/wall.pcd"
-        if self.wall_pcd is None or len(self.wall_pcd.points) == 0:
-            print("No wall points to save.")
-            return
-        o3d.io.write_point_cloud(layout_pcd_path, self.wall_pcd)
-        print(f"Wall point cloud saved to {layout_pcd_path}")
-
-    def visualize_wall_pcd(self):
-        """
-        Visualize wall point cloud.
-        """
-        if self.wall_pcd is None or len(self.wall_pcd.points) == 0:
-            print("No wall points to visualize.")
-            return
-        o3d.visualization.draw_geometries([self.wall_pcd])
+        # print(f"[LayoutMap] Updated local occ_map region: x[{min_x}:{max_x}], y[{min_y}:{max_y}]")
 
 class RRT:
     def __init__(self, algorithm="rrt", max_iter=1000, steer_length=5, search_radius=10, goal_sample_rate=0.1):
@@ -515,27 +404,27 @@ class RRT:
         plt.show()
 
 class NavigationGraph:
-    def __init__(self, cfg: Dynaconf, pcd: o3d.geometry.PointCloud, cell_size: float):
-        """Initialization of the NavigationGraph class.
-
+    def __init__(self, cfg: Dynaconf, occupancy_grid_map: np.ndarray, x_edges: np.ndarray, y_edges: np.ndarray, cell_size: float):
+        """
+        Initialize NavigationGraph from an occupancy grid map (1=occupied, 0=free candidate).
         Args:
-            pcd (o3d.geometry.PointCloud): The point cloud of the floor.
-            cell_size (int): the resolution of the cell (m/cell)
+            occupancy_grid_map: 2D array [rows(y), cols(x)]
+            x_edges, y_edges: histogram bin edges to convert grid <-> world
+            cell_size: resolution (m/cell)
         """
         self.cfg = cfg
-
-        self.pcd_min = np.min(np.array(pcd.points), axis=0)
-        self.pcd_max = np.max(np.array(pcd.points), axis=0)
-        self.grid_size = np.ceil((self.pcd_max - self.pcd_min) / cell_size + 1).astype(
-            np.int32
-        )
-        self.grid_size = self.grid_size[[0, 1]]
-        print(f"[NavigationGraph] grid size:{self.grid_size}")
         self.cell_size = cell_size
-        self.pcd = pcd
+
+        # Grid and world bounds from edges
+        self.occupancy_grid_map = occupancy_grid_map.astype(np.uint8)
+        self.x_edges = x_edges
+        self.y_edges = y_edges
+        # origin in world coordinates
+        self.pcd_min = np.array([self.x_edges[0], self.y_edges[0], 0.0])
+        self.pcd_max = np.array([self.x_edges[-1], self.y_edges[-1], 0.0])
+        self.grid_size = np.array([self.occupancy_grid_map.shape[0], self.occupancy_grid_map.shape[1]], dtype=np.int32)
 
         self.pos_path = []
-
         self.snapped_goal = None
 
         self.rrt = RRT(
@@ -546,74 +435,52 @@ class NavigationGraph:
             goal_sample_rate=0.2,
         )
 
+        # Prepare free space once
+        self._prepare_free_space()
+
+    def _prepare_free_space(self):
+        """
+        From occupancy_grid_map (1=occupied), compute dilated occupancy and largest connected free space.
+        """
+        occupancy_grid_map = self.occupancy_grid_map.copy()
+
+        # Dilate obstacles to account for robot radius
+        dilation_radius = 3  # cell size = resolution 0.05m
+        if dilation_radius > 0:
+            occupancy_grid_map = cv2.dilate(
+                occupancy_grid_map.astype(np.uint8),
+                np.ones((dilation_radius, dilation_radius), dtype=np.uint8),
+                iterations=1,
+            )
+
+        self.occupancy_grid_map = occupancy_grid_map
+
+        # Free space map: 1 = free, 0 = occupied
+        free_space_map = (occupancy_grid_map == 0).astype(np.uint8)
+
+        # Keep only largest connected free-space component
+        num_labels, labels = cv2.connectedComponents(free_space_map)
+        largest_component = 0
+        largest_size = 0
+        for label in range(1, num_labels):
+            size = np.sum(labels == label)
+            if size > largest_size:
+                largest_size = size
+                largest_component = label
+        self.free_space = (labels == largest_component).astype(np.uint8)
+
     # here we only use voronoi graph now
     def get_graph(self):
-        free_space = self.get_occupancy_map()
         voronoi = self.get_voronoi_graph()
         self.graph = voronoi
 
     def get_occ_map(self):
-        free_space = self.get_occupancy_map()
-        # self.visualize_occupancy_map(free_space)
+        # Kept for compatibility; no-op since we already have occ_map
+        _ = self.free_space
 
     def get_occupancy_map(self):
-        # 1. Initialize an empty grid map with all cells marked as unoccupied (0)
-        occupancy_grid_map = np.zeros(self.grid_size[::-1], dtype=int)
-
-        # 2. Handle point cloud with negative values
-        point_cloud = np.asarray(self.pcd.points)  # Get the point cloud as a numpy array
-
-        # 3. Iterate through the point cloud and mark the corresponding cells as occupied (1)
-        # needs adjusting x,y coordinates to positive values)
-        x_cells = np.floor((point_cloud[:, 0] - self.pcd_min[0]) / self.cell_size).astype(int)
-        y_cells = np.floor((point_cloud[:, 1] - self.pcd_min[1]) / self.cell_size).astype(int)
-
-        # Mark occupied cells
-        occupancy_grid_map[y_cells, x_cells] = 1
-
-        # self.visualize_occupancy_map(occupancy_grid_map)
-
-        # 4. Make the occupancy places with a dilation operation
-        dilation_radius = 10
-
-        if dilation_radius > 0:
-            occupancy_grid_map = cv2.dilate(
-                occupancy_grid_map.astype(np.uint8),
-                np.ones((dilation_radius, dilation_radius)),
-                iterations=1,
-            )
-
-        # self.visualize_occupancy_map(occupancy_grid_map)
-
-        self.occupancy_grid_map = occupancy_grid_map
-
-        # 5. get largest free space
-        # Now, we need to find the largest free space (value 0) using connected components
-        # Invert the map so that free space is marked with 1 and occupied space with 0
-        free_space_map = (occupancy_grid_map == 0).astype(np.uint8)
-
-        # Find all connected components (regions of free space)
-        num_labels, labels = cv2.connectedComponents(free_space_map)
-
-        # 6. Find the largest connected component (ignore the background label 0)
-        largest_component = 0
-        largest_size = 0
-
-        for label in range(1, num_labels):  # Start from 1, as 0 is the background
-            component_size = np.sum(labels == label)
-            if component_size > largest_size:
-                largest_size = component_size
-                largest_component = label
-
-        # Create a mask for the largest component
-        largest_component_mask = (labels == largest_component).astype(np.uint8)
-
-        # Optionally, visualize the largest free space
-        # self.visualize_occupancy_map(largest_component_mask)
-
-        self.free_space = largest_component_mask
-
-        return largest_component_mask
+        # Deprecated path; kept for API compatibility
+        return self.free_space
 
     def is_in_bounds(self, point):
         x, y = point

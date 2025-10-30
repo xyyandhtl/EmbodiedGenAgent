@@ -53,7 +53,7 @@ class Dualmap:
         dualmap_dir = str(Path(__file__).resolve().parent.parent)
         # self.cfg.output_path = f'{dualmap_dir}/{self.cfg.output_path}'
         # self.cfg.logging_config = f'{dualmap_dir}/{self.cfg.logging_config}'
-        self.cfg.yolo.given_classes_path = f'{dualmap_dir}/{self.cfg.yolo.given_classes_path}'
+        self.cfg.yolo.given_classes_path = f'{dualmap_dir}/{self.cfg.yolo.given_classes_path}/{self.cfg.dataset_name}.txt'
         self.cfg.yolo.model_path = f'{dualmap_dir}/{self.cfg.yolo.model_path}'
         self.cfg.sam.model_path = f'{dualmap_dir}/{self.cfg.sam.model_path}'
         self.cfg.fastsam.model_path = f'{dualmap_dir}/{self.cfg.fastsam.model_path}'
@@ -91,7 +91,7 @@ class Dualmap:
         self.realtime_pose: np.ndarray = np.eye(4)
         self.curr_pose: np.ndarray = None
         self.prev_pose: np.ndarray = None
-        self.goal_pose: list = None
+        self.goal_pose: list | None = None
         self.wait_count = 0
 
         # --- 2. Threads & Queues ---
@@ -124,6 +124,154 @@ class Dualmap:
         self.mapping_thread = None
         self.path_planning_thread = None
 
+    # ===============================================
+    # Basic Utilities
+    # ===============================================
+    def print_cfg(self):
+        log_file_path = ""
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers:
+            if isinstance(handler, logging.FileHandler):
+                log_file_path = handler.baseFilename
+
+        # Organize configuration items to be printed into a list
+        cfg_items = [
+            ("Log Path", log_file_path),
+            ("Output Dir", self.cfg.output_path),
+            ("Map Save Dir", self.cfg.map_save_path),
+            ("Class List Path", self.cfg.yolo.given_classes_path),
+            ("Use FastSAM for OV?", self.cfg.use_fastsam),
+            # ("Running Concrete Map Only?", self.cfg.run_local_mapping_only),
+            # ("Save Concrete Map?", self.cfg.save_local_map),
+            # ("Save Global Map?", self.cfg.save_global_map),
+            # ("Use Preload Global Map?", self.cfg.preload_global_map),
+            ("Use Rerun for Visualization?", self.cfg.use_rerun),
+            ("Camera Intrinsics", str(self.cfg.intrinsic)),
+            # ("Cmaera Extrinsics": str(self.cfg.extrinsics)},
+        ]
+
+        # Define separator line length
+        line_length = 60
+        print("=" * line_length)
+        for key, value in cfg_items:
+            print(f"{key:<30} : {value}")
+        print("=" * line_length)
+
+    def save_map(self, map_path=None):
+        """
+        Save the local and global maps to disk.
+        """
+        if map_path is not None:
+            self.cfg.map_save_path = map_path
+
+        # if self.cfg.save_local_map:
+        # self.local_map_manager.save_map()
+
+        # if self.cfg.save_global_map:
+        self.global_map_manager.save_map()
+        
+        # if self.cfg.save_layout:
+        self.detector.save_layout()
+        layout_pcd = self.detector.get_layout_pointcloud()
+        self.global_map_manager.set_layout_info(layout_pcd, force_full_update=True)
+        # self.global_map_manager.save_wall_pcd()
+
+    def load_map(self, map_path=None):
+        """
+        Load the local and global maps from disk.
+        """
+        if map_path is not None:
+            self.cfg.preload_path = map_path
+
+        # check if need to preload the global map
+        # if self.cfg.preload_global_map:
+        logger.info("[Core][Init] Preloading global map...")
+        self.global_map_manager.load_map()
+
+        # if self.cfg.preload_layout:
+        logger.info("[Core][Init] Preloading layout...")
+        self.detector.load_layout()
+        # self.global_map_manager.load_wall()
+        # TODO: the dualmap save/load logic should be reorgainized
+        layout_pcd = self.detector.get_layout_pointcloud()
+        self.global_map_manager.set_layout_info(layout_pcd, force_full_update=True)
+
+    def get_keyframe_idx(self):
+        return self.keyframe_counter
+
+    def check_keyframe(self, time_stamp, curr_pose):
+        """
+        Check if the current frame should be selected as a keyframe based on
+        time interval, pose difference (translation), and rotation difference.
+        """
+        is_keyframe = False
+        # Translation check
+        if self.last_keyframe_pose is not None:
+            translation_diff = np.linalg.norm(
+                curr_pose[:3, 3] - self.last_keyframe_pose[:3, 3]
+            )  # Translation difference
+            if translation_diff >= self.pose_threshold:  # 0.1 m
+                self.last_keyframe_time = time_stamp
+                self.last_keyframe_pose = curr_pose
+                logger.debug(
+                    "[Core][CheckKeyframe] New keyframe detected by translation"
+                )
+                is_keyframe = True
+
+            # Rotation check
+            curr_rotation = R.from_matrix(curr_pose[:3, :3])
+            last_rotation = R.from_matrix(self.last_keyframe_pose[:3, :3])
+            rotation_diff = curr_rotation.inv() * last_rotation
+            angle_diff = rotation_diff.magnitude() * (180 / np.pi)
+
+            if angle_diff >= self.rotation_threshold:  # > 3 degrees
+                self.last_keyframe_time = time_stamp
+                self.last_keyframe_pose = curr_pose
+                logger.debug("[Core][CheckKeyframe] New keyframe detected by rotation")
+                is_keyframe = True
+
+        # Time check
+        if (
+            self.last_keyframe_time is None
+            or abs(time_stamp - self.last_keyframe_time) >= self.time_threshold
+        ):  # > 0.5 s
+            self.last_keyframe_time = time_stamp
+            self.last_keyframe_pose = curr_pose
+            logger.debug("[Core][CheckKeyframe] New keyframe detected by time")
+            is_keyframe = True
+
+        if is_keyframe:
+            self.keyframe_counter += 1
+            logger.debug(
+                f"[Core][CheckKeyframe] Current frame is keyframe: {self.keyframe_counter}"
+            )
+            return True
+        else:
+            # logger.info("Not a new keyframe, abandon")
+            return False
+
+    def get_total_memory_by_keyword(self, keyword="applications"):
+        total_rss = 0
+        for proc in psutil.process_iter(["pid", "name", "cmdline", "memory_info"]):
+            try:
+                cmdline = proc.info.get("cmdline")
+                if isinstance(cmdline, list) and keyword in " ".join(cmdline):
+                    total_rss += proc.info["memory_info"].rss
+            except (psutil.NoSuchProcess, psutil.AccessDenied, TypeError):
+                continue
+        return total_rss / 1024 / 1024  # MB
+
+    def convert_inquiry_to_feat(self, inquiry_sentence: str):
+        text_query_tokenized = self.detector.clip_tokenizer(inquiry_sentence).to("cuda")
+        text_query_ft = self.detector.clip_model.encode_text(text_query_tokenized)
+        text_query_ft = text_query_ft / text_query_ft.norm(dim=-1, keepdim=True)
+        text_query_ft = text_query_ft.squeeze()
+
+        return text_query_ft
+    
+    # ===============================================
+    # Threading Control
+    # ===============================================
     def start_threading(self):
         # Parallel for mapping thread
         # if self.cfg.use_parallel:
@@ -327,8 +475,8 @@ class Dualmap:
                 # Global Mapping
                 self.global_map_manager.process_observations(global_obs_list)
 
-                if len(global_obs_list) > 0:
-                    self.global_map_manager.mark_semantic_map_dirty()
+                # if len(global_obs_list) > 0:
+                self.global_map_manager.mark_semantic_map_dirty()
 
             # Get memory usage statistics of local and global maps
             # mem_stats = get_map_memory_usage(self.local_map_manager.local_map,
@@ -348,11 +496,10 @@ class Dualmap:
         Currently, after goal_mode is set first time, path_plan is always running
         TODO: check if goal_inview, reset_query_and_navigation()
         """
-        loop_interval = 3.0
+        loop_interval = self.cfg.path_planning_interval
         # set False to plan_path with loop_interval,
         # set True to plan_path once only when quiry found
-        plan_once = True
-        path_exist = False
+        plan_once = False
 
         while not self.stop_thread:
             logger.debug(f"[PathPlanningThread] Loop begins.")
@@ -360,7 +507,21 @@ class Dualmap:
             self.goal_event.clear()  # 重置为未触发状态
             if self.stop_thread:
                 break
+            
+            # 每次此低频loop先更新layout_map
+            if not self.global_map_manager.layout_initialized:
+                layout_pcd = self.detector.get_layout_pointcloud()
+                self.global_map_manager.set_layout_info(layout_pcd)
+            else:
+                update_radius = self.cfg.layout_update_radius
+                layout_pcd_partial = self.detector.get_partial_layout_pcd(self.curr_pose, 
+                                                                          update_radius)
+                self.global_map_manager.set_layout_info(layout_pcd_partial, 
+                                                        current_pose=self.curr_pose, 
+                                                        update_radius=update_radius)
 
+            # 如果 goal_pose 存在，直接计算路径
+            # 否则用 inquiry 查询目标位置，若查询到则将目标赋给goal_pose，否则自主探索
             if self.goal_pose:
                 self.goal_mode = GoalMode.POSE
                 logger.debug(f"[PathPlanningThread] goal_pose exists, "
@@ -368,188 +529,55 @@ class Dualmap:
             elif self.inquiry:
                 self.goal_pose = self.query_object(self.inquiry)
                 if self.goal_pose:
-                    path_exist = False  # First time inquiry found
+                    # self.curr_global_path = []
                     self.goal_mode = GoalMode.POSE
                     self.inquiry_found.add(self.inquiry)
                     logger.debug(f"[PathPlanningThread] compute path to {self.inquiry} "
                                  f"with query position {self.goal_pose}")
                 else:
-                    if self.goal_mode != GoalMode.RANDOM:         # 避免多次设定随机探索目标点
-                        self.goal_mode = GoalMode.RANDOM
-                        self.inquiry_found.discard(self.inquiry)    # 静态环境不存在这种情况
-                        logger.debug(f"[PathPlanningThread] compute path to {self.inquiry} "
-                                     f"with random goal")
+                    # self.curr_global_path = []
+                    self.goal_mode = GoalMode.RANDOM
+                    # self.inquiry_found.discard(self.inquiry)    # 静态环境不存在这种情况
+                    logger.debug(f"[PathPlanningThread] compute path to {self.inquiry} "
+                                    f"with random goal")
             else:
                 logger.debug(f"[PathPlanningThread] No need to plan path.")
+                self.goal_mode = GoalMode.NONE
+                continue
 
-            if not plan_once or not path_exist:
+            if self.goal_mode != GoalMode.NONE:     # and not self.path_exists()
                 logger.info(f"[PathPlanningThread] calculating global_path with "
                             f"goal_mode {self.goal_mode}, "
                             f"goal_pose {self.goal_pose}, "
                             f"inquiry_name {self.inquiry}")
                 self.compute_global_path()
-                path_exist = True
 
         logger.info("[Core] Path_planning thread exiting.")
 
-    def print_cfg(self):
-
-        log_file_path = ""
-
-        root_logger = logging.getLogger()
-        for handler in root_logger.handlers:
-            if isinstance(handler, logging.FileHandler):
-                log_file_path = handler.baseFilename
-
-        # Organize configuration items to be printed into a list
-        cfg_items = [
-            ("Log Path", log_file_path),
-            ("Output Dir", self.cfg.output_path),
-            ("Map Save Dir", self.cfg.map_save_path),
-            ("Class List Path", self.cfg.yolo.given_classes_path),
-            ("Use FastSAM for OV?", self.cfg.use_fastsam),
-            # ("Running Concrete Map Only?", self.cfg.run_local_mapping_only),
-            # ("Save Concrete Map?", self.cfg.save_local_map),
-            # ("Save Global Map?", self.cfg.save_global_map),
-            # ("Use Preload Global Map?", self.cfg.preload_global_map),
-            ("Use Rerun for Visualization?", self.cfg.use_rerun),
-            ("Camera Intrinsics", str(self.cfg.intrinsic)),
-            # ("Cmaera Extrinsics": str(self.cfg.extrinsics)},
-        ]
-
-        # Define separator line length
-        line_length = 60
-        print("=" * line_length)
-        for key, value in cfg_items:
-            print(f"{key:<30} : {value}")
-        print("=" * line_length)
-
-    def save_map(self, map_path=None):
-        """
-        Save the local and global maps to disk.
-        """
-        if map_path is not None:
-            self.cfg.map_save_path = map_path
-
-        # if self.cfg.save_local_map:
-        # self.local_map_manager.save_map()
-
-        # if self.cfg.save_global_map:
-        self.global_map_manager.save_map()
-        
-        # if self.cfg.save_layout:
-        self.detector.save_layout()
-        layout_pcd = self.detector.get_layout_pointcloud()
-        self.global_map_manager.set_layout_info(layout_pcd, force_full_update=True)
-        self.global_map_manager.save_wall_pcd()
-
-    def load_map(self, map_path=None):
-        """
-        Load the local and global maps from disk.
-        """
-        if map_path is not None:
-            self.cfg.preload_path = map_path
-
-        # check if need to preload the global map
-        # if self.cfg.preload_global_map:
-        logger.info("[Core][Init] Preloading global map...")
-        self.global_map_manager.load_map()
-
-        # if self.cfg.preload_layout:
-        logger.info("[Core][Init] Preloading layout...")
-        self.detector.load_layout()
-        self.global_map_manager.load_wall()
-        # TODO: the dualmap save/load logic should be reorgainized
-        layout_pcd = self.detector.get_layout_pointcloud()
-        self.global_map_manager.set_layout_info(layout_pcd, force_full_update=True)
-
-    def get_keyframe_idx(self):
-        return self.keyframe_counter
-
-    def check_keyframe(self, time_stamp, curr_pose):
-        """
-        Check if the current frame should be selected as a keyframe based on
-        time interval, pose difference (translation), and rotation difference.
-        """
-        is_keyframe = False
-        # Translation check
-        if self.last_keyframe_pose is not None:
-            translation_diff = np.linalg.norm(
-                curr_pose[:3, 3] - self.last_keyframe_pose[:3, 3]
-            )  # Translation difference
-            if translation_diff >= self.pose_threshold:  # 0.1 m
-                self.last_keyframe_time = time_stamp
-                self.last_keyframe_pose = curr_pose
-                logger.debug(
-                    "[Core][CheckKeyframe] New keyframe detected by translation"
-                )
-                is_keyframe = True
-
-            # Rotation check
-            curr_rotation = R.from_matrix(curr_pose[:3, :3])
-            last_rotation = R.from_matrix(self.last_keyframe_pose[:3, :3])
-            rotation_diff = curr_rotation.inv() * last_rotation
-            angle_diff = rotation_diff.magnitude() * (180 / np.pi)
-
-            if angle_diff >= self.rotation_threshold:  # > 3 degrees
-                self.last_keyframe_time = time_stamp
-                self.last_keyframe_pose = curr_pose
-                logger.debug("[Core][CheckKeyframe] New keyframe detected by rotation")
-                is_keyframe = True
-
-        # Time check
-        if (
-            self.last_keyframe_time is None
-            or abs(time_stamp - self.last_keyframe_time) >= self.time_threshold
-        ):  # > 0.5 s
-            self.last_keyframe_time = time_stamp
-            self.last_keyframe_pose = curr_pose
-            logger.debug("[Core][CheckKeyframe] New keyframe detected by time")
-            is_keyframe = True
-
-        if is_keyframe:
-            self.keyframe_counter += 1
-            logger.debug(
-                f"[Core][CheckKeyframe] Current frame is keyframe: {self.keyframe_counter}"
-            )
-            return True
-        else:
-            # logger.info("Not a new keyframe, abandon")
-            return False
-
-    def get_total_memory_by_keyword(self, keyword="applications"):
-        total_rss = 0
-        for proc in psutil.process_iter(["pid", "name", "cmdline", "memory_info"]):
-            try:
-                cmdline = proc.info.get("cmdline")
-                if isinstance(cmdline, list) and keyword in " ".join(cmdline):
-                    total_rss += proc.info["memory_info"].rss
-            except (psutil.NoSuchProcess, psutil.AccessDenied, TypeError):
-                continue
-        return total_rss / 1024 / 1024  # MB
-
-    def convert_inquiry_to_feat(self, inquiry_sentence: str):
-        text_query_tokenized = self.detector.clip_tokenizer(inquiry_sentence).to("cuda")
-        text_query_ft = self.detector.clip_model.encode_text(text_query_tokenized)
-        text_query_ft = text_query_ft / text_query_ft.norm(dim=-1, keepdim=True)
-        text_query_ft = text_query_ft.squeeze()
-
-        return text_query_ft
-
     # ===============================================
-    # Public API for navigation and querying
+    # Query and Navigation API
     # ===============================================
     def reset_query_and_navigation(self):
         """重置 Find 涉及的导航状态，包括清除索引目标和已索引到的目标位置。"""
         self.inquiry = ""
         self.goal_mode = GoalMode.NONE
         self.goal_pose = None
-        # self.inquiry_feat = None
-        # self.action_path = []
-        # self.curr_global_path = []
-        # self.curr_local_path = []
+        
+        self.inquiry_feat = None
+        self.action_path = []
+        self.curr_global_path = []
+        self.curr_local_path = []
+
+        self.global_map_manager.mark_semantic_map_dirty()
+
+    def path_exists(self):
+        """检查当前是否存在有效的全局路径。"""
+        return len(self.curr_global_path) > 0
 
     def query_object(self, query: str):
+        if query == "explore":
+            logger.info("[Core][Query] set explore mode")
+            return None
         # 1. 从查询（如："desk"/"RobotNear(ControlRoom)"）中提取物体名称
         match = re.search(r'\((.*?)\)', query)
         if match:
@@ -571,21 +599,19 @@ class Dualmap:
         # 4. 调用 GlobalMapManager 的 find_best_candidate_with_inquiry 来寻找最佳匹配
         #    这将返回 GlobalObject 实例和分数
         best_candidate, best_similarity = self.global_map_manager.find_best_candidate_with_inquiry()
-
+        
         # 5. 处理结果
         if best_candidate is not None:
             # 提取物体边界框的中心点作为其位置
-            position = best_candidate.bbox_2d.get_center().tolist()
             self.found_obj_name = self.global_map_manager.obj_classes.get_classes_arr()[best_candidate.class_id]
-            
             logger.info(f"[VLMapNav] [query_object] Found best match '{self.found_obj_name}' "
-                        f"for query '{object_name}' with score {best_similarity:.4f} "
-                        f"at position {position}.")
-            return position
-        else:
-            logger.warning(f"[VLMapNav] [query_object] No object found for query '{object_name}'"
-                           f" in the global map.")
-            return None
+                        f"for query '{object_name}' with score {best_similarity:.4f}")
+            if best_similarity > 0.5:
+                position = best_candidate.bbox_2d.get_center().tolist()
+                return position
+        
+        logger.warning(f"[VLMapNav] [query_object] No object found for query '{object_name}'")
+        return None
 
     def compute_global_path(self):
         """
@@ -598,16 +624,6 @@ class Dualmap:
         self.global_map_manager.has_action_path = False
 
         start = time.time()
-        # Get Current layout information from Detector
-        # And send to GlobalMapManager.layout_map, extract wall_pcd
-        if not self.global_map_manager.layout_initialized:
-            layout_pcd = self.detector.get_layout_pointcloud()
-            self.global_map_manager.set_layout_info(layout_pcd)
-        else:
-            update_radius = self.cfg.get("layout_update_radius", 5.0)
-            layout_pcd_partial = self.detector.get_partial_layout_pcd(self.curr_pose, update_radius)
-            self.global_map_manager.set_layout_info(layout_pcd_partial, current_pose=self.curr_pose, update_radius=update_radius)
-
         # calculate the path based on current global map
         # Get 3D path point in world coordinate
         # 计算 全局路径

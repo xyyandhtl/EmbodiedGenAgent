@@ -29,6 +29,8 @@ class BaseAgentEnv:
         self.last_tick_output: str = ""
         self.tick_updated = False
         
+        self.is_explore = False
+
         self.cur_target: str = ""
         self.condition_set = set()
 
@@ -78,13 +80,16 @@ class BaseAgentEnv:
 
         self._last_tick_time = now  # 更新时间点，保证间隔准确
         self.step_num += 1
+        if self.is_explore:
+            self.run_action("cmd_vel", self.get_cur_cmd_vel())
+            return False
 
         if self.bt is None:
             return False
 
         self.bt.tick()
         bt_output = self.bt.visitor.output_str
-        parts = bt_output.split("Action", 1)
+        parts = bt_output.rsplit("Action", 1)
         if len(parts) > 1:
             bt_output = parts[1].strip()
         else:
@@ -119,6 +124,12 @@ class BaseAgentEnv:
         raise NotImplementedError
 
     def close(self):
+        raise NotImplementedError
+    
+    def run_action(self, action_type: str, action: tuple | None, verbose=False):
+        raise NotImplementedError
+    
+    def get_cur_cmd_vel(self) -> tuple:
         raise NotImplementedError
 
 
