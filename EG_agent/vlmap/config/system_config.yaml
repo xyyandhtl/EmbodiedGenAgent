@@ -209,6 +209,9 @@ given_path_dir: ""
 # ============================================================
 # ACTIONS CONFIG
 # ============================================================
+# Path planning interval (seconds)
+path_planning_interval: 10.0
+
 # Monitoring the incoming actions
 config_file_path: config/actions.yaml
 monitor_interval: 0.1

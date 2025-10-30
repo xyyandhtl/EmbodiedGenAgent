@@ -10,7 +10,6 @@ dataset/
 captured/
 reports/
 usd/
-scripts/
 
 # specific paths
 EG_agent/vlmap/config/class_list/*.json

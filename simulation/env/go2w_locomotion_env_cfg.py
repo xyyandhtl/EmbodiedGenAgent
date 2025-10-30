@@ -240,7 +240,7 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
 
         # Viewer settings
-        self.viewer.eye = (2.0, 0.0, 10.0)
+        self.viewer.eye = (0.0, -2.0, 10.0)
         self.viewer.lookat = (0.0, 0.0, 0.0)
 
         # general settings

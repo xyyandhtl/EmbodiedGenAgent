@@ -118,7 +118,7 @@ class GlobalMapManager(BaseMapManager):
             # Subsequent live updates: process only a local part
             if current_pose is not None and update_radius:
                 self.layout_map.update_local_layout_occmap(layout_pcd, current_pose, update_radius)
-                logger.info("[GlobalMapManager] Updated layout occ_map with partial point cloud.")
+                logger.debug("[GlobalMapManager] Updated layout occ_map with partial point cloud.")
             else:
                 logger.warning("[GlobalMapManager] Skipping live layout update because current_pose is not provided or update_radius is 0.")
 
@@ -813,7 +813,7 @@ class GlobalMapManager(BaseMapManager):
                         self._update_traversable_map_cache()
                 
                 # Sleep for a short time to prevent busy waiting
-                self._stop_map_update.wait(timeout=1.0)
+                self._stop_map_update.wait(timeout=1.5)
 
             except Exception as e:
                 logger.error(f"[GlobalMapManager] Error in background map update thread: {e}")
@@ -1112,7 +1112,7 @@ class GlobalMapManager(BaseMapManager):
             self._curr_pose = curr_pose
             self.mark_traversable_map_dirty()
             self._traj_path.append(curr_pose[:3, 3])
-            # self.mark_semantic_map_dirty()
+            self.mark_semantic_map_dirty()
         if nav_path is not None:
             self._nav_path = nav_path
             self.mark_semantic_map_dirty()

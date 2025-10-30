@@ -201,7 +201,7 @@ class LayoutMap:
             # 与原始实现相同：直接将局部点云的直方图累加回全局 occ_map
             self.occ_map += new_occ
 
-        print(f"[LayoutMap] Updated local occ_map region: x[{min_x}:{max_x}], y[{min_y}:{max_y}]")
+        # print(f"[LayoutMap] Updated local occ_map region: x[{min_x}:{max_x}], y[{min_y}:{max_y}]")
 
 class RRT:
     def __init__(self, algorithm="rrt", max_iter=1000, steer_length=5, search_radius=10, goal_sample_rate=0.1):
@@ -445,7 +445,7 @@ class NavigationGraph:
         occupancy_grid_map = self.occupancy_grid_map.copy()
 
         # Dilate obstacles to account for robot radius
-        dilation_radius = 10
+        dilation_radius = 3  # cell size = resolution 0.05m
         if dilation_radius > 0:
             occupancy_grid_map = cv2.dilate(
                 occupancy_grid_map.astype(np.uint8),

@@ -275,14 +275,14 @@ class Detector:
     def set_data_input(self, curr_data: DataInput) -> None:
         self.curr_data = curr_data
 
-        if not self.cfg.preload_layout:
-            # If a thread is already running, wait for it to finish
-            if self.data_thread and self.data_thread.is_alive():
-                self.data_thread.join()
+        # if not self.cfg.preload_layout:
+        # If a thread is already running, wait for it to finish
+        if self.data_thread and self.data_thread.is_alive():
+            self.data_thread.join()
 
-            # Create a new thread to process data input
-            self.data_thread = threading.Thread(target=self._process_data_input_thread)
-            self.data_thread.start()
+        # Create a new thread to process data input
+        self.data_thread = threading.Thread(target=self._process_data_input_thread)
+        self.data_thread.start()
 
     def _process_data_input_thread(self):
         """
@@ -334,7 +334,7 @@ class Detector:
             self.layout_time += layout_time
             self.layout_num += 1
             logger.debug(
-                f"[Detector][Layout] Layout update took {layout_time:.4f} seconds."
+                f"[Detector][Layout] Layout update took {layout_time:.4f} seconds, total {self.layout_num} layouts."
             )
 
     def get_layout_pointcloud(self):

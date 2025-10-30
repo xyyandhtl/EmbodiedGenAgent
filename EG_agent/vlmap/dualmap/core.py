@@ -496,7 +496,7 @@ class Dualmap:
         Currently, after goal_mode is set first time, path_plan is always running
         TODO: check if goal_inview, reset_query_and_navigation()
         """
-        loop_interval = 8.0
+        loop_interval = self.cfg.path_planning_interval
         # set False to plan_path with loop_interval,
         # set True to plan_path once only when quiry found
         plan_once = False
