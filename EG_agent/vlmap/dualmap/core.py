@@ -53,7 +53,7 @@ class Dualmap:
         dualmap_dir = str(Path(__file__).resolve().parent.parent)
         # self.cfg.output_path = f'{dualmap_dir}/{self.cfg.output_path}'
         # self.cfg.logging_config = f'{dualmap_dir}/{self.cfg.logging_config}'
-        self.cfg.yolo.given_classes_path = f'{dualmap_dir}/{self.cfg.yolo.given_classes_path}'
+        self.cfg.yolo.given_classes_path = f'{dualmap_dir}/{self.cfg.yolo.given_classes_path}/{self.cfg.dataset_name}.txt'
         self.cfg.yolo.model_path = f'{dualmap_dir}/{self.cfg.yolo.model_path}'
         self.cfg.sam.model_path = f'{dualmap_dir}/{self.cfg.sam.model_path}'
         self.cfg.fastsam.model_path = f'{dualmap_dir}/{self.cfg.fastsam.model_path}'
@@ -348,10 +348,10 @@ class Dualmap:
         Currently, after goal_mode is set first time, path_plan is always running
         TODO: check if goal_inview, reset_query_and_navigation()
         """
-        loop_interval = 3.0
+        loop_interval = 8.0
         # set False to plan_path with loop_interval,
         # set True to plan_path once only when quiry found
-        plan_once = True
+        plan_once = False
         path_exist = False
 
         while not self.stop_thread:

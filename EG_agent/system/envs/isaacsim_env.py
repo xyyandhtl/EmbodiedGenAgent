@@ -37,7 +37,7 @@ class IsaacsimEnv(BaseAgentEnv):
         self.cam_forward_axis = "z"  # hardcoded: camera's +Z faces forward
         # Real-time visibility state: {goal_name_lower: bool}
         self.goal_inview = {}
-        self.near_dist = 2.0  # meters
+        self.near_dist = 3.0  # meters
 
         # Defer ROS init to configure_ros
         self.ros_node: Node | None = None

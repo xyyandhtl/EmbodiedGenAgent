@@ -209,9 +209,11 @@ class EGAgentSystem:
         path = map_path or getattr(self.vlmap_backend.cfg, "preload_path", None)
         self._log_info(f"Loading global map from: {path}")
         self.dm.load_map(map_path=path)
-        self._log_info(f"Map loaded with {len(self.dm.global_map_manager.global_map)} objects and "
-                       f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
-                       f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points")
+        self._log_info(
+            f"Map loaded with {len(self.dm.global_map_manager.global_map)} objects and "
+            f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
+            f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points"
+        )
         self.update_objects_from_map()
         # For quick test, directly set a goal pose
         # self.vlmap_backend.get_global_path(goal_pose=np.array([3.5, 6.0, 0.0]))

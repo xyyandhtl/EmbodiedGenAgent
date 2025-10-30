@@ -77,20 +77,21 @@ ASSET_DICT = {
         spawn=UsdFileCfg(
             visible=True,
             # usd_path=f"{SIMULATION_DATA_DIR}/terrains/IsaacWarehouse/IsaacWarehouse.usd",
-            usd_path=f"/media/lenovo/1/USD/island-usd-v2.1/island/usd/islandPrman.usda",
+            # usd_path=f"/media/lenovo/1/USD/island-usd-v2.1/island/usd/islandPrman.usda",
+            usd_path=f"/media/lenovo/1/USD/intel_moorelane_v1_2_0/Intel_mooreLane_v1_2_0/Intel_mooreLane/USD/4004MooreLane_Assembly.usda",
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, 0.0), rot=(0.7071, 0.7071, 0.0, 0.0)),
     ),
     "sketchfab": AssetBaseCfg(
         prim_path=f"/World/Terrain",
         spawn=UsdFileCfg(
             visible=True,
-            usd_path=f"{SIMULATION_DATA_DIR}/terrains/Road/scene.usdc",
-            scale=(0.05, 0.05, 0.05),  # agent init pos: (0.0, 0.0, 0.45)
+            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/Road/scene.usdc",
+            # scale=(0.05, 0.05, 0.05),  # agent init pos: (0.0, 0.0, 0.45)
             # usd_path=f"{SIMULATION_DATA_DIR}/terrains/factory_optymize_v2/scene.usdc",
-            # scale=(0.2, 0.2, 0.2),  # agent init pos: (0.0, 0.0, 0.45)
-            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/CCity_Building_Set_1/scene.usdc",
-            # scale=(0.05, 0.05, 0.05),  # agent init pos: (-19.0, 33.0, 0.45)
+            # scale=(0.1, 0.1, 0.1),  # pos=(0, 20, 0.0)
+            usd_path=f"{SIMULATION_DATA_DIR}/terrains/CCity_Building_Set_1/scene.usdc",
+            scale=(0.02, 0.02, 0.02),  # agent init pos: (-19.0, 33.0, 0.45)
             # usd_path=f"{SIMULATION_DATA_DIR}/terrains/Ship/scene.usdc",
             # scale=(0.05, 0.05, 0.05),
             # Road: https://sketchfab-prod-media.s3.amazonaws.com/archives/6a0e3b97a8a54f2a909d351322916293/usdz/a8a92840a69f45dfba44436472d88013/Neighbourhood_City_Modular_lowpoly.usdz?AWSAccessKeyId=ASIAZ4EAQ242LKVSATTF&Signature=bZl522vBvCLV3VHF4UT0y0SBPmg%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEDcaCWV1LXdlc3QtMSJHMEUCIQCVAsf2qK8AuOq7pl1tFv4tpHuLrxpBTiT2Vt4iR4S%2BXwIgE4PXLsjCjy11rwYshbmOYrfh67VlgLmdpwAgLl6MofgquwUI0P%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARAAGgw2Nzg4NzQzNzE4OTIiDEpHSnbZFX%2BdreB%2FPyqPBbHKGm9o%2Fp%2B8VFx0fQM%2Fne9Cq4OAkAdU5y7mrvipJvP%2B4l9N98dV14vsoNu%2FNX7MtDesrST1SbqS7LTtYWYRSSzvHYev1P4WRkNuM0XBSAkmo2uB1hPhDQZl2WMODm2woU6MPtFVf4S96VQq5oi3Q3t3RxivykTLVRmRI0h4OtPOoPXa%2FhJZFvQUO%2BKnTFg5Xxn5nIPvuRpt4orGv0N60A5WZYSXDybPQQykimPbdhHJREDAix824xbje%2BDnNH55EdB13Eq8grHaHOIc%2FoldVnhpBdzimzYh4GbYJ5irjFF%2BAS%2FGjJjj%2FVJ1ncKA6n3vgup%2FdVeGl0cAgKRxzpAAH6P%2BlH9BzJc5fvUcBIR9K2MWP420PDpbZhZCnL2rrkCHpUbZ0CWQ79UCV%2FR6L7lBuoaeyxdN0%2F1fumO17fpqqH3PudF1SNJ%2F3NXXBFP3veU1bl2QvrCbGWw8hYGW4QnN0SaJkLJpIPMpRTqIIyu9XAsdL49WULxbY68axIH%2FxeScJijGiDRT%2BCaKbqIe8gDu%2BXkeu3LRnY%2FB0LCoQpFAJJduF0g98Uy3xdA%2BZkQ5X4A1yR7MecW%2FA%2FQWrOoCB8iD%2FuDF2qcqe8%2FBcLh14DmInHNG3t8kT8egdNrBgLMVjIwEYUCOywZPKhOYbBV6YPjTHoHPKvUlhyj6i2hohEg9jFHq%2FX%2FxMeeuCztUdGdWzOD3kBereaEzVUBke3A6Ql1Hg8z%2BLg4raEuY547I6mD3m3NEMhx7J4wY63aOPWgdY3RphJPO9eqGmPUoPJqYPeoPA4%2BCxQFZI9VLo06VxoUrylXJ6wINXTM6b07dCKu4NITnvv0KiwyQm7Ar9Zbd4L7CH803AgnLCPFN3pbw3NwSb8Qw6KqdxwY6sQEdyodHEG6eI33QPasQ2v890QKvNnXeMnfAgN%2B3ysLnH%2FYTExh7kcwUUHuvPccmHplQ7MMbbSiZf48GBBjb2JnH%2BFTRumBvS4C9u913wtuEVQfQsk%2BvzSIjLSh8c2kY7siY2RK0tpmJXPCk5b5maSyGZeWU%2Bli9XnUmrT5AK0C3APrpYLPzRwUNZYt5oW%2FF8FnUMNGqinRr2qp8HyO10X3SEHLG6BMyFr5a9x%2FQE%2FJp6vg%3D&Expires=1759994322
@@ -101,6 +102,6 @@ ASSET_DICT = {
             # Industrial Factory Equipment: https://sketchfab.com/3d-models/industrial-factory-equipment-9143423e241e4a7b98def7e74c15b49b
             # Factory: https://sketchfab.com/3d-models/factory-3d-model-e723f4fe48ec4b9da52ec6e4a442286b
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, 0.0), rot=(0.7071, 0.7071, 0.0, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(19, -33, 0.0), rot=(0.7071, 0.7071, 0.0, 0.0)),
     ),
 }
