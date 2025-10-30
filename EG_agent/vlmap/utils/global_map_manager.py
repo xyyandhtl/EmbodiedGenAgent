@@ -49,6 +49,7 @@ class GlobalMapManager(BaseMapManager):
         # layout information --> LayoutMap
         layout_resolution = self.cfg.layout_voxel_size * 2
         self.layout_map = LayoutMap(cfg, resolution=layout_resolution, percentile=90, min_area=5, kernel_size=3)
+        self.binary_occ: np.ndarray = None
 
         # pass to the local map manager for inquiry
         self.global_candidate_bbox = None
@@ -60,7 +61,6 @@ class GlobalMapManager(BaseMapManager):
         self.best_candidate_name = None
         
         self.preload_path_ok = False
-        self.vis_preload_wall_ok = False
 
         # Caching for the semantic map
         self.cached_semantic_map = None
@@ -108,23 +108,19 @@ class GlobalMapManager(BaseMapManager):
     def has_global_map(self) -> bool:
         return len(self.global_map) > 0
 
-    def set_layout_info(self, layout_pcd, force_full_update=False, current_pose=None, update_radius=0):
+    def set_layout_info(self, layout_pcd, force_full_update=False, current_pose=None, update_radius=None):
         if force_full_update or not self.layout_initialized:
             # First time or forced: process the whole layout
             self.layout_map.set_layout_pcd(layout_pcd)
-            self.layout_map.extract_wall_pcd(num_samples_per_grid=10, z_value=self.cfg.floor_height)
             self.layout_initialized = True
-            logger.info("[GlobalMapManager] Initialized/updated layout map with full point cloud.")
+            logger.info("[GlobalMapManager] Initialized/updated layout map (occ_map only).")
         else:
             # Subsequent live updates: process only a local part
-            if current_pose is not None and update_radius > 0:
-                self.layout_map.update_local_layout_occmap_wallpcd(layout_pcd, current_pose, update_radius)
-                logger.info("[GlobalMapManager] Updated layout map with partial point cloud.")
+            if current_pose is not None and update_radius:
+                self.layout_map.update_local_layout_occmap(layout_pcd, current_pose, update_radius)
+                logger.info("[GlobalMapManager] Updated layout occ_map with partial point cloud.")
             else:
                 logger.warning("[GlobalMapManager] Skipping live layout update because current_pose is not provided or update_radius is 0.")
-
-    def save_wall_pcd(self):
-        self.layout_map.save_wall_pcd()
 
     def process_observations(
         self,
@@ -228,7 +224,7 @@ class GlobalMapManager(BaseMapManager):
         for i, obj in enumerate(self.global_map):
             if obj.save_path is not None:
                 obj.save_path = obj._initialize_save_path()
-                logger.info(f"[GlobalMap] Saving No.{i} obj: {obj.save_path}")
+                logger.debug(f"[GlobalMap] Saving No.{i} obj: {obj.save_path}")
                 obj.save_to_disk()
             else:
                 logger.info("[GlobalMap] No save path for local object")
@@ -280,35 +276,6 @@ class GlobalMapManager(BaseMapManager):
 
         logger.info(f"[GlobalMap] Successfully preloaded {len(self.global_map)} objects")
         self.is_initialized = True
-
-    def load_wall(self) -> None:
-        if os.path.exists(self.cfg.preload_path):
-            load_dir = self.cfg.preload_path
-            logger.info(f"[GlobalMap] Using preload wall path: {load_dir}")
-        else:
-            load_dir = self.cfg.map_save_path
-            logger.info(f"[GlobalMap] Preload wall path not found. Using default map save path: {load_dir}")
-
-        wall_pcd_path = os.path.join(load_dir, "wall.pcd")
-
-        if not Path(wall_pcd_path).is_file():
-            logger.warning(f"[GlobalMap] wall file not found at: {wall_pcd_path}")
-            return None
-
-        # load wall pcd
-        wall_pcd = o3d.io.read_point_cloud(wall_pcd_path)
-        # Convert to numpy array
-        points = np.asarray(wall_pcd.points)
-
-        # Set all z values to 22
-        points[:, 2] = self.cfg.floor_height
-
-        # Assign the modified points back to the point cloud
-        wall_pcd.points = o3d.utility.Vector3dVector(points)
-        logger.info(f"[GlobalMap] Wall loaded from: {wall_pcd_path}")
-
-        # Save to class attribute
-        self.layout_map.wall_pcd = wall_pcd
     
     def read_json_files(self, directory):
         data_records = {}
@@ -334,20 +301,6 @@ class GlobalMapManager(BaseMapManager):
         new_logged_entities = set()
 
         path_radii = self.cfg.path_radii
-
-        # show the preload wall pcd
-        if self.vis_preload_wall_ok is False:
-            if self.layout_map.wall_pcd is not None:
-                self.visualizer.log(
-                    "world/preload_wall",
-                    self.visualizer.Points3D(
-                        np.asarray(self.layout_map.wall_pcd.points),
-                        colors=[(169, 169, 169)],
-                        radii = [0.01]
-                    )
-                )
-                self.vis_preload_wall_ok = True
-
 
         if self.preload_path_ok is False and self.cfg.use_given_path:
             json_data = self.read_json_files(self.cfg.given_path_dir)
@@ -590,37 +543,32 @@ class GlobalMapManager(BaseMapManager):
 
     def create_nav_graph(self, curr_pose, resolution=0.03) -> None:
         """
-            Generates the NavigationGraph based on the current global map.
-            (A computationally intensive operation)
+            Generates the NavigationGraph based on the current layout occ_map.
         """
-        logger.info("[GlobalMapManager] [create_nav_graph] Creating navigation graph...")
+        logger.info("[GlobalMapManager] [create_nav_graph] Creating navigation graph from occ_map...")
 
-        # # 1. Get all objects' pcd from global map
-        # total_pcd = o3d.geometry.PointCloud()
-        # for obj in self.global_map:
-        #     total_pcd += obj.pcd_2d
-        #
-        # # 2. Add current pose into the total pcd
-        # curr_point_coords = curr_pose[:3, 3]
-        # curr_point = o3d.geometry.PointCloud()
-        # curr_point.points = o3d.utility.Vector3dVector([curr_point_coords])
-        # total_pcd += curr_point
-        #
-        # # 3. Add layout wall to the total pcd
-        # total_pcd += self.layout_map.wall_pcd
-        total_pcd = self.layout_map.wall_pcd
-
-        if not total_pcd.has_points():
-            logger.warning("[GlobalMapManager] [create_nav_graph] No points in map to create navigation graph.")
+        if self.layout_map is None or self.layout_map.occ_map is None:
+            logger.warning("[GlobalMapManager] [create_nav_graph] occ_map not available.")
             self.nav_graph = None
             return
 
-        # 4. Construct NavigationGraph and 2D occupancy map
         try:
-            nav_graph = NavigationGraph(self.cfg, total_pcd, cell_size=resolution)
-            self.nav_graph = nav_graph
+            # processed_occ = self.layout_map.process_binary_map()
+            if self.binary_occ is None or self.binary_occ.size == 0:
+                logger.warning("[GlobalMapManager] [create_nav_graph] Processed occ_map is empty.")
+                self.nav_graph = None
+                return
 
-            nav_graph.get_graph()
+            occ_for_nav = self.binary_occ.T  # [row(y), col(x)]
+            self.nav_graph = NavigationGraph(
+                self.cfg,
+                occupancy_grid_map=occ_for_nav,
+                x_edges=self.layout_map.x_edges,
+                y_edges=self.layout_map.y_edges,
+                # 关键修正：使用 LayoutMap 的分辨率，避免坐标映射误差
+                cell_size=self.layout_map.resolution,
+            )
+            self.nav_graph.get_graph()
         except Exception as e:
             logger.error(f"[GlobalMapManager] [create_nav_graph] Failed to create navigation graph: {e}")
             self.nav_graph = None
@@ -876,6 +824,7 @@ class GlobalMapManager(BaseMapManager):
         """
         Updates the cached semantic map image with static elements.
         """
+        start = time.time()
         if not self.has_global_map():
             self.cached_semantic_map = None
             return
@@ -885,10 +834,6 @@ class GlobalMapManager(BaseMapManager):
         for obj in self.global_map:
             if not obj.pcd_2d.is_empty():
                 all_points_lists.append(np.asarray(obj.pcd_2d.points))
-
-        wall_pcd = self.layout_map.wall_pcd if self.layout_map else None
-        if wall_pcd and not wall_pcd.is_empty():
-            all_points_lists.append(np.asarray(wall_pcd.points))
 
         if not all_points_lists:
             self.cached_semantic_map = None
@@ -931,13 +876,26 @@ class GlobalMapManager(BaseMapManager):
 
         placed_label_boxes = []
 
-        # Draw walls if available
-        if wall_pcd and not wall_pcd.is_empty():
-            wall_points_data = np.asarray(wall_pcd.points)
-            wall_points_img = np.array([world_to_img(p) for p in wall_points_data if np.isfinite(p).all()])
-            radius = int(1 * (scale_factor / 2))
-            for p_img in wall_points_img:
-                draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=(160, 160, 160))
+        # Draw walls from occ_map (processed binary map), draw the entire map
+        if self.layout_map and self.layout_map.occ_map is not None:
+
+            self.binary_occ = self.layout_map.process_binary_map()  # shape: [x_bins, y_bins], 1=occupied
+            x_edges = self.layout_map.x_edges
+            y_edges = self.layout_map.y_edges
+            wall_color = (160, 160, 160)
+
+            # 遍历每个占据网格，绘制对应的像素矩形
+            for i in range(self.binary_occ.shape[0]):       # x-bins
+                for j in range(self.binary_occ.shape[1]):   # y-bins
+                    if self.binary_occ[i, j] == 1:
+                        # cell corners in world
+                        p0 = world_to_img(np.array([x_edges[i],     y_edges[j],     0.0]))
+                        p1 = world_to_img(np.array([x_edges[i + 1], y_edges[j + 1], 0.0]))
+                        left = min(p0[0], p1[0])
+                        right = max(p0[0], p1[0])
+                        top = min(p0[1], p1[1])
+                        bottom = max(p0[1], p1[1])
+                        draw.rectangle([left, top, right, bottom], fill=wall_color)
 
         # Draw objects
         for obj in self.global_map:
@@ -1050,6 +1008,7 @@ class GlobalMapManager(BaseMapManager):
         self.cached_semantic_map = pil_img
         self.semantic_map_metadata = metadata
         self.semantic_map_dirty = False
+        logger.debug(f"[semantic] _update_semantic_map_cache: {time.time() - start:.4f} seconds")
 
     def _update_traversable_map_cache(self):
         """

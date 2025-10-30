@@ -212,7 +212,7 @@ class EGAgentSystem:
         self._log_info(
             f"Map loaded with {len(self.dm.global_map_manager.global_map)} objects and "
             f"{len(self.dm.global_map_manager.layout_map.point_cloud.points)} layout points"
-            f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points"
+            # f" and {len(self.dm.global_map_manager.layout_map.wall_pcd.points)} wall points"
         )
         self.update_objects_from_map()
         # For quick test, directly set a goal pose
