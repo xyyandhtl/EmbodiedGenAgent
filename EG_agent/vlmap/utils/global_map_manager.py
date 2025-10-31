@@ -16,7 +16,7 @@ import torch
 import torch.nn.functional as F
 
 from EG_agent.vlmap.utils.object import GlobalObject
-from EG_agent.vlmap.utils.types import Observation, GoalMode
+from EG_agent.vlmap.utils.types import Observation, GoalMode, ObjectClasses
 from EG_agent.vlmap.utils.base_map_manager import BaseMapManager
 from EG_agent.vlmap.utils.navigation_helper import NavigationGraph, LayoutMap
 
@@ -77,10 +77,20 @@ class GlobalMapManager(BaseMapManager):
         self._stop_map_update = threading.Event()
         # self._map_update_lock = threading.Lock()
         self._last_update_time = 0
-        self._update_interval = 2.0  # Update every 2 seconds (low frequency)
 
         # Start background thread
         self._start_background_update_thread()
+
+        # Object classes
+        # --- 加载指定的 要识别的 全部物体的 类别text ---
+        classes_path = cfg.yolo.given_classes_path
+        logger.info(f"[Detector][Init] Using given classes, path:{classes_path}")
+
+        # Object classes
+        self.obj_classes = ObjectClasses(
+            classes_file_path=classes_path,
+            bg_classes=self.cfg.yolo.bg_classes,
+            skip_bg=self.cfg.yolo.skip_bg)
 
         # Store dynamic parameters for background updates
         self._curr_pose: np.ndarray = None
@@ -88,6 +98,17 @@ class GlobalMapManager(BaseMapManager):
         self._traj_path = deque(maxlen=60)
 
         self.layout_initialized = False
+
+        self._cached_static_image = None  # Cache for static elements
+        self._cached_static_metadata = None  # Metadata for static elements
+        self._dynamic_layer = None  # Cache for dynamic elements
+        self._world_to_img_cache = {}  # Cache for world-to-image coordinate mapping
+
+        self.scale_factor = 2.0
+        try:
+            self.font = ImageFont.truetype("DejaVuSans.ttf", size=int(12 * (self.scale_factor / 2)))
+        except IOError:
+            self.font = ImageFont.load_default()
 
     def append_traj(self, pose: np.ndarray) -> None:
         self._traj_path.append(pose)
@@ -703,7 +724,7 @@ class GlobalMapManager(BaseMapManager):
             obj.nav_goal = False
             obj_feat = torch.from_numpy(obj.clip_ft).to("cuda")
             max_sim = F.cosine_similarity(text_query_ft.unsqueeze(0), obj_feat.unsqueeze(0), dim=-1).item()
-            obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
+            obj_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
             logger.debug(f"[GlobalMap][Inquiry] =========={obj_name}==============")
             logger.debug(f"[GlobalMap][Inquiry] Itself: \t{max_sim:.3f}")
 
@@ -745,7 +766,7 @@ class GlobalMapManager(BaseMapManager):
             for obj in self.global_map:
                 if obj.uid in self.ignore_global_obj_list:
                     continue
-                obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
+                obj_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
                 if obj_name == self.best_candidate_name:
                     obj_list.append(obj)
         
@@ -753,7 +774,7 @@ class GlobalMapManager(BaseMapManager):
             best_candidate = obj_list[0]
 
         # Output the best candidate and its similarity
-        best_candidate_name = self.obj_classes.get_classes_arr()[best_candidate.class_id]
+        best_candidate_name = self.visualizer.obj_classes.get_classes_arr()[best_candidate.class_id]
 
         # logger.debug(f"[GlobalMap][Inquiry] We ignore {len(self.ignore_global_obj_list)} objects in this global query.")
 
@@ -778,29 +799,15 @@ class GlobalMapManager(BaseMapManager):
         """Background thread worker that updates both semantic and traversable maps at low frequency."""
         while not self._stop_map_update.is_set():
             try:
-                # Check if an update is needed based on dirty flags or time interval
-                current_time = time.time()
-                time_ok = current_time - self._last_update_time >= self._update_interval
-                sem_needs_update = self.semantic_map_dirty and time_ok
-                tra_needs_update = self.traversable_map_dirty and time_ok
-
-                if sem_needs_update:
-                    # with self._map_update_lock:
-                    self._last_update_time = current_time
-                    # Update semantic map if dirty
-                    if self.semantic_map_dirty and self.has_global_map():
-                        self._update_semantic_map_cache(
-                            resolution=0.03,  # default resolution
-                        )
-                if tra_needs_update:
-                    self._last_update_time = current_time
-                    # with self._map_update_lock:
-                    # Update traversable map if dirty
-                    if self.traversable_map_dirty and self.nav_graph:
-                        self._update_traversable_map_cache()
+                if self.has_global_map():
+                    self._update_semantic_map_cache(
+                        resolution=0.03,
+                    )
+                if self.nav_graph:
+                    self._update_traversable_map_cache()
                 
                 # Sleep for a short time to prevent busy waiting
-                self._stop_map_update.wait(timeout=1.5)
+                self._stop_map_update.wait(timeout=1.0)
 
             except Exception as e:
                 logger.error(f"[GlobalMapManager] Error in background map update thread: {e}")
@@ -809,237 +816,220 @@ class GlobalMapManager(BaseMapManager):
 
     def _update_semantic_map_cache(self, resolution=0.03):
         """
-        Updates the cached semantic map image with static elements.
+        Optimized method to update the cached semantic map image with static and dynamic elements.
         """
         start = time.time()
         if not self.has_global_map():
             self.cached_semantic_map = None
             return
 
-        # 1. Aggregate all points to determine map boundaries
-        all_points_lists = []
-        for obj in self.global_map:
-            if not obj.pcd_2d.is_empty():
-                all_points_lists.append(np.asarray(obj.pcd_2d.points))
-
-        if not all_points_lists:
-            self.cached_semantic_map = None
-            return
-
-        all_points = np.vstack(all_points_lists)
-        all_points = all_points[np.isfinite(all_points).all(axis=1)]
-        if all_points.size == 0:
-            self.cached_semantic_map = None
-            return
-
-        # 2. Determine map dimensions and create metadata
-        min_coords = np.min(all_points[:, :2], axis=0)
-        max_coords = np.max(all_points[:, :2], axis=0)
-        map_size = max_coords - min_coords
-        scale_factor = 2.0
-        padding = 100
-        width = int((map_size[0]) / resolution * scale_factor) + padding
-        height = int((map_size[1]) / resolution * scale_factor) + padding
-
-        metadata = {
-            'min_coords': min_coords, 'resolution': resolution, 'scale_factor': scale_factor,
-            'padding': padding, 'width': width, 'height': height
-        }
-
-        # 3. Create base image and draw static elements
-        pil_img = Image.new('RGB', (width, height), (255, 255, 255))
-        draw = ImageDraw.Draw(pil_img)
-
-        try:
-            font = ImageFont.truetype("DejaVuSans.ttf", size=int(12 * (scale_factor / 2)))
-        except IOError:
-            font = ImageFont.load_default()
-
-        def world_to_img(point):
-            point_img = ((point[:2] - metadata['min_coords']) / metadata['resolution'] * metadata['scale_factor']).astype(int)
-            point_img[0] += metadata['padding'] // 2
-            point_img[1] = metadata['height'] - point_img[1] - (metadata['padding'] // 2)
-            return tuple(point_img)
-
-        placed_label_boxes = []
-
-        # Draw walls from occ_map (processed binary map), draw the entire map
-        if self.layout_map and self.layout_map.occ_map is not None:
-
-            self.binary_occ = self.layout_map.process_binary_map()  # shape: [x_bins, y_bins], 1=occupied
-            x_edges = self.layout_map.x_edges
-            y_edges = self.layout_map.y_edges
-            wall_color = (160, 160, 160)
-
-            # 遍历每个占据网格，绘制对应的像素矩形
-            for i in range(self.binary_occ.shape[0]):       # x-bins
-                for j in range(self.binary_occ.shape[1]):   # y-bins
-                    if self.binary_occ[i, j] == 1:
-                        # cell corners in world
-                        p0 = world_to_img(np.array([x_edges[i],     y_edges[j],     0.0]))
-                        p1 = world_to_img(np.array([x_edges[i + 1], y_edges[j + 1], 0.0]))
-                        left = min(p0[0], p1[0])
-                        right = max(p0[0], p1[0])
-                        top = min(p0[1], p1[1])
-                        bottom = max(p0[1], p1[1])
-                        draw.rectangle([left, top, right, bottom], fill=wall_color)
-
-        # Draw objects
-        for obj in self.global_map:
-            if obj.pcd_2d.is_empty():
-                continue
-
-            points = np.asarray(obj.pcd_2d.points)
-            if points.shape[0] == 0:
-                continue
-
-            obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
-            color_rgb_int = tuple(int(c * 255) for c in self.obj_classes.get_class_color(obj_name))
-
-            points_img = np.array([world_to_img(p) for p in points])
-            radius = int(1 * (scale_factor / 2))
-            for p_img in points_img:
-                draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=color_rgb_int)
-            # Draw class text (with collision detection)
-            obj_x_min, obj_y_min = np.min(points_img, axis=0)
-            obj_x_max, obj_y_max = np.max(points_img, axis=0)
-            centroid_img = np.mean(points_img, axis=0).astype(int)
-
-            text_bbox = draw.textbbox((0, 0), obj_name, font=font)
-            text_w, text_h = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
-
-            candidates = [
-                (centroid_img[0] - text_w // 2, centroid_img[1] - text_h // 2 - 5),
-                (obj_x_min + (obj_x_max - obj_x_min) // 2 - text_w // 2, obj_y_min - text_h),
-                (obj_x_max + 1, obj_y_min + text_h // 2),
-                (obj_x_min - text_w - 1, obj_y_min + text_h // 2),
-                (obj_x_max + 1, obj_y_max),
-                (obj_x_min - text_w - 1, obj_y_max),
+        # Check if static elements need to be updated
+        if self.semantic_map_dirty:
+            self.semantic_map_dirty = False
+            # 1. Aggregate all points to determine map boundaries
+            all_points_lists = [
+                np.asarray(obj.pcd_2d.points)
+                for obj in self.global_map if not obj.pcd_2d.is_empty()
             ]
-            # Find a non-colliding position
-            final_pos = None
-            for pos in candidates:
-                lx, ly = pos
-                label_box = (lx, ly, lx + text_w, ly + text_h)
-                if not (label_box[0] >= 0 and label_box[1] >= 0 and label_box[2] < width and label_box[3] < height):
+            if not all_points_lists:
+                self.cached_semantic_map = None
+                return
+
+            all_points = np.vstack(all_points_lists)
+            all_points = all_points[np.isfinite(all_points).all(axis=1)]
+            if all_points.size == 0:
+                self.cached_semantic_map = None
+                return
+
+            # 2. Update map dimensions and metadata
+            min_coords = np.min(all_points[:, :2], axis=0)
+            max_coords = np.max(all_points[:, :2], axis=0)
+            map_size = max_coords - min_coords
+            
+            padding = 100
+            width = int((map_size[0]) / resolution * self.scale_factor) + padding
+            height = int((map_size[1]) / resolution * self.scale_factor) + padding
+
+            self._cached_static_metadata = {
+                'min_coords': min_coords, 'resolution': resolution, 'scale_factor': self.scale_factor,
+                'padding': padding, 'width': width, 'height': height
+            }
+
+            # 3. Create base image for static elements
+            pil_img = Image.new('RGB', (width, height), (255, 255, 255))
+            draw = ImageDraw.Draw(pil_img)
+
+            def world_to_img(point):
+                point_img = ((point[:2] - self._cached_static_metadata['min_coords']) /
+                             self._cached_static_metadata['resolution'] *
+                             self._cached_static_metadata['scale_factor']).astype(int)
+                point_img[0] += self._cached_static_metadata['padding'] // 2
+                point_img[1] = self._cached_static_metadata['height'] - point_img[1] - (self._cached_static_metadata['padding'] // 2)
+                return tuple(point_img)
+
+            placed_label_boxes = []
+
+            # Draw walls from occ_map
+            if self.layout_map.occ_map is not None:
+                self.binary_occ = self.layout_map.process_binary_map()
+                x_edges = self.layout_map.x_edges
+                y_edges = self.layout_map.y_edges
+                wall_color = (160, 160, 160)
+
+                for i in range(self.binary_occ.shape[0]):
+                    for j in range(self.binary_occ.shape[1]):
+                        if self.binary_occ[i, j] == 1:
+                            p0 = world_to_img(np.array([x_edges[i], y_edges[j], 0.0]))
+                            p1 = world_to_img(np.array([x_edges[i + 1], y_edges[j + 1], 0.0]))
+                            left, right = min(p0[0], p1[0]), max(p0[0], p1[0])
+                            top, bottom = min(p0[1], p1[1]), max(p0[1], p1[1])
+                            draw.rectangle([left, top, right, bottom], fill=wall_color)
+
+            # Draw objects and their labels
+            for obj in self.global_map:
+                if obj.pcd_2d.is_empty():
                     continue
-                is_colliding = False
-                for placed_box in placed_label_boxes:
-                    if not (label_box[2] < placed_box[0] or label_box[0] > placed_box[2] or label_box[3] < placed_box[1] or label_box[1] > placed_box[3]):
-                        is_colliding = True
+
+                points = np.asarray(obj.pcd_2d.points)
+                obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
+                color_rgb_int = tuple(int(c * 255) for c in self.obj_classes.get_class_color(obj_name))
+
+                points_img = np.array([world_to_img(p) for p in points])
+                radius = int(1 * (self.scale_factor / 2))
+                for p_img in points_img:
+                    draw.ellipse([p_img[0]-radius, p_img[1]-radius, p_img[0]+radius, p_img[1]+radius], fill=color_rgb_int)
+
+                # Draw class text (with collision detection)
+                obj_x_min, obj_y_min = np.min(points_img, axis=0)
+                obj_x_max, obj_y_max = np.max(points_img, axis=0)
+                centroid_img = np.mean(points_img, axis=0).astype(int)
+
+                text_bbox = draw.textbbox((0, 0), obj_name, font=self.font)
+                text_w, text_h = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
+
+                candidates = [
+                    (centroid_img[0] - text_w // 2, centroid_img[1] - text_h // 2 - 5),
+                    (obj_x_min + (obj_x_max - obj_x_min) // 2 - text_w // 2, obj_y_min - text_h),
+                    (obj_x_max + 1, obj_y_min + text_h // 2),
+                    (obj_x_min - text_w - 1, obj_y_min + text_h // 2),
+                    (obj_x_max + 1, obj_y_max),
+                    (obj_x_min - text_w - 1, obj_y_max),
+                ]
+                # Find a non-colliding position
+                final_pos = None
+                for pos in candidates:
+                    lx, ly = pos
+                    label_box = (lx, ly, lx + text_w, ly + text_h)
+                    if not (label_box[0] >= 0 and label_box[1] >= 0 and label_box[2] < width and label_box[3] < height):
+                        continue
+                    is_colliding = False
+                    for placed_box in placed_label_boxes:
+                        if not (label_box[2] < placed_box[0] or label_box[0] > placed_box[2] or label_box[3] < placed_box[1] or label_box[1] > placed_box[3]):
+                            is_colliding = True
+                            break
+                    if not is_colliding:
+                        final_pos = pos
+                        placed_label_boxes.append(label_box)
                         break
-                if not is_colliding:
-                    final_pos = pos
-                    placed_label_boxes.append(label_box)
-                    break
-            if final_pos is None:
-                final_pos = candidates[0]
-            draw.text(final_pos, obj_name, font=font, fill=(0, 0, 0))
+                if final_pos is None:
+                    final_pos = candidates[0]
+                draw.text(final_pos, obj_name, font=self.font, fill=(0, 0, 0))
 
-        # 4. Draw dynamic elements: nav path, trajectory, and current pose
-        def world_to_img_cached(point):
-            point_img = ((point[:2] - metadata['min_coords']) / metadata['resolution'] * metadata['scale_factor']).astype(int)
-            point_img[0] += metadata['padding'] // 2
-            point_img[1] = metadata['height'] - point_img[1] - (metadata['padding'] // 2)
-            return tuple(point_img)
+            self._cached_static_image = pil_img
 
-        try:
-            coord_font = ImageFont.truetype("DejaVuSans.ttf", size=int(10 * (scale_factor / 2)))
-        except IOError:
-            coord_font = ImageFont.load_default()
+        # 4. Create dynamic layer
+        dynamic_layer = Image.new('RGBA', self._cached_static_image.size, (0, 0, 0, 0))
+        draw_dynamic = ImageDraw.Draw(dynamic_layer)
 
-        # (1) Draw navigation path
+        # Draw navigation path
         if self._nav_path and len(self._nav_path) > 1:
-            path_points_img = [world_to_img_cached(np.array(p)) for p in self._nav_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
-            if len(path_points_img) > 1:
-                draw.line(path_points_img, fill=(0, 255, 0), width=6)  # Green line
-                for point in path_points_img:
-                    draw.ellipse([point[0]-3, point[1]-3, point[0]+3, point[1]+3], fill=(255, 0, 0))
+            path_points_img = [self._world_to_img(np.array(p)) for p in self._nav_path]
+            draw_dynamic.line(path_points_img, fill=(0, 255, 0, 255), width=6)
 
-        # (2) Draw trajectory
+        # Draw trajectory
         if self._traj_path and len(self._traj_path) > 1:
-            traj_points_img = [world_to_img_cached(np.array(p)) for p in self._traj_path if isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 2]
-            if len(traj_points_img) > 1:
-                draw.line(traj_points_img, fill=(0, 0, 255), width=4)  # Blue line
+            traj_points_img = [self._world_to_img(np.array(p)) for p in self._traj_path]
+            draw_dynamic.line(traj_points_img, fill=(0, 0, 255, 255), width=4)
 
-        # (3) Draw current pose
+        # Draw current pose
         if self._curr_pose is not None:
             pos = self._curr_pose[:3, 3]
-            rot_matrix = self._curr_pose[:3, :3]
-            fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
-            pos_img = world_to_img_cached(pos)
+            pos_img = self._world_to_img(pos)
+            draw_dynamic.ellipse([pos_img[0]-4, pos_img[1]-4, pos_img[0]+4, pos_img[1]+4], fill=(255, 0, 0, 255))
 
-            arrow_length = 16 * (scale_factor / 3)
-            arrow_color = (255, 0, 0)  # Red
-            fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
-            tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
-            tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]  # Subtract because Y is flipped
-
-            # Define triangle points for the arrow
-            perp_vec_2d = np.array([-fwd_vec_2d_normalized[1], fwd_vec_2d_normalized[0]])
-            base_width = 8 * (scale_factor / 3)
-
-            base_center_x = pos_img[0] - 0.5 * arrow_length * fwd_vec_2d_normalized[0]
-            base_center_y = pos_img[1] + 0.5 * arrow_length * fwd_vec_2d_normalized[1]
-
-            p1 = (tip_x, tip_y)
-            p2 = (base_center_x + base_width * perp_vec_2d[0], base_center_y - base_width * perp_vec_2d[1])
-            p3 = (base_center_x - base_width * perp_vec_2d[0], base_center_y + base_width * perp_vec_2d[1])
-
-            draw.polygon([p1, p2, p3], fill=arrow_color)
-            # Add coordinates text
-            coord_text = f"({pos[0]:.2f}, {pos[1]:.2f})"
-            draw.text((pos_img[0] + 15, pos_img[1]), coord_text, font=coord_font, fill=(0, 0, 0))
-
-        # 5. Update the cached image and metadata
-        self.cached_semantic_map = pil_img
-        self.semantic_map_metadata = metadata
-        self.semantic_map_dirty = False
+        # Combine static and dynamic layers
+        combined_img = Image.alpha_composite(self._cached_static_image.convert('RGBA'), dynamic_layer)
+        self.cached_semantic_map = combined_img.convert('RGB')
         logger.debug(f"[semantic] _update_semantic_map_cache: {time.time() - start:.4f} seconds")
+
+    def _world_to_img(self, point):
+        """
+        Converts a world coordinate to an image coordinate, with caching.
+        """
+        key = tuple(point)
+        if key in self._world_to_img_cache:
+            return self._world_to_img_cache[key]
+
+        metadata = self._cached_static_metadata
+        point_img = ((point[:2] - metadata['min_coords']) / metadata['resolution'] * metadata['scale_factor']).astype(int)
+        point_img[0] += metadata['padding'] // 2
+        point_img[1] = metadata['height'] - point_img[1] - (metadata['padding'] // 2)
+        self._world_to_img_cache[key] = tuple(point_img)
+        return tuple(point_img)
 
     def _update_traversable_map_cache(self):
         """
-        Updates the cached traversable map image.
+        Optimized method to update the cached traversable map image.
         """
-        if not self.nav_graph:
+        if not self.nav_graph or self.nav_graph.free_space is None:
+            self.cached_traversable_map = None
             return
 
-        free_grid = self.nav_graph.free_space
-        if free_grid is None:
-            return
+        # Check if static elements need to be updated
+        if self.traversable_map_dirty:
+            self.traversable_map_dirty = False
+            free_grid = self.nav_graph.free_space
+            h, w = free_grid.shape
 
-        h, w = free_grid.shape
+            # Create base image for static elements
+            static_image = np.zeros((h, w, 3), dtype=np.uint8)
+            static_image[free_grid == 1] = [255, 255, 255]  # White for free space
+            static_image[free_grid == 0] = [100, 100, 100]  # Gray for occupied
 
-        image = np.zeros((h, w, 3), dtype=np.uint8)
-        image[free_grid == 1] = [255, 255, 255]  # White for free space
-        image[free_grid == 0] = [100, 100, 100]  # Gray for occupied
+            # Flip the image vertically to correct orientation
+            static_image = cv2.flip(static_image, 0)
 
-        # Flip the image vertically to correct orientation
-        image = cv2.flip(image, 0)
+            # Convert to PIL image
+            self._cached_static_traversable_image = Image.fromarray(static_image, 'RGB')
+            self._cached_traversable_metadata = {
+                'origin': self.nav_graph.pcd_min,
+                'resolution': self.nav_graph.cell_size,
+                'height': h,
+                'width': w
+            }
 
-        # PIL expects RGB
-        pil_img = Image.fromarray(image, 'RGB')
-        draw = ImageDraw.Draw(pil_img)
-
-        metadata = {'origin': self.nav_graph.pcd_min,
-                    'resolution': self.nav_graph.cell_size,
-                    'height': h, 'width': w}
+        # Create dynamic layer
+        dynamic_layer = Image.new('RGBA', self._cached_static_traversable_image.size, (0, 0, 0, 0))
+        draw_dynamic = ImageDraw.Draw(dynamic_layer)
 
         def world_to_grid_img(point):
-            # Transform world point to grid indices
+            """
+            Converts a world coordinate to grid image coordinates.
+            """
+            metadata = self._cached_traversable_metadata
             grid_x = int((point[0] - metadata['origin'][0]) / metadata['resolution'])
             grid_y = int((point[1] - metadata['origin'][1]) / metadata['resolution'])
-            # Transform grid indices to image coordinates (y is flipped)
             return grid_x, metadata['height'] - 1 - grid_y
 
+        # Draw current pose
         if self._curr_pose is not None:
             pos = self._curr_pose[:3, 3]
             rot_matrix = self._curr_pose[:3, :3]
-            fwd_vec_world = rot_matrix @ np.array([0, 0, 1]) # ROS forward is +Z
+            fwd_vec_world = rot_matrix @ np.array([0, 0, 1])  # ROS forward is +Z
             pos_img = world_to_grid_img(pos)
 
             arrow_length = 16
-            arrow_color = (255, 0, 0) # Red
+            arrow_color = (255, 0, 0, 255)  # Red
 
             fwd_vec_2d_normalized = fwd_vec_world[:2] / (np.linalg.norm(fwd_vec_world[:2]) + 1e-6)
 
@@ -1047,12 +1037,12 @@ class GlobalMapManager(BaseMapManager):
             tip_x = pos_img[0] + arrow_length * fwd_vec_2d_normalized[0]
             tip_y = pos_img[1] - arrow_length * fwd_vec_2d_normalized[1]
 
-            draw.line([pos_img, (tip_x, tip_y)], fill=arrow_color, width=3)
-            draw.ellipse([pos_img[0]-4, pos_img[1]-4, pos_img[0]+4, pos_img[1]+4], fill=arrow_color)
+            draw_dynamic.line([pos_img, (tip_x, tip_y)], fill=arrow_color, width=3)
+            draw_dynamic.ellipse([pos_img[0]-4, pos_img[1]-4, pos_img[0]+4, pos_img[1]+4], fill=arrow_color)
 
-        self.cached_traversable_map = pil_img
-        self.traversable_map_metadata = metadata
-        self.traversable_map_dirty = False
+        # Combine static and dynamic layers
+        combined_img = Image.alpha_composite(self._cached_static_traversable_image.convert('RGBA'), dynamic_layer)
+        self.cached_traversable_map = combined_img.convert('RGB')
 
     def mark_semantic_map_dirty(self):
         """Marks the semantic map as dirty, forcing a redraw on next get."""

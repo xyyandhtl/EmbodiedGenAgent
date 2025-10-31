@@ -106,4 +106,12 @@ ASSET_DICT = {
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(10.0, 0.0, 0.0), rot=(0.7071, 0.7071, 0.0, 0.0)),
     ),
+    "blender": AssetBaseCfg(
+        prim_path=f"/World/Terrain",
+        spawn=UsdFileCfg(
+            visible=True,
+            usd_path=f"/media/lenovo/1/Assets/uploads_files_4518977_Scene/Scene.usdc",
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(-10.0, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0)),
+    ),
 }

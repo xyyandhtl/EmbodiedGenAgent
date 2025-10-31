@@ -403,7 +403,7 @@ class Detector:
             curr_pose[:3, 3] - prev_kf_pose[:3, 3]
         )  # Translation difference
         if translation_diff >= 1.0:
-            logger.info(
+            logger.debug(
                 f"[Detector][Layout] Candidate Frame for layout calculation -- translation: {translation_diff}"
             )
             return True
@@ -415,7 +415,7 @@ class Detector:
         angle_diff = rotation_diff.magnitude() * (180 / np.pi)
 
         if angle_diff >= 20:
-            logger.info(
+            logger.debug(
                 f"[Detector][Layout] Candidate Frame for layout calculation -- rotation: {angle_diff}"
             )
             return True
@@ -692,7 +692,7 @@ class Detector:
                 fastsam_thread.join()
 
         if self.curr_detections.is_empty():
-            logger.warning("[Detector] No detections found in curr frame, skip!")
+            logger.debug("[Detector] No detections found in curr frame, skip!")
             return
         
         with timing_context("Detection Filter", self):
@@ -1015,7 +1015,7 @@ class Detector:
     ) -> None:
         # if no detection, just return
         if self.curr_results == {}:
-            logger.warning("[Detector] No detection, Nothing to calculate observations")
+            logger.debug("[Detector] No detection, Nothing to calculate observations")
             self.curr_observations = []
             return
 
