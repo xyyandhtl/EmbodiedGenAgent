@@ -3,7 +3,7 @@ defaults:
 #  - override hydra/job_logging: stdout
 
 # scene config
-terrain: "sketchfab"   # see assets/terrains/usd_scene.py
+terrain: "blender"   # see assets/terrains/usd_scene.py
 add_physics: True # if the terrain usd dont have collision
 
 # locomotion config
@@ -23,7 +23,7 @@ sensors:
     cx: 320.0
     cy: 240.0
 monitor_camera: False
-camera_follow: True
+camera_follow: False
 
 # ui config
 sim_app:
