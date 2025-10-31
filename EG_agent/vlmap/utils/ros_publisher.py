@@ -42,7 +42,6 @@ class ROSPublisher:
         self._publish_path(dualmap.action_path, 'action')
 
         if self.cfg.use_rviz:
-
             # 2. Publish images
             self._publish_image(dualmap.detector.annotated_image, 'annotated')
             self._publish_image(dualmap.detector.annotated_image_fs, 'fastsam')
@@ -52,13 +51,14 @@ class ROSPublisher:
             self._publish_pose(dualmap.curr_pose)
 
             # 4. Publish local map (RGB point cloud + semantic point cloud)
+            obj_classes = dualmap.detector.obj_classes
             if len(dualmap.local_map_manager.local_map):
                 start_time = time.time()
-                self._publish_local_map(dualmap.local_map_manager, dualmap.visualizer, publish_rgb=False)
+                self._publish_local_map(dualmap.local_map_manager, obj_classes, publish_rgb=False)
                 # print(f"Publishing local map took {time.time() - start_time:.2f} seconds.")
 
             if len(dualmap.global_map_manager.global_map):
-                self._publish_global_map(dualmap.global_map_manager, dualmap.visualizer, publish_rgb=False)
+                self._publish_global_map(dualmap.global_map_manager, obj_classes, publish_rgb=False)
 
     def _publish_path(self, path, path_type):
         if path is None:
@@ -135,16 +135,16 @@ class ROSPublisher:
         # Publish Odometry message
         self.pose_publisher.publish(odom_msg)
 
-    def _publish_local_map(self, local_map_manager, visualizer, publish_rgb=True):
+    def _publish_local_map(self, local_map_manager, obj_classes, publish_rgb=True):
         all_positions = []
         all_rgb_colors = []
         all_semantic_colors = []
 
         for local_obj in local_map_manager.local_map:
-            obj_name = visualizer.obj_classes.get_classes_arr()[local_obj.class_id]
+            obj_name = obj_classes.get_classes_arr()[local_obj.class_id]
             positions = np.asarray(local_obj.pcd.points)
             colors = (np.asarray(local_obj.pcd.colors) * 255).astype(np.uint8)
-            curr_obj_color = np.array(visualizer.obj_classes.get_class_color(obj_name)) * 255
+            curr_obj_color = np.array(obj_classes.get_class_color(obj_name)) * 255
             curr_obj_color = curr_obj_color.astype(np.uint8)
             semantic_colors = np.tile(curr_obj_color, (positions.shape[0], 1))
 
@@ -164,16 +164,16 @@ class ROSPublisher:
 
         self.publish_pointcloud(all_positions, all_semantic_colors, self.local_sem_publisher, "map")
 
-    def _publish_global_map(self, global_map_manager, visualizer, publish_rgb=True):
+    def _publish_global_map(self, global_map_manager, obj_classes, publish_rgb=True):
         all_positions = []
         all_rgb_colors = []
         all_semantic_colors = []
 
         for global_obj in global_map_manager.global_map:
-            obj_name = visualizer.obj_classes.get_classes_arr()[global_obj.class_id]
+            obj_name = obj_classes.get_classes_arr()[global_obj.class_id]
             positions = np.asarray(global_obj.pcd_2d.points)
             colors = (np.asarray(global_obj.pcd_2d.colors) * 255).astype(np.uint8)
-            curr_obj_color = np.array(visualizer.obj_classes.get_class_color(obj_name)) * 255
+            curr_obj_color = np.array(obj_classes.get_class_color(obj_name)) * 255
             curr_obj_color = curr_obj_color.astype(np.uint8)
             semantic_colors = np.tile(curr_obj_color, (positions.shape[0], 1))
 

@@ -18,7 +18,7 @@ from scipy.spatial.transform import Rotation as _R
 
 from EG_agent.system.envs.base_env import BaseAgentEnv
 from EG_agent.system.module_path import AGENT_ENV_PATH
-from EG_agent.vlmap.ros_runner.ros_publisher import ROSPublisher
+from EG_agent.vlmap.utils.ros_publisher import ROSPublisher
 
 import typing
 if typing.TYPE_CHECKING:
@@ -87,7 +87,53 @@ class IsaacsimEnv(BaseAgentEnv):
             "mark_point": self._handle_mark,
             "place_flag": self._handle_mark,
         }
+    
+    # ==========================================
+    # Basic Interface
+    # ==========================================
+    def set_vlmap_backend(self, backend) -> None:
+        """Attach VLMap backend so ROSPublisher can publish dualmap outputs."""
+        self._vlmap_backend = backend
 
+    def find_path(self, goal_pose):
+        """调用 VLMap 后端计算路径"""
+        return self._vlmap_backend.get_global_path(goal_pose)
+    
+    def get_cur_cmd_vel(self) -> tuple:
+        """返回当前计算的速度命令 (vx, vy, wz)"""
+        self.cur_cmd_vel = self._vlmap_backend.get_cmd_vel()
+        return self.cur_cmd_vel
+    
+    def get_target_pos(self, target_name: str) -> list[float]:
+        """返回指定目标的当前位置 [x,y,z]，若未知则返回 None。"""
+        return self.cur_goal_places.get(target_name, [])
+    
+    def get_cur_target_pos(self) -> list[float]:
+        return self.get_target_pos(self.cur_target)
+    
+    def get_inview_goals(self) -> list[str]:
+        """返回当前在相机视锥内的目标名称列表）。"""
+        return [name for name, inview in self.goal_inview.items() if inview]
+
+    def set_object_places(self, places: dict[str, list[float]]):
+        """设置/更新目标位置，并更新可视性（每个目标是否在当前相机的视锥内）"""
+        # Normalize to lower-case keys to match action args
+        self.cur_goal_places.update(places)
+        # Recompute visibility when goal set changes
+        self._update_goal_inview()
+
+    def get_cur_target(self):
+        return self._vlmap_backend.dualmap.goal_pose
+
+    def reset(self):
+        """重置环境：清空内部状态、发布零速以停止，并等待首次同步观测（最多约2秒）。"""
+        # Clear internal state
+        # self.goal_inview = {}
+        self.init_statistics()
+
+    # ==========================================
+    # ROS Configuration
+    # ==========================================
     def configure_ros(self, cfg) -> None:
         """创建 ROS 节点、发布/订阅与同步器，并在后台线程 spin。"""
         # 保存 Dynaconf 引用并同步相机配置
@@ -144,26 +190,6 @@ class IsaacsimEnv(BaseAgentEnv):
         period = 1.0 / float(cfg.ros.ros_rate)
         self._ros_pub_timer = self.ros_node.create_timer(period, self._ros_pub_tick)
 
-    def set_vlmap_backend(self, backend) -> None:
-        """Attach VLMap backend so ROSPublisher can publish dualmap outputs."""
-        self._vlmap_backend = backend
-
-    def find_path(self, goal_pose):
-        """调用 VLMap 后端计算路径"""
-        return self._vlmap_backend.get_global_path(goal_pose)
-    
-    def get_cur_cmd_vel(self) -> tuple:
-        """返回当前计算的速度命令 (vx, vy, wz)"""
-        self.cur_cmd_vel = self._vlmap_backend.get_cmd_vel()
-        return self.cur_cmd_vel
-    
-    def get_target_pos(self, target_name: str) -> list[float]:
-        """返回指定目标的当前位置 [x,y,z]，若未知则返回 None。"""
-        return self.cur_goal_places.get(target_name, [])
-    
-    def get_cur_target_pos(self) -> list[float]:
-        return self.get_target_pos(self.cur_target)
-
     def _synced_callback(self, rgb_msg, depth_msg, odom_msg):
         """RGB/Depth/Odom 同步回调：解码 -> 位姿矩阵 -> 推送到 VLMap 后端 -> 更新可视状态"""
         # Timestamp
@@ -208,31 +234,18 @@ class IsaacsimEnv(BaseAgentEnv):
         # Guard against early timer firing before backend/publisher ready
         self._ros_pub_executor.submit(self._ros_publisher.publish_all, self._vlmap_backend.dualmap)
 
-    # ==========================================
-    # 环境状态与目标管理（状态更新、目标位置、完成判定）
-    # ==========================================
-    def get_inview_goals(self) -> list[str]:
-        """返回当前在相机视锥内的目标名称列表）。"""
-        return [name for name, inview in self.goal_inview.items() if inview]
-
-    def set_object_places(self, places: dict[str, list[float]]):
-        """设置/更新目标位置，并更新可视性（每个目标是否在当前相机的视锥内）"""
-        # Normalize to lower-case keys to match action args
-        self.cur_goal_places.update(places)
-        # Recompute visibility when goal set changes
-        self._update_goal_inview()
-
-    def get_cur_target(self):
-        return self._vlmap_backend.dualmap.goal_pose
-
-    def reset(self):
-        """重置环境：清空内部状态、发布零速以停止，并等待首次同步观测（最多约2秒）。"""
-        # Clear internal state
-        # self.goal_inview = {}
-        self.init_statistics()
+    def close(self):
+        """销毁节点与执行器线程；必要时关闭 rclpy。"""
+        # 先清理发布器资源
+        if self._ros_pub_timer is not None:
+            self._ros_pub_timer.cancel()
+            self._ros_pub_timer = None
+        if self._ros_pub_executor is not None:
+            self._ros_pub_executor.shutdown(wait=False)
+            self._ros_pub_executor = None
 
     # ==========================================
-    # 动作发布与执行（cmd_vel、nav_pose、枚举命令、mark）
+    # Action Implementation
     # ==========================================
     def run_action(self, action_type: str, action: tuple | None, verbose=False):
         """
@@ -333,13 +346,13 @@ class IsaacsimEnv(BaseAgentEnv):
         print(f"[IsaacsimEnv] Published mark point at: ({x}, {y}, {z})")
 
     # ==========================================
-    # 相机几何与可视性辅助（旋转、视锥检测）
+    # Auxiliary Methods
     # ==========================================
     def _update_goal_inview(self):
         """根据当前相机位姿与目标位置，实时更新目标是否在视野内。"""
         # Default: no goals or no pose => all False
         self.goal_inview = {name: False for name in self.cur_goal_places.keys()}
-        cam_pose = self._vlmap_backend.dualmap.realtime_pose
+        cam_pose = self._vlmap_backend.realtime_pose
         
         cam_pos = cam_pose[:3, 3]
         cam_rot = cam_pose[:3, :3]
@@ -365,16 +378,3 @@ class IsaacsimEnv(BaseAgentEnv):
                 self.goal_inview[name] = True
             else:
                 self.goal_inview[name] = False
-
-    # ==========================================
-    # ROS 生命周期（关闭/清理）
-    # ==========================================
-    def close(self):
-        """销毁节点与执行器线程；必要时关闭 rclpy。"""
-        # 先清理发布器资源
-        if self._ros_pub_timer is not None:
-            self._ros_pub_timer.cancel()
-            self._ros_pub_timer = None
-        if self._ros_pub_executor is not None:
-            self._ros_pub_executor.shutdown(wait=False)
-            self._ros_pub_executor = None

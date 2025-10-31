@@ -23,10 +23,8 @@ class ReRunVisualizer:
             super().__init__()
             self.cfg = cfg
 
-            classes_path = cfg.yolo.classes_path
-            if cfg.yolo.use_given_classes:
-                classes_path = cfg.yolo.given_classes_path
-                logger.info(f"[Visualizar] Using given classes, path:{classes_path}")
+            classes_path = cfg.yolo.given_classes_path
+            logger.info(f"[Visualizar] Using given classes, path:{classes_path}")
 
             # Object classes
             self.obj_classes = ObjectClasses(

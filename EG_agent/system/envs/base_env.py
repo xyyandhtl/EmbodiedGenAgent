@@ -17,7 +17,7 @@ class BaseAgentEnv:
         self.cur_goal_set = set()  # set of str
 
         # Behavior Tree attributes
-        self.bt: BehaviorTree = None  # type: ignore
+        self.bt: BehaviorTree | None = None  # type: ignore
         
         self.step_num = 0
         self._last_tick_time = time.time()
@@ -115,7 +115,7 @@ class BaseAgentEnv:
         # raise NotImplementedError
         """根据条件集合判定任务完成。"""
         # Delegate scheduling/completion to behavior tree
-        return self.cur_goal_set and self.cur_goal_set <= self.condition_set
+        return len(self.cur_goal_set) > 0 and self.cur_goal_set <= self.condition_set
 
     def create_behavior_lib(self):
         self.behavior_lib = ExecBehaviorLibrary(self.behavior_lib_path)

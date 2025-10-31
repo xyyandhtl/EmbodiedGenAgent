@@ -13,7 +13,7 @@ intrinsic:
 #   0, 0, 0, 1]
 
 # ============================================================
-# ONLINE ROS CONFIG
+# SCENARIO CONFIG
 # ============================================================
 # dataset_name: 'road'
 # dataset_name: 'warehouse'
@@ -23,11 +23,9 @@ dataset_name: 'garden'
 # ============================================================
 # OUTPUT CONFIG
 # ============================================================
-# output directory
-output_path: ./outputs
+output_path: ../../outputs
 
 # ============================================================
 # LOGGING CONFIG
 # ============================================================
-# logging config
-logging_config: ./config/support_config/logging_config.yaml
+logging_config: ./config/logging_config.yaml

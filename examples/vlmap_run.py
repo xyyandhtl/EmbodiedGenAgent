@@ -12,7 +12,7 @@ from scipy.spatial.transform import Rotation as R
 from dynaconf import Dynaconf
 
 from EG_agent.vlmap.vlmap import VLMapNav
-from EG_agent.vlmap.ros_runner.ros_publisher import ROSPublisher
+from EG_agent.vlmap.utils.ros_publisher import ROSPublisher
 from EG_agent.system.module_path import AGENT_SYSTEM_PATH
 
 class VLMapRosRunner(Node):

@@ -29,33 +29,32 @@ class EGAgentSystem:
 
     def __init__(self):
         """Initialize generators, environment runtime, and UI caches."""
-        # QT监听器与缓存
+        # QT 监听器与缓存
         self._listeners: Dict[str, List[Callable[[Any], None]]] = {}
         self._conversation: List[str] = ["智能体: 请先创建后台"]
         self._logs: List[str] = []
         self._last_bt_image: np.ndarray = self._gen_dummy_image(300, 400, "Behavior Tree")
         self._placeholder_counter = 0
 
-        # 逻辑 Goal 生成器：用于将用户的自然语言指令（如“找到椅子”）解析为结构化的 逻辑目标
+        # Logic-Goal 生成器
         self.goal_generator = LogicGoalGenerator()
         self.goal_generator.prepare_prompt(object_set=None)
         self._log_info(f"goal_generator prompt: \n{self.goal_generator.prompt_scene}")
 
-        # 行为树规划器：用于根据逻辑目标，动态地生成一个 BT。连续任务时需即时更新 cur_cond_set 和 key_objects
+        # Behavior-Tree 生成器
         self.bt_generator = BTGenerator(env_name="embodied",
                                         cur_cond_set=set(),
                                         key_objects=[])
 
-        # Agent 载体部署环境
-        # 组成：通过 bint_bt 动态绑定行为树，定义 run_action 实现交互逻辑，通过 ROS2 与部署环境信息收发
-        # 运行：行为树叶节点在被 tick 时，通过调用其绑定的 agent_env.run_action 实现智能体到部署环境交互的 action
+        # VLM-Backend 后台
+        self.vlmap_backend = VLMapNav()
+        self.dm: Dualmap = None
+
+        # Agent-Env 部署环境
         self.agent_env = IsaacsimEnv()
         cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
         self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
-
-        # VLM 语义地图导航后端 -> 延迟创建，由 GUI 按钮触发
-        self.vlmap_backend: VLMapNav = None
-        self.dm: Dualmap = None
+        self.agent_env.set_vlmap_backend(self.vlmap_backend)
 
         # 运行控制
         self._running = False
@@ -68,7 +67,7 @@ class EGAgentSystem:
     # ---------------------- 状态查询 ----------------------
     @property
     def backend_ready(self) -> bool:
-        return self.vlmap_backend is not None and self.dm is not None
+        return self.dm is not None
     
     @property
     def finished(self) -> bool:
@@ -108,26 +107,24 @@ class EGAgentSystem:
     # ---------------------- 控制接口 ----------------------
     def create_backend(self) -> bool:
         """Create the VLMapNav backend and configure ROS subscriptions."""
-        if self.vlmap_backend is not None:
+        if self.dm is not None:
             self._log_warn("Backend already created.")
             return True
         self._conv_info("正在创建后台，请稍候...")
-        self._conv_debug("提示：使用期间任何时候，可以手动操探键盘方向键和ZX转向键控制智能体移动！")
         self._log_info("Creating backend...")
-        self.vlmap_backend = VLMapNav()
-        self.agent_env.set_vlmap_backend(self.vlmap_backend)
-        # dualmap reference, set after backend is created
+
+        # 创建建图后台
+        self.vlmap_backend.create_backend()
         self.dm = self.vlmap_backend.dualmap
-        # 再配置 ROS（内部会创建订阅与可选的发布计时器）
         self._log_info("Configuring ROS...")
         self.agent_env.configure_ros(self.cfg)
-        self._log_info("Backend created successfully.")
         self._conv_info("后台创建成功，ROS2通信已配置，请启动智能体。")
         # For test goal_inview
         # self.agent_env.set_object_places({"flag1": [5, 0, 0]})
         # self.agent_env.set_object_places({"flag2": [0, 5, 0]})
         # self.agent_env.run_action("mark", (5, 0, 0))
         # self.agent_env.run_action("mark", (0, 5, 0))
+        self._log_info("Backend created successfully.")
         return True
     
     def start(self):
@@ -232,7 +229,7 @@ class EGAgentSystem:
 
     def get_agent_pose(self) -> tuple:
         """返回当前机器人位姿 [x,y,z,qw,qx,qy,qz]"""
-        return tuple(self.dm.realtime_pose[:3, 3]) if self.backend_ready else (0, 0, 0)
+        return tuple(self.vlmap_backend.realtime_pose[:3, 3]) if self.backend_ready else (0, 0, 0)
 
     def get_cur_target_pos(self) -> list:
         """返回当前所有目标的全局位置 {target_name: [x,y,z]}"""
@@ -272,19 +269,6 @@ class EGAgentSystem:
             self._log_error(f"Run loop_bt exception: {e}")
             self._log(tb)
             self._conv_err("[行为树]运行循环异常，已停止。请查看日志窗口。")
-
-    def _run_loop_backend(self):
-        """(已弃用,移至后台线程) Backend loop: backend run_once detector frontend"""
-        try:
-            while not self._stop_event.is_set():
-                # time.sleep(0.01)
-                # VLM 建图后台处理一帧数据
-                self.vlmap_backend.run_once()
-        except Exception as e:
-            tb = traceback.format_exc()
-            self._log_error(f"Run loop_backend exception: {e}")
-            self._log(tb)
-            self._conv_err("[地图后台]运行循环异常，已停止。请查看日志窗口。")
 
     # ---------------------- 输入接口 ----------------------
     def feed_instruction(self, text: str):
@@ -357,7 +341,7 @@ class EGAgentSystem:
     def get_entity_rows(self) -> Iterable[tuple]:
         """Yield (name, info) tuples using dualmap content (local/global)."""
         rows = []
-        classes = self.dm.visualizer.obj_classes.get_classes_arr()
+        classes = self.dm.detector.obj_classes.get_classes_arr()
 
         # Local objects summary
         # for local_obj in dm.local_map_manager.local_map[:20]:
