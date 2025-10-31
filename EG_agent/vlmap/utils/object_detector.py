@@ -89,10 +89,8 @@ class Detector:
 
         # Object classes
         # --- 加载指定的 要识别的 全部物体的 类别text ---
-        classes_path = cfg.yolo.classes_path
-        if cfg.yolo.use_given_classes:
-            classes_path = cfg.yolo.given_classes_path
-            logger.info(f"[Detector][Init] Using given classes, path:{classes_path}")
+        classes_path = cfg.yolo.given_classes_path
+        logger.info(f"[Detector][Init] Using given classes, path:{classes_path}")
 
         self.obj_classes = ObjectClasses(
             classes_file_path=classes_path,
@@ -123,7 +121,12 @@ class Detector:
         self.curr_observations = []
 
         # visualizer
-        self.visualizer = ReRunVisualizer()
+        if self.cfg.use_rerun:
+            self.visualizer = ReRunVisualizer()
+             # for filtering the pose of follower camera for visualization
+            # --- 创建 相机位姿 滤波器（平滑实时输入的位姿，避免 微小噪声 引起 可视化时的窗口抖动）
+            self.pose_filter_follower = PoseLowPassFilter(alpha=0.95)
+
         self.annotated_image = None
 
         # Variables for FastSAM
@@ -145,67 +148,51 @@ class Detector:
         logger.info(f"[Detector][Init] Initilizating detection modules...")
 
         if cfg.run_detection:
-            try:
-                # CLIP module
-                logger.info(
-                    f"[Detector][Init] Loading CLIP model: {cfg.clip.model_name} with pretrained weights '{cfg.clip.pretrained}'"
+            # CLIP module
+            logger.info(
+                f"[Detector][Init] Loading CLIP model: {cfg.clip.model_name} with pretrained weights '{cfg.clip.pretrained}'"
+            )
+
+            self.clip_model, _, self.clip_preprocess = (
+                open_clip.create_model_and_transforms(
+                    cfg.clip.model_name, pretrained=cfg.clip.pretrained
                 )
+            )
+            self.clip_model = self.clip_model.to(cfg.device)
+            self.clip_model.eval()
 
-                self.clip_model, _, self.clip_preprocess = (
-                    open_clip.create_model_and_transforms(
-                        cfg.clip.model_name, pretrained=cfg.clip.pretrained
-                    )
-                )
-                self.clip_model = self.clip_model.to(cfg.device)
-                self.clip_model.eval()
+            # Only reparameterize if the model is MobileCLIP
+            if "MobileCLIP" in cfg.clip.model_name:
+                from mobileclip.modules.common.mobileone import reparameterize_model
 
-                # Only reparameterize if the model is MobileCLIP
-                if "MobileCLIP" in cfg.clip.model_name:
-                    from mobileclip.modules.common.mobileone import reparameterize_model
+                self.clip_model = reparameterize_model(self.clip_model)
 
-                    self.clip_model = reparameterize_model(self.clip_model)
+            self.clip_tokenizer = open_clip.get_tokenizer(cfg.clip.model_name)
 
-                self.clip_tokenizer = open_clip.get_tokenizer(cfg.clip.model_name)
-            except Exception as e:
-                logger.error(f"[Detector][Init] Error loading CLIP model: {e}")
-                return
+            # Detection module
+            logger.info(
+                f"[Detector][Init] Loading YOLO model from\t{cfg.yolo.model_path}"
+            )
+            self.yolo = YOLO(str(cfg.yolo.model_path))  
+            # self.yolo.to(cfg.device)
+            self.yolo.set_classes(self.obj_classes.get_classes_arr())
+            logger.info(f"[Detector][Init] YOLO device: {self.yolo.device}")
 
-            try:
-                # Detection module
-                logger.info(
-                    f"[Detector][Init] Loading YOLO model from\t{cfg.yolo.model_path}"
-                )
-                self.yolo = YOLO(str(cfg.yolo.model_path))  
-                # self.yolo.to(cfg.device)
-                self.yolo.set_classes(self.obj_classes.get_classes_arr())
-                logger.info(f"[Detector][Init] YOLO device: {self.yolo.device}")
-            except Exception as e:
-                logger.error(f"[Detector][Init] Error loading YOLO model: {e}")
-                return
-
-            try:
-                # Segmentation module
-                logger.info(
-                    f"[Detector][Init] Loading SAM model from\t{cfg.sam.model_path}"
-                )
-                self.sam = SAM(str(cfg.sam.model_path))
-                # self.sam.to(cfg.device)
-                logger.info(f"[Detector][Init] SAM device: {self.sam.device}")
-            except Exception as e:
-                logger.error(f"[Detector][Init] Error loading SAM model: {e}")
-                return
+            # Segmentation module
+            logger.info(
+                f"[Detector][Init] Loading SAM model from\t{cfg.sam.model_path}"
+            )
+            self.sam = SAM(str(cfg.sam.model_path))
+            # self.sam.to(cfg.device)
+            logger.info(f"[Detector][Init] SAM device: {self.sam.device}")
 
             # Open fastsam for open vocabulary detection
             if cfg.use_fastsam:
-                try:
-                    logger.info(
-                        f"[Detector][Init] Loading FastSAM model from\t{cfg.fastsam.model_path}"
-                    )
-                    self.fastsam = FastSAM(cfg.fastsam.model_path)
-                    # self.fastsam.to(cfg.device)
-                except Exception as e:
-                    logger.error(f"[Detector][Init] Error loading FASTSAM model: {e}")
-                    return
+                logger.info(
+                    f"[Detector][Init] Loading FastSAM model from\t{cfg.fastsam.model_path}"
+                )
+                self.fastsam = FastSAM(cfg.fastsam.model_path)
+                # self.fastsam.to(cfg.device)
 
             logger.info("[Detector][Init] Initializing high-low mobility classifier.")
             # --- 加载 预定义的 动、静物体 类别text，并使用 CLIP 模型将其 转换为 文本特征向量 ---
@@ -253,10 +240,6 @@ class Detector:
                 )
                 self.filter.set_device(self.cfg.device)
 
-        # for filtering the pose of follower camera for visualization
-        # --- 创建 相机位姿 滤波器（平滑实时输入的位姿，避免 微小噪声 引起 可视化时的窗口抖动）
-        self.pose_filter_follower = PoseLowPassFilter(alpha=0.95)
-
         logger.info(f"[Detector][Init] Finish Init.")
 
     def update_state(self) -> None:
@@ -275,7 +258,6 @@ class Detector:
     def set_data_input(self, curr_data: DataInput) -> None:
         self.curr_data = curr_data
 
-        # if not self.cfg.preload_layout:
         # If a thread is already running, wait for it to finish
         if self.data_thread and self.data_thread.is_alive():
             self.data_thread.join()
@@ -558,7 +540,7 @@ class Detector:
             mask=fs_masks_np,
         )
 
-        if self.cfg.visualize_detection and self.cfg.show_fastsam_debug:
+        if self.cfg.generate_detection and self.cfg.show_fastsam_debug:
             image_fs, _ = visualize_result_rgb(
                 color, fs_detections, self.obj_classes.get_classes_arr()
             )
@@ -678,7 +660,7 @@ class Detector:
                 fastsam_detections, incoming_detections
             )
 
-        if self.cfg.visualize_detection and self.cfg.show_fastsam_debug:
+        if self.cfg.generate_detection and self.cfg.show_fastsam_debug:
             image_fs_after, _ = visualize_result_rgb(
                 color, fs_after_detections, self.obj_classes.get_classes_arr()
             )
@@ -766,7 +748,7 @@ class Detector:
             "text_feats": text_feats,
         }
 
-        if self.cfg.visualize_detection:
+        if self.cfg.generate_detection:
             with timing_context("Visualize Detection", self):
                 self.annotated_image, _ = visualize_result_rgb(
                     color, filtered_detections, self.obj_classes.get_classes_arr()

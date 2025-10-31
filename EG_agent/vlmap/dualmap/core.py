@@ -57,9 +57,6 @@ class Dualmap:
         self.cfg.yolo.model_path = f'{dualmap_dir}/{self.cfg.yolo.model_path}'
         self.cfg.sam.model_path = f'{dualmap_dir}/{self.cfg.sam.model_path}'
         self.cfg.fastsam.model_path = f'{dualmap_dir}/{self.cfg.fastsam.model_path}'
-        self.cfg.config_file_path = f'{dualmap_dir}/{self.cfg.config_file_path}'
-        # self.cfg.ros_stream_config_path = f'{dualmap_dir}/{self.cfg.ros_stream_config_path}'
-        self.cfg.given_classes_id_color = f'{dualmap_dir}/{self.cfg.given_classes_id_color}'
         self.cfg.preload_path = f'{self.cfg.output_path}/{self.cfg.dataset_name}/{self.cfg.preload_path}'
 
         self.cfg.map_save_path = f"{self.cfg.output_path}/{self.cfg.dataset_name}/{self.cfg.map_save_path}"
@@ -69,15 +66,16 @@ class Dualmap:
         self.print_cfg()
 
         # --- 1. Initialization ---
-        self.visualizer = ReRunVisualizer(cfg)  # 用于通过Rerun库进行实时可视化（展示建图过程、机器人位姿、点云、检测框等信息）
-        self.detector = Detector(cfg)  # 负责图像中的物体检测（YOLO）、分割（SAM/FastSAM）以及 特征提取（CLIP）
-        self.local_map_manager = LocalMapManager(cfg)  # 局部地图管理器（短期记忆）：负责维护机器人当前位置周围一小块区域的、高精度的实时地图，用于精细环境感知与动态避障
-        self.global_map_manager = GlobalMapManager(cfg)  # 全局地图管理器（长期记忆）：负责存储和管理长期的、大范围环境地图和物体信息，用于大范围全局路径规划
+        self.detector = Detector(cfg)
+        self.local_map_manager = LocalMapManager(cfg)
+        self.global_map_manager = GlobalMapManager(cfg)
 
         # Additional initialization for visualization
-        self.visualizer.set_use_rerun(cfg.use_rerun)
-        self.visualizer.init("refactor_mapping")
-        self.visualizer.spawn()
+        if cfg.use_rerun:
+            self.visualizer = ReRunVisualizer(cfg)
+            self.visualizer.set_use_rerun(cfg.use_rerun)
+            self.visualizer.init("refactor_mapping")
+            self.visualizer.spawn()
 
         # Keyframe Selection
         self.keyframe_counter = 0
@@ -88,7 +86,6 @@ class Dualmap:
         self.rotation_threshold = cfg.rotation_threshold
 
         # pose memory
-        self.realtime_pose: np.ndarray = np.eye(4)
         self.curr_pose: np.ndarray = None
         self.prev_pose: np.ndarray = None
         self.goal_pose: list | None = None
@@ -188,7 +185,6 @@ class Dualmap:
         logger.info("[Core][Init] Preloading global map...")
         self.global_map_manager.load_map()
 
-        # if self.cfg.preload_layout:
         logger.info("[Core][Init] Preloading layout...")
         self.detector.load_layout()
         # self.global_map_manager.load_wall()
@@ -318,7 +314,8 @@ class Dualmap:
         for i in range(end_range):
             # Set timestamp for visualizer
             logger.info("[Core][EndProcess] End Counter: %d", end_frame_id + i + 1)
-            self.visualizer.set_time_sequence("frame", end_frame_id + i + 1)
+            if self.cfg.use_rerun:
+                self.visualizer.set_time_sequence("frame", end_frame_id + i + 1)
 
             # local end_process
             # set fake timestamp
@@ -343,7 +340,8 @@ class Dualmap:
         with timing_context("Merging", self):
             if self.cfg.merge_local_map:
                 self.local_map_manager.merge_local_map()
-                self.visualizer.set_time_sequence("frame", end_range + 1)
+                if self.cfg.use_rerun:
+                    self.visualizer.set_time_sequence("frame", end_range + 1)
                 logger.info("[Core][EndProcess] Local Map Merged")
 
         # save the local mapping results
@@ -417,11 +415,11 @@ class Dualmap:
             end_time = time.time()
 
             # Set time sequence for visualizer
-            self.visualizer.set_time_sequence("frame", self.curr_frame_id)
-
-            # Set current camera information
-            self.visualizer.set_camera_info(data_input.intrinsics, data_input.pose)
-            self.visualizer.set_image(data_input.color)
+            if self.cfg.use_rerun:
+                self.visualizer.set_time_sequence("frame", self.curr_frame_id)
+                # Set current camera information
+                self.visualizer.set_camera_info(data_input.intrinsics, data_input.pose)
+                self.visualizer.set_image(data_input.color)
 
             logger.debug(f"[Core][DetectorThread] Processed frame {self.curr_frame_id} in {end_time - start_time:.2f} seconds")
             if self.cfg.use_rerun:
@@ -454,8 +452,9 @@ class Dualmap:
             except queue.Empty:
                 continue
 
-            # Set time stamp
-            self.visualizer.set_time_sequence("frame", self.curr_frame_id)
+            # Set time sequence for visualizer
+            if self.cfg.use_rerun:
+                self.visualizer.set_time_sequence("frame", self.curr_frame_id)
 
             # Detection Visualization
             if self.cfg.use_rerun:

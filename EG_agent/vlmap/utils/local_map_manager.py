@@ -349,7 +349,7 @@ class LocalMapManager(BaseMapManager):
             # if no related objects, delete in local map and ready for global obs
             if len(related_objs) == 0:
 
-                class_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
+                class_name = self.obj_classes.get_classes_arr()[obj.class_id]
 
                 # restrict unknown
                 if self.cfg.restrict_unknown_labels and class_name == "unknown":
@@ -379,7 +379,7 @@ class LocalMapManager(BaseMapManager):
             # And delete the current object and all related objects
             if is_related_obj_ready:
 
-                class_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
+                class_name = self.obj_classes.get_classes_arr()[obj.class_id]
 
                 # restrict unknown
                 if self.cfg.restrict_unknown_labels and class_name == "unknown":
@@ -624,7 +624,7 @@ class LocalMapManager(BaseMapManager):
             if local_obj.observed_num <= 2:
                 continue
 
-            obj_name = self.visualizer.obj_classes.get_classes_arr()[local_obj.class_id]
+            obj_name = self.obj_classes.get_classes_arr()[local_obj.class_id]
 
             # Ignore ceiling wall
             if obj_name == "ceiling wall" or obj_name == "carpet" or obj_name == "rug" or obj_name == "ceiling_molding":
@@ -639,7 +639,7 @@ class LocalMapManager(BaseMapManager):
             positions = np.asarray(local_obj.pcd.points)
             colors = np.asarray(local_obj.pcd.colors) * 255
             colors = colors.astype(np.uint8)
-            curr_obj_color = self.visualizer.obj_classes.get_class_color(obj_name)
+            curr_obj_color = self.obj_classes.get_class_color(obj_name)
 
             obj_names.append(obj_name)
             obj_colors.append(curr_obj_color)
@@ -949,7 +949,7 @@ class LocalMapManager(BaseMapManager):
             if obj.observed_num <= 3:
                 continue
             # Ignore ceiling wall
-            obj_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
+            obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
             if obj_name in ["ceiling wall", "carpet", "rug", "unknown"]:
                 continue
             total_pcd += obj.pcd
@@ -1104,7 +1104,7 @@ class LocalMapManager(BaseMapManager):
             obj.nav_goal = False
             obj_feat = torch.from_numpy(obj.clip_ft).to("cuda")
             max_sim = F.cosine_similarity(text_query_ft.unsqueeze(0), obj_feat.unsqueeze(0), dim=-1).item()
-            obj_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
+            obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
             logger.info(f"[LocalMap][Inquiry] =========={obj_name}==============")
             logger.info(f"[LocalMap][Inquiry] Itself: \t{max_sim:.3f}")
 
@@ -1119,7 +1119,7 @@ class LocalMapManager(BaseMapManager):
         best_candidate, best_similarity = sorted_candidates[0]
 
         # Output the best candidate and its similarity
-        best_candidate_name = self.visualizer.obj_classes.get_classes_arr()[best_candidate.class_id]
+        best_candidate_name = self.obj_classes.get_classes_arr()[best_candidate.class_id]
         logger.info(f"[LocalMap][Inquiry] Best Candidate: '{best_candidate_name}' with similarity: {best_similarity:.3f}")
 
         # Set flag to the best candidate for visualization

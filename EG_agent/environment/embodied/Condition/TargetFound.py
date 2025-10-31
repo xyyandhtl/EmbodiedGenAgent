@@ -1,4 +1,4 @@
-from EG_agent.environment.embodied._base.condition import EmbodiedCondition
+from EG_agent.environment import EmbodiedCondition
 
 # TODO: Implement TargetFound Condition
 class TargetFound(EmbodiedCondition):

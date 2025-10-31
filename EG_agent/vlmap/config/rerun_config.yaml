@@ -1,22 +1,20 @@
 # HERE are the configs for demo
 # Most of the configs are for better visualization in Rerun
 
-# Disable other visualization
-# for debug visualization
 # if you need debuging in rerun, open this. This will give you plenty of debug information
 show_debug_entities: false
 # set false for long time data collecting, because the long run rerun will have lag
 #  https://github.com/rerun-io/rerun/issues/7678
 show_local_entities: True
 
-# global_mapping floor height in rerun
-floor_height: 0.0 # -1.2
+# global_mapping floor height in rerun, just for visualization
+floor_height: 0.0
 
 # height of related bbox visualization in rerun
 related_height: -0.1
 
 # Robot height
-# this one change the path height in rerun
+# this one change the path height in rerun, and for path_3d z
 robot_height: 0.5
 
 # path visualization radius in rerun
@@ -39,7 +37,6 @@ use_directional_path: false
 # for simulation, this one is not necessary, recomend to use false
 use_remove_sharp_turns: true
 
-
 # show global obj 3d bbox in rerun
 show_global_map_3d_bbox: false
 
@@ -51,48 +48,11 @@ save_all_path: false
 
 # World axis rotation changing config
 # Setting RPY here to adjust the mapped results with XYZ axis
-# Origin
 world_roll: 0.0
 world_pitch: 0.0
 world_yaw: 0.0
 
-# lab device default adjustment
-# world_roll: 0.0
-# world_pitch: 20.0
-# world_yaw: 0.0
-
-# long bottle keyborad
-# world_roll: 0.0
-# world_pitch: 19.0
-# world_yaw: -1.2
-
-# black backpack
-# world_roll: 0.0
-# world_pitch: 18.0
-# world_yaw: -3.7
-
-# w1-l1-office
-# world_roll: 0.0
-# world_pitch: -3.0
-# world_yaw: 9.0
-
-# w2-l3-hallway-1
-# world_roll: -0.8
-# world_pitch: -1.0
-# world_yaw: 5.5
-
-# w2-l3-hallway-2
-# world_roll: 0.0
-# world_pitch: -2.0
-# world_yaw: 7.0
-
-# w1-l2-office
-# world_roll: 0.0
-# world_pitch: 0.0
-# world_yaw: 9.0
-
 # Follower camera config in rerun for visualization
-# left,right; up down; forwardbackward
 follower_translation: [0.8, -1.0, -2.0]
 follower_roll: -20.0
 follower_pitch: -20.0
@@ -102,15 +62,3 @@ follower_translation2: [0.8, -3.2, -6.0]
 follower_roll2: -25.0
 follower_pitch2: -5.0
 follower_yaw2: 0.0
-
-# back view setting
-# follower_translation: [0.0, -1.0, -2.0]
-# follower_roll: -20.0
-# follower_pitch: 0.0
-# follower_yaw: 0.0
-
-# side view setting
-# follower_translation: [-0.8, -1.0, -2.0]
-# follower_roll: -20.0
-# follower_pitch: 20.0
-# follower_yaw: 0.0

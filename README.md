@@ -32,11 +32,16 @@ After reading the guides above, follow these steps for the Isaac Sim demo:
 
 And then in the GUI:
 
-> **创建后台**: 点击`创建后台`按钮，创建具身建图后台，用于智能体理解世界,对齐指令目标和地图实体
-> **智能体开始工作**: 点击`启动智能体`按钮，智能体和部署环境开始通信，本例`IsaacSim`通信使用`ROS2`
+> **创建后台**: 点击`创建后台`按钮，创建具身建图后台，用于智能体理解世界,对齐指令目标和地图实体。
+>
+> **智能体开始工作**: 点击`启动智能体`按钮，智能体和部署环境开始通信，本例`IsaacSim`通信使用`ROS2`。
+>
 > **自主探索（可选）**: 点击`开始自主探索`按钮，智能体会引导机器人在环境中自主探索，探索过程中会持续更新地图。
-> **载入地图（可选）**: 点击`载入地图`按钮，选择预建地图目录
+>
+> **载入地图（可选）**: 点击`载入地图`按钮，选择预建地图目录。
+>
 > **发送指令**: 在输入框中输入指令，点击`发送`按钮。任务目标会自动提取，请发送和场景有关的指令，若为场景无关指令，则可能会在对话窗口提示指令失败。解析和规划成功后，会在行为树窗口可视化执行行为树，机器人自动开始执行。
+>
 > **停止当前任务**：点击`停止当前任务`按钮，智能体会停止执行任意当前任务，进入等待状态。
 
 > **说明**：目前指令可解析的`原子动作`包括`目标搜寻（Find）`、`目标移动（Walk）`、`拍摄存图（Capture）`、`插旗标记（Mark）`、`生成报告（Report）`。如需更多指令，需自行在待部署机器人中实现并在[`env`](EG_agent/environment/embodied)中添加注册，补全对应的动作、条件节点。
@@ -61,7 +66,7 @@ Future Work:
 - [ ] Enhance the prompts engineering with memory / map for better reasoning and interactive task
 - [ ] Support user-defined object classes in the GUI window, and some preset scene classes templates
 - [ ] More scenes in the Isaacsim simulator
-- [ ] The frontier self-exploration navigator for `Find` action when target not found
+- [x] The frontier self-exploration navigator for `Find` action when target not found
 - [ ] Conitune dev and opt the vlmap backend, adding support for additional range sensors beyond the depth camera
 - [ ] Real world deployment with a legged robot
 

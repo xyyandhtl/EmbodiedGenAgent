@@ -16,7 +16,7 @@ import torch
 import torch.nn.functional as F
 
 from EG_agent.vlmap.utils.object import GlobalObject
-from EG_agent.vlmap.utils.types import Observation, GoalMode, ObjectClasses
+from EG_agent.vlmap.utils.types import Observation, GoalMode
 from EG_agent.vlmap.utils.base_map_manager import BaseMapManager
 from EG_agent.vlmap.utils.navigation_helper import NavigationGraph, LayoutMap
 
@@ -81,19 +81,6 @@ class GlobalMapManager(BaseMapManager):
 
         # Start background thread
         self._start_background_update_thread()
-
-        # Object classes
-        # --- 加载指定的 要识别的 全部物体的 类别text ---
-        classes_path = cfg.yolo.classes_path
-        if cfg.yolo.use_given_classes:
-            classes_path = cfg.yolo.given_classes_path
-            logger.info(f"[Detector][Init] Using given classes, path:{classes_path}")
-
-        # Object classes
-        self.obj_classes = ObjectClasses(
-            classes_file_path=classes_path,
-            bg_classes=self.cfg.yolo.bg_classes,
-            skip_bg=self.cfg.yolo.skip_bg)
 
         # Store dynamic parameters for background updates
         self._curr_pose: np.ndarray = None
@@ -716,7 +703,7 @@ class GlobalMapManager(BaseMapManager):
             obj.nav_goal = False
             obj_feat = torch.from_numpy(obj.clip_ft).to("cuda")
             max_sim = F.cosine_similarity(text_query_ft.unsqueeze(0), obj_feat.unsqueeze(0), dim=-1).item()
-            obj_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
+            obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
             logger.debug(f"[GlobalMap][Inquiry] =========={obj_name}==============")
             logger.debug(f"[GlobalMap][Inquiry] Itself: \t{max_sim:.3f}")
 
@@ -758,7 +745,7 @@ class GlobalMapManager(BaseMapManager):
             for obj in self.global_map:
                 if obj.uid in self.ignore_global_obj_list:
                     continue
-                obj_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
+                obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
                 if obj_name == self.best_candidate_name:
                     obj_list.append(obj)
         
@@ -766,7 +753,7 @@ class GlobalMapManager(BaseMapManager):
             best_candidate = obj_list[0]
 
         # Output the best candidate and its similarity
-        best_candidate_name = self.visualizer.obj_classes.get_classes_arr()[best_candidate.class_id]
+        best_candidate_name = self.obj_classes.get_classes_arr()[best_candidate.class_id]
 
         # logger.debug(f"[GlobalMap][Inquiry] We ignore {len(self.ignore_global_obj_list)} objects in this global query.")
 

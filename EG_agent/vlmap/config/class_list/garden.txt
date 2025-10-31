@@ -4,7 +4,7 @@ Fence
 Gate
 Pergola
 Canopy
-OutdoorSofa
+Sofa
 DiningTable
 LoungeChair
 FirePit

@@ -1,4 +1,4 @@
-from EG_agent.environment.embodied._base.action import EmbodiedAction
+from EG_agent.environment import EmbodiedAction
 
 # TODO: Implement Query Action
 class Find(EmbodiedAction):
