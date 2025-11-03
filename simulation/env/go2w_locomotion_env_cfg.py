@@ -44,21 +44,29 @@ class VelocitySceneCfg(InteractiveSceneCfg):
     terrain = None  # to be set outside
 
     # Lights
-    light = AssetBaseCfg(
-        prim_path="/World/light",
-        spawn=sim_utils.DistantLightCfg(color=(0.75, 0.75, 0.75), intensity=10000.0),
-    )
+    # light = AssetBaseCfg(
+    #     prim_path="/World/light",
+    #     spawn=sim_utils.DistantLightCfg(color=(0.75, 0.75, 0.75), intensity=10000.0),
+    # )
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
-        spawn=sim_utils.DomeLightCfg(color=(0.2, 0.2, 0.3), intensity=10000.0),
+        spawn=sim_utils.DomeLightCfg(color=(0.2, 0.2, 0.3), intensity=20000.0),
     )
-    cylinder_light = AssetBaseCfg(
-        prim_path="/World/cylinderLight",
+    cylinder_light1 = AssetBaseCfg(
+        prim_path="/World/cylinderLight1",
         spawn=sim_utils.CylinderLightCfg(
-            length=100, radius=0.3, treat_as_line=False, intensity=10000.0
+            length=100, radius=0.3, treat_as_line=False, intensity=20000.0
         ),
     )
-    cylinder_light.init_state.pos = (0, 0, 2.0)
+    cylinder_light1.init_state.pos = (0, 0, 2.0)
+    cylinder_light2 = AssetBaseCfg(
+        prim_path="/World/cylinderLight2",
+        spawn=sim_utils.CylinderLightCfg(
+            length=100, radius=0.3, treat_as_line=False, intensity=20000.0
+        ),
+    )
+    cylinder_light2.init_state.pos = (0, 0, 2.0)
+    cylinder_light2.init_state.rot = (0.7071, 0, 0, 0.7071)
 
     # Robots
     robot: ArticulationCfg = UNITREE_GO2W_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
@@ -240,7 +248,7 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
 
         # Viewer settings
-        self.viewer.eye = (0.0, -2.0, 10.0)
+        self.viewer.eye = (0.0, -2.0, 5.0)
         self.viewer.lookat = (0.0, 0.0, 0.0)
 
         # general settings

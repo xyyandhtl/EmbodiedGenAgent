@@ -114,21 +114,21 @@ class ObjectClasses:
         
         id_color_file_path = self.classes_file_path.parent / f"{self.classes_file_path.stem}_id_colors.json"
 
-        if color_file_path.exists():
-            with open(color_file_path, "r") as f:
-                class_to_color = json.load(f)
-            # construct a dict map {class, color}
-            class_to_color = {cls : class_to_color[cls] for cls in classes if cls in class_to_color}
-        else:
-            class_to_color = {class_name: list(np.random.rand(3).tolist())for class_name in classes}
-            # Generate the corresponding id_to_color mapping
-            id_to_color = {str(i): class_to_color[cls] for i, cls in enumerate(classes)}
-            # dump the new dict to json
-            with open(color_file_path, "w") as f:
-                json.dump(class_to_color, f)
-            
-            with open(id_color_file_path, "w") as f:
-                json.dump(id_to_color, f)
+        # if color_file_path.exists():
+        #     with open(color_file_path, "r") as f:
+        #         class_to_color = json.load(f)
+        #     # construct a dict map {class, color}
+        #     class_to_color = {cls : class_to_color[cls] for cls in classes if cls in class_to_color}
+        # else:
+        class_to_color = {class_name: list(np.random.rand(3).tolist())for class_name in classes}
+        # Generate the corresponding id_to_color mapping
+        id_to_color = {str(i): class_to_color[cls] for i, cls in enumerate(classes)}
+        # dump the new dict to json
+        with open(color_file_path, "w") as f:
+            json.dump(class_to_color, f)
+        
+        with open(id_color_file_path, "w") as f:
+            json.dump(id_to_color, f)
         
         if selection_ratio == 1.0:
             return classes, class_to_color

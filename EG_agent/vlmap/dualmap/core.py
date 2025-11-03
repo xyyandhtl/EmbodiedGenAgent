@@ -57,6 +57,7 @@ class Dualmap:
         self.cfg.yolo.model_path = f'{dualmap_dir}/{self.cfg.yolo.model_path}'
         self.cfg.sam.model_path = f'{dualmap_dir}/{self.cfg.sam.model_path}'
         self.cfg.fastsam.model_path = f'{dualmap_dir}/{self.cfg.fastsam.model_path}'
+        self.cfg.clip.model_path = f'{dualmap_dir}/{self.cfg.clip.model_path}'
         self.cfg.preload_path = f'{self.cfg.output_path}/{self.cfg.dataset_name}/{self.cfg.preload_path}'
 
         self.cfg.map_save_path = f"{self.cfg.output_path}/{self.cfg.dataset_name}/{self.cfg.map_save_path}"
