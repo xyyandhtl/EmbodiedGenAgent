@@ -87,7 +87,13 @@ ASSET_DICT = {
         spawn=UsdFileCfg(
             visible=True,
             usd_path=f"{SIMULATION_DATA_DIR}/terrains/Road/scene.usdc",
-            scale=(0.05, 0.05, 0.05),  # agent init pos: (0.0, 0.0, 0.45)
+            scale=(0.05, 0.05, 0.05),
+            # usd_path=f"simulation/data/terrains/sketchfab/Barranco_Bar__PS1_EnvironmentOptimizedMobile.usdz",
+            # usd_path=f"simulation/data/terrains/sketchfab/Popular_Streets_of_Lima__PS1_Environment.usdz",
+            # usd_path=f"simulation/data/terrains/sketchfab/Full_Gameready_City_Buildings_retextured.usdz",
+            # scale=(0.5, 0.5, 0.5),
+            # usd_path=f"simulation/data/terrains/sketchfab/city.usdz",
+            # scale=(0.5, 0.5, 0.5),
             # usd_path=f"{SIMULATION_DATA_DIR}/terrains/factory_optymize_v2/scene.usdc",
             # scale=(0.1, 0.1, 0.1),  # pos=(0, 20, 0.0)
             # usd_path=f"{SIMULATION_DATA_DIR}/terrains/CCity_Building_Set_1/scene.usdc",
@@ -112,6 +118,14 @@ ASSET_DICT = {
             visible=True,
             usd_path=f"{SIMULATION_DATA_DIR}/terrains/blender/uploads_files_3581843_send.usdc",
             # https://www.cgtrader.com/items/2883707/download-page
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0)),
+    ),
+    "city": AssetBaseCfg(
+        prim_path=f"/World/Terrain",
+        spawn=UsdFileCfg(
+            visible=True,
+            usd_path=f"{SIMULATION_DATA_DIR}/terrains/sketchfab/city.usdz",
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0)),
     ),

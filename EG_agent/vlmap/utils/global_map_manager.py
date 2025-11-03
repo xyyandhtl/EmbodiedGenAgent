@@ -97,6 +97,7 @@ class GlobalMapManager(BaseMapManager):
         self._nav_path: list = []
         self._traj_path = deque(maxlen=60)
         self._traj_path_lock = threading.Lock()  # Add a lock for thread-safe access to _traj_path
+        self.goal_grid: tuple | None = None
 
         self.layout_initialized = False
 
@@ -342,11 +343,11 @@ class GlobalMapManager(BaseMapManager):
         for global_obj in self.global_map:
             base_entity_path = "global/objects"
 
-            obj_name = self.visualizer.obj_classes.get_classes_arr()[global_obj.class_id]
+            obj_name = self.obj_classes.get_classes_arr()[global_obj.class_id]
             positions = np.asarray(global_obj.pcd_2d.points)
             colors = np.asarray(global_obj.pcd_2d.colors) * 255
             colors = colors.astype(np.uint8)
-            curr_obj_color = self.visualizer.obj_classes.get_class_color(obj_name)
+            curr_obj_color = self.obj_classes.get_class_color(obj_name)
 
             if global_obj.nav_goal:
                 # set red
@@ -413,8 +414,8 @@ class GlobalMapManager(BaseMapManager):
 
                 # get color
                 class_id = global_obj.related_color[i]
-                obj_name = self.visualizer.obj_classes.get_classes_arr()[class_id]
-                obj_color = self.visualizer.obj_classes.get_class_color(obj_name)
+                obj_name = self.obj_classes.get_classes_arr()[class_id]
+                obj_color = self.obj_classes.get_class_color(obj_name)
 
                 related_bbox_entity = base_entity_path + "/related_bbox" + f"/{global_obj.uid}_{i}"
                 self.visualizer.log(
@@ -595,11 +596,11 @@ class GlobalMapManager(BaseMapManager):
         start_position_grid = nav_graph.calculate_pos_2d(curr_position)
 
         # Select and process goal based on mode
-        goal_position_grid = self.get_goal_position(nav_graph, start_position_grid, goal_position, goal_mode)
-
+        self.goal_grid = self.get_goal_position(nav_graph, start_position_grid, goal_position, goal_mode)
+            
         # Step 3: Find shortest path
-        if goal_position_grid is not None:
-            path = nav_graph.find_shortest_path(start_position_grid, goal_position_grid)
+        if self.goal_grid is not None:
+            path = nav_graph.find_shortest_path(start_position_grid, self.goal_grid)
             if path:
                 logger.info("[GlobalMap][Path] Path successfully generated.")
                 return nav_graph.pos_path
@@ -623,21 +624,20 @@ class GlobalMapManager(BaseMapManager):
         - goal_position: The selected goal position.
         """
         if goal_mode == GoalMode.RANDOM:
-            # logger.info("[GlobalMap][Path] Goal mode: RANDOM")
-            return nav_graph.sample_random_point()
+            if self.goal_grid is None or not nav_graph.free_space_check(self.goal_grid):
+                return nav_graph.sample_random_point()
+            else:
+                return self.goal_grid
 
         if goal_mode == GoalMode.CLICK:
-            # logger.info("[GlobalMap][Path] Goal mode: CLICK")
             return nav_graph.visualize_start_and_select_goal(start_position_grid)
 
         if goal_mode == GoalMode.POSE:
-            # logger.info("[GlobalMap][Path] Goal mode: POSE")
             if not goal_position_world:
                 return None
             return nav_graph.calculate_pos_2d(goal_position_world)
 
         if goal_mode == GoalMode.INQUIRY:
-            # logger.info("[GlobalMap][Path] Goal mode: INQUIRY")
             # Step 1, from gloabl map find the best candidate
             global_goal_candidate, score = self.find_best_candidate_with_inquiry()
 
@@ -670,7 +670,7 @@ class GlobalMapManager(BaseMapManager):
                 else:
                     nearest_node = nav_graph.find_nearest_node(goal_2d)
 
-                goal_2d = np.array(nearest_node)
+                goal_2d = tuple(nearest_node)
 
             logger.info(f"[GlobalMap][Path] Nearest node: {goal_2d}")
 
@@ -722,7 +722,7 @@ class GlobalMapManager(BaseMapManager):
             obj.nav_goal = False
             obj_feat = torch.from_numpy(obj.clip_ft).to("cuda")
             max_sim = F.cosine_similarity(text_query_ft.unsqueeze(0), obj_feat.unsqueeze(0), dim=-1).item()
-            obj_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
+            obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
             logger.debug(f"[GlobalMap][Inquiry] =========={obj_name}==============")
             logger.debug(f"[GlobalMap][Inquiry] Itself: \t{max_sim:.3f}")
 
@@ -764,7 +764,7 @@ class GlobalMapManager(BaseMapManager):
             for obj in self.global_map:
                 if obj.uid in self.ignore_global_obj_list:
                     continue
-                obj_name = self.visualizer.obj_classes.get_classes_arr()[obj.class_id]
+                obj_name = self.obj_classes.get_classes_arr()[obj.class_id]
                 if obj_name == self.best_candidate_name:
                     obj_list.append(obj)
         
@@ -772,7 +772,7 @@ class GlobalMapManager(BaseMapManager):
             best_candidate = obj_list[0]
 
         # Output the best candidate and its similarity
-        best_candidate_name = self.visualizer.obj_classes.get_classes_arr()[best_candidate.class_id]
+        best_candidate_name = self.obj_classes.get_classes_arr()[best_candidate.class_id]
 
         # logger.debug(f"[GlobalMap][Inquiry] We ignore {len(self.ignore_global_obj_list)} objects in this global query.")
 

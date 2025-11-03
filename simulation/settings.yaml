@@ -23,7 +23,7 @@ sensors:
     cx: 320.0
     cy: 240.0
 monitor_camera: False
-camera_follow: False
+camera_follow: True
 
 # ui config
 sim_app:

@@ -100,7 +100,7 @@ class ObjectClasses:
         Need external class file for detection part
         '''
         with open(self.classes_file_path, "r") as f:
-            all_class = [cls.strip() for cls in f.readlines()]
+            all_class = [cls.strip().split()[0] for cls in f.readlines()]
 
         # filter all classes with skip bg flag
         if self.skip_bg:
@@ -108,11 +108,6 @@ class ObjectClasses:
         else:
             classes = all_class
         
-        # add color to each class
-        # load color path
-        color_file_path = self.classes_file_path.parent / f"{self.classes_file_path.stem}_colors.json"
-        
-        id_color_file_path = self.classes_file_path.parent / f"{self.classes_file_path.stem}_id_colors.json"
 
         # if color_file_path.exists():
         #     with open(color_file_path, "r") as f:
@@ -123,12 +118,15 @@ class ObjectClasses:
         class_to_color = {class_name: list(np.random.rand(3).tolist())for class_name in classes}
         # Generate the corresponding id_to_color mapping
         id_to_color = {str(i): class_to_color[cls] for i, cls in enumerate(classes)}
+
         # dump the new dict to json
-        with open(color_file_path, "w") as f:
-            json.dump(class_to_color, f)
+        # color_file_path = self.classes_file_path.parent / f"{self.classes_file_path.stem}_colors.json"
+        # id_color_file_path = self.classes_file_path.parent / f"{self.classes_file_path.stem}_id_colors.json"
+        # with open(color_file_path, "w") as f:
+        #     json.dump(class_to_color, f)
         
-        with open(id_color_file_path, "w") as f:
-            json.dump(id_to_color, f)
+        # with open(id_color_file_path, "w") as f:
+        #     json.dump(id_to_color, f)
         
         if selection_ratio == 1.0:
             return classes, class_to_color

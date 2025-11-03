@@ -49,7 +49,7 @@ class LayoutMap:
         """
         points = np.asarray(self.point_cloud.points)
         # 只保留 z 在 0.15 ~ 0.65 的点
-        points = points[(points[:, 2] > 0.15) & (points[:, 2] < 0.65)]
+        points = points[(points[:, 2] > 0.20) & (points[:, 2] < 0.70)]
         xy_points = points[:, :2]
         x_min, y_min = np.min(xy_points, axis=0)
         x_max, y_max = np.max(xy_points, axis=0)
@@ -190,7 +190,7 @@ class LayoutMap:
         self.occ_map[min_x:max_x+1, min_y:max_y+1] = 0
 
         points = np.asarray(partial_pcd.points)
-        points = points[(points[:, 2] > 0.15) & (points[:, 2] < 0.65)]
+        points = points[(points[:, 2] > 0.20) & (points[:, 2] < 0.70)]
         if points.shape[0] > 0:
             xy_points = points[:, :2]
             new_occ, _, _ = np.histogram2d(
