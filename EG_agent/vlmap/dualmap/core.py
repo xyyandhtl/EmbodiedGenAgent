@@ -496,10 +496,7 @@ class Dualmap:
         Currently, after goal_mode is set first time, path_plan is always running
         TODO: check if goal_inview, reset_query_and_navigation()
         """
-        loop_interval = self.cfg.path_planning_interval
-        # set False to plan_path with loop_interval,
-        # set True to plan_path once only when quiry found
-        plan_once = False
+        loop_interval: float = self.cfg.path_planning_interval
 
         while not self.stop_thread:
             logger.debug(f"[PathPlanningThread] Loop begins.")
@@ -560,15 +557,21 @@ class Dualmap:
     def reset_query_and_navigation(self):
         """重置 Find 涉及的导航状态，包括清除索引目标和已索引到的目标位置。"""
         self.inquiry = ""
-        self.goal_mode = GoalMode.NONE
-        self.goal_pose = None
-        
         self.inquiry_feat = None
+        self.goal_mode = GoalMode.NONE
+        
+        self.reset_goal_position()
+
+        self.global_map_manager.mark_semantic_map_dirty()
+
+    def reset_goal_position(self):
+        """仅重置目标位置，保留查询内容不变。"""
+        self.goal_pose = None
+        self.global_map_manager.goal_grid = None
+        
         self.action_path = []
         self.curr_global_path = []
         self.curr_local_path = []
-
-        self.global_map_manager.mark_semantic_map_dirty()
 
     def path_exists(self):
         """检查当前是否存在有效的全局路径。"""

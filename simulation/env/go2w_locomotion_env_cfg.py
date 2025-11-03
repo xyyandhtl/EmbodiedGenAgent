@@ -6,10 +6,11 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import CameraCfg, ContactSensorCfg, RayCasterCfg, patterns
-from isaaclab.terrains import TerrainImporterCfg
+from isaaclab.sensors import CameraCfg
+# from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
+# from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
+# from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 import isaaclab.envs.mdp as mdp
@@ -50,23 +51,23 @@ class VelocitySceneCfg(InteractiveSceneCfg):
     # )
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
-        spawn=sim_utils.DomeLightCfg(color=(0.2, 0.2, 0.3), intensity=20000.0),
+        spawn=sim_utils.DomeLightCfg(color=(0.2, 0.2, 0.3), intensity=10000.0),
     )
-    cylinder_light1 = AssetBaseCfg(
-        prim_path="/World/cylinderLight1",
-        spawn=sim_utils.CylinderLightCfg(
-            length=100, radius=0.3, treat_as_line=False, intensity=20000.0
-        ),
-    )
-    cylinder_light1.init_state.pos = (0, 0, 2.0)
-    cylinder_light2 = AssetBaseCfg(
-        prim_path="/World/cylinderLight2",
-        spawn=sim_utils.CylinderLightCfg(
-            length=100, radius=0.3, treat_as_line=False, intensity=20000.0
-        ),
-    )
-    cylinder_light2.init_state.pos = (0, 0, 2.0)
-    cylinder_light2.init_state.rot = (0.7071, 0, 0, 0.7071)
+    # cylinder_light1 = AssetBaseCfg(
+    #     prim_path="/World/cylinderLight1",
+    #     spawn=sim_utils.CylinderLightCfg(
+    #         length=100, radius=0.3, treat_as_line=False, intensity=10000.0
+    #     ),
+    # )
+    # cylinder_light1.init_state.pos = (0, 0, 2.0)
+    # cylinder_light2 = AssetBaseCfg(
+    #     prim_path="/World/cylinderLight2",
+    #     spawn=sim_utils.CylinderLightCfg(
+    #         length=100, radius=0.3, treat_as_line=False, intensity=10000.0
+    #     ),
+    # )
+    # cylinder_light2.init_state.pos = (0, 0, 2.0)
+    # cylinder_light2.init_state.rot = (0.7071, 0, 0, 0.7071)
 
     # Robots
     robot: ArticulationCfg = UNITREE_GO2W_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
@@ -87,6 +88,7 @@ class VelocitySceneCfg(InteractiveSceneCfg):
         colorize_instance_id_segmentation=False,
         colorize_instance_segmentation=False,
     )
+    # lidar = 
     # height_scanner = RayCasterCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base",
     #     offset=RayCasterCfg.OffsetCfg(pos=[0.0, 0.0, 20.0]),

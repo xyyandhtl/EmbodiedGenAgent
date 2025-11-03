@@ -157,31 +157,30 @@ class VLMapNav:
 
     def get_cmd_vel(self) -> tuple:
         """
-        Generate a single velocity command based on the next waypoint and current pose.
-        TODO: if need to put this method to a sub-thread too
+        Generate a velocity command toward the next waypoint.
+        Now supports simple back-off behavior when stuck or facing wall.
         """
         start = time.time()
         arrived, next_waypoint = self.dualmap.compute_next_waypoint()
         if arrived:
             self.logger.info("[VLMapNav] goal_pose arrived")
-            # reset to trigger another 'find' workflow to avoid stuck
-            self.dualmap.reset_query_and_navigation()
+            self.dualmap.reset_goal_position()
             return (0.0, 0.0, 0.0)
         if next_waypoint is None:
             self.logger.debug("[VLMapNav] [get_cmd_vel] get_next_waypoint failed!")
             return (0.0, 0.0, 0.0)
         
-        # Controller constants (tune as needed)
+        # Controller parameters
         kp_ang = 0.8
         kp_lin = 0.8
-        min_lin_vel = 0.8
-        max_lin_vel = 2.0
+        min_lin_vel = 0.6
+        max_lin_vel = 2.5
         max_ang_vel = 1.0
         yaw_error_threshold = 0.8
-        goal_reached_threshold = 0.1  # m
+        goal_reached_threshold = 0.1
 
-        # 1. 计算 目标方向
-        camera_pose_ros = self.realtime_pose.copy()  # 4x4 pose matrix in ROS frame
+        # === 1. 获取相机位姿 ===
+        camera_pose_ros = self.realtime_pose.copy()
         cam_pos = camera_pose_ros[:3, 3]
         cam_rot = camera_pose_ros[:3, :3]
 
@@ -191,11 +190,11 @@ class VLMapNav:
         # Distance to goal
         dist_to_goal = np.linalg.norm(delta_world[:2])
         if dist_to_goal <= goal_reached_threshold:
-            # self.logger.debug(f"[VLMapNav] [get_cmd_vel] Waypoint reached (distance = {dist_to_goal: .2f}m).")
+            self.logger.info(f"[VLMapNav] goal_pose arrived")
+            self.dualmap.reset_goal_position()
             return (0.0, 0.0, 0.0)
 
-        # 2. 将 目标方向 投影到 机器人局部坐标系
-        # 将 目标方向 从世界方向 转到 相机坐标系
+        # === 2. 世界 -> base_link 坐标变换 ===
         delta_body = cam_rot.T @ delta_world
         # 注：ROS系统下，相机forward为 +Z，而机器人forward为 +X
         # 速度指令是给机器人底盘（x-forward），需从 camera系 旋转到 base_link系
@@ -205,13 +204,14 @@ class VLMapNav:
                                   [0, -1, 0]], dtype=float)
         delta_base = R_cam_to_base @ delta_body
 
-        # 3. 计算偏航误差（基于base_link）
+        # === 3. 计算误差 ===
         goal_yaw = np.arctan2(delta_base[1], delta_base[0])
         yaw_error = np.arctan2(np.sin(goal_yaw), np.cos(goal_yaw))
 
-        # Angular velocity
+        # === 4. 速度控制 ===
         ang_vel_z = np.clip(kp_ang * yaw_error, -max_ang_vel, max_ang_vel)
-        # Linear velocity
+
+        # forward velocity
         lin_vel_x = min_lin_vel + (max_lin_vel - min_lin_vel) * (1 - np.exp(-kp_lin * dist_to_goal))
         yaw_factor = np.clip(np.cos(yaw_error), 0.0, 1.0)
         if np.abs(yaw_error) > yaw_error_threshold:
@@ -219,13 +219,19 @@ class VLMapNav:
         lin_vel_x *= yaw_factor
         lin_vel_x = np.clip(lin_vel_x, 0.0, max_lin_vel)
 
+        # === 5. 倒退策略 ===
+        # 如果角度误差太大而且目标很近，尝试后退调整姿态
+        if np.abs(yaw_error) > 1.2 and dist_to_goal < 0.6:
+            lin_vel_x = -0.4  # small backward velocity
+            ang_vel_z = np.sign(yaw_error) * 0.5  # turn while backing
+            self.logger.debug("[VLMapNav] [get_cmd_vel] Backing off due to large yaw error near wall")
+
+        # === 6. 输出 ===
         end = time.time()
-        self.logger.debug(f"[VLMapNav] [get_cmd_vel] Computation time: {end - start: .4f}s")
         self.logger.debug(
-            f"[VLMapNav] [get_cmd_vel] Pose = ({cam_pos[0]:.2f}, {cam_pos[1]:.2f}), "
-            f"Goal = ({waypoint_pos[0]:.2f}, {waypoint_pos[1]:.2f}), "
-            f"Dist = {dist_to_goal:.2f}, yaw_err={yaw_error:.2f}, "
-            f"CMD = ({lin_vel_x:.2f}, 0, {ang_vel_z:.2f})"
+            f"[VLMapNav] [get_cmd_vel] Time={end - start:.4f}s | "
+            f"Pose=({cam_pos[0]:.2f},{cam_pos[1]:.2f}) -> Goal=({waypoint_pos[0]:.2f},{waypoint_pos[1]:.2f}), "
+            f"Dist={dist_to_goal:.2f}, YawErr={yaw_error:.2f}, CMD=({lin_vel_x:.2f},0,{ang_vel_z:.2f})"
         )
 
         return (float(lin_vel_x), 0.0, float(ang_vel_z))
