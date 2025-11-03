@@ -1,5 +1,6 @@
 import cv2
 import random
+import logging
 
 import numpy as np
 import open3d as o3d
@@ -9,6 +10,11 @@ import matplotlib.pyplot as plt
 from scipy.spatial import Voronoi, KDTree
 from scipy.ndimage import binary_erosion
 from dynaconf import Dynaconf
+from scipy.ndimage import binary_dilation
+from pathfinding.core.grid import Grid
+from pathfinding.finder.a_star import AStarFinder
+
+logger = logging.getLogger(__name__)
 
 class LayoutMap:
     def __init__(self, cfg, resolution=0.1, percentile=90, min_area=5, kernel_size=3):
@@ -206,6 +212,7 @@ class LayoutMap:
 class RRT:
     def __init__(self, algorithm="rrt", max_iter=1000, steer_length=5, search_radius=10, goal_sample_rate=0.1):
         """
+        TODO: 实际未使用，待删除
         Initialize the RRT planner with different algorithm choices.
 
         :param occupancy_grid_map: 2D numpy array representing the occupancy grid map (1 for free, 0 for occupied).
@@ -406,6 +413,7 @@ class RRT:
 class NavigationGraph:
     def __init__(self, cfg: Dynaconf, occupancy_grid_map: np.ndarray, x_edges: np.ndarray, y_edges: np.ndarray, cell_size: float):
         """
+        TODO: 实际未使用，待删除
         Initialize NavigationGraph from an occupancy grid map (1=occupied, 0=free candidate).
         Args:
             occupancy_grid_map: 2D array [rows(y), cols(x)]
@@ -1167,6 +1175,84 @@ class NavigationGraph:
 
         return pos_path
 
+def inflate_obstacles(binary_occ, robot_radius, resolution):
+    """
+    Inflates obstacles in the occupancy grid to account for the robot's radius.
+    """
+    if robot_radius == 0 or resolution == 0:
+        return binary_occ
+    inflation_radius_cells = int(np.ceil(robot_radius / resolution))
+    y, x = np.ogrid[-inflation_radius_cells:inflation_radius_cells + 1, -inflation_radius_cells:inflation_radius_cells + 1]
+    structure = x ** 2 + y ** 2 <= inflation_radius_cells ** 2
+    inflated_map = binary_dilation(binary_occ, structure=structure)
+    return inflated_map.astype(int)
+
+
+def plan_path_on_grid(binary_occ_map, map_origin, map_resolution, start_world, goal_world, robot_radius, floor_height):
+    """
+    A centralized function to plan a path on a given occupancy grid.
+
+    Args:
+        binary_occ_map (np.array): The occupancy grid (0=free, 1=obstacle).
+        map_origin (np.array): The world coordinate of the grid's (0,0) cell.
+        map_resolution (float): The size of one grid cell in meters.
+        start_world (np.array): The start position in world coordinates (x, y, z).
+        goal_world (np.array): The goal position in world coordinates (x, y, z).
+        robot_radius (float): The robot's radius in meters for inflation.
+        floor_height (float): The z-coordinate for the returned path.
+
+    Returns:
+        list: A list of [x, y, z] points representing the path in world coordinates, or an empty list if no path is found.
+    """
+    # 1. Inflate map（因pathfinding不自带机器人轮廓碰撞检测，因此间接膨胀障碍物实现）
+    inflated_map = inflate_obstacles(binary_occ_map, robot_radius, map_resolution)
+
+    # 2. Create pathfinding grid
+    pathfinding_matrix = np.where(inflated_map == 0, 1, 0)
+    grid = Grid(matrix=pathfinding_matrix.T.tolist())
+
+    # 3. Define coordinate conversion helpers
+    def world_to_grid(world_pos):
+        grid_pos = np.floor((np.array(world_pos[:2]) - map_origin) / map_resolution).astype(int)
+        return tuple(grid_pos)
+
+    def grid_to_world(grid_pos):
+        world_pos = (np.array(grid_pos) * map_resolution) + map_origin
+        return [world_pos[0], world_pos[1], floor_height]
+
+    # 4. Determine start and end points in grid coordinates
+    start_grid = world_to_grid(start_world)
+    goal_grid = world_to_grid(goal_world)
+
+    # 5. Validate start and goal points
+    if not (0 <= start_grid[0] < grid.width and 0 <= start_grid[1] < grid.height and grid.node(start_grid[0], start_grid[1]).walkable):
+        logger.warning(f"Start point {start_grid} is on an obstacle or out of bounds. Cannot plan path.")
+        return [], inflated_map
+
+    if not (0 <= goal_grid[0] < grid.width and 0 <= goal_grid[1] < grid.height and grid.node(goal_grid[0], goal_grid[1]).walkable):
+        logger.warning(f"Original goal {goal_grid} is on an obstacle. Snapping to nearest walkable node.")
+        # TODO: 现是全局找，需优化到仅在目标点附近找
+        free_nodes = np.argwhere(pathfinding_matrix.T == 1)
+        if free_nodes.size == 0:
+            logger.error("No walkable nodes found on the entire map.")
+            return [], inflated_map
+        distances = np.linalg.norm(free_nodes - np.array(goal_grid), axis=1)
+        goal_grid = tuple(free_nodes[np.argmin(distances)])
+        logger.info(f"Snapped goal to {goal_grid}.")
+
+    # 6. Run A* pathfinding
+    start_node = grid.node(start_grid[0], start_grid[1])
+    end_node = grid.node(goal_grid[0], goal_grid[1])
+    finder = AStarFinder(diagonal_movement=True)
+    path_grid_coords, _ = finder.find_path(start_node, end_node, grid)
+
+    # 7. Convert path back to world coordinates
+    if path_grid_coords:
+        path_world_coords = [grid_to_world((p.x, p.y)) for p in path_grid_coords]
+        return path_world_coords, inflated_map
+    else:
+        logger.warning("A* failed to find a path.")
+        return [], inflated_map
 
 # functions used in core for path refine
 def remaining_path(path, current_pose):
