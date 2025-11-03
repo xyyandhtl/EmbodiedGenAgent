@@ -86,15 +86,15 @@ ASSET_DICT = {
         prim_path=f"/World/Terrain",
         spawn=UsdFileCfg(
             visible=True,
-            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/Road/scene.usdc",
-            # scale=(0.05, 0.05, 0.05),  # agent init pos: (0.0, 0.0, 0.45)
+            usd_path=f"{SIMULATION_DATA_DIR}/terrains/Road/scene.usdc",
+            scale=(0.05, 0.05, 0.05),  # agent init pos: (0.0, 0.0, 0.45)
             # usd_path=f"{SIMULATION_DATA_DIR}/terrains/factory_optymize_v2/scene.usdc",
             # scale=(0.1, 0.1, 0.1),  # pos=(0, 20, 0.0)
             # usd_path=f"{SIMULATION_DATA_DIR}/terrains/CCity_Building_Set_1/scene.usdc",
             # scale=(0.02, 0.02, 0.02),  # pos=(19, -33, 0.0)
             # usd_path=f"{SIMULATION_DATA_DIR}/terrains/WareHouse/scene.usdc",
             # scale=(0.03, 0.03, 0.03),
-            usd_path=f"{SIMULATION_DATA_DIR}/terrains/Windsor_House_V2/scene.usdc",
+            # usd_path=f"{SIMULATION_DATA_DIR}/terrains/Windsor_House_V2/scene.usdc",
             # pos=(10.0, 0.0, 0.0)
             # Road: https://sketchfab-prod-media.s3.amazonaws.com/archives/6a0e3b97a8a54f2a909d351322916293/usdz/a8a92840a69f45dfba44436472d88013/Neighbourhood_City_Modular_lowpoly.usdz?AWSAccessKeyId=ASIAZ4EAQ242LKVSATTF&Signature=bZl522vBvCLV3VHF4UT0y0SBPmg%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEDcaCWV1LXdlc3QtMSJHMEUCIQCVAsf2qK8AuOq7pl1tFv4tpHuLrxpBTiT2Vt4iR4S%2BXwIgE4PXLsjCjy11rwYshbmOYrfh67VlgLmdpwAgLl6MofgquwUI0P%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARAAGgw2Nzg4NzQzNzE4OTIiDEpHSnbZFX%2BdreB%2FPyqPBbHKGm9o%2Fp%2B8VFx0fQM%2Fne9Cq4OAkAdU5y7mrvipJvP%2B4l9N98dV14vsoNu%2FNX7MtDesrST1SbqS7LTtYWYRSSzvHYev1P4WRkNuM0XBSAkmo2uB1hPhDQZl2WMODm2woU6MPtFVf4S96VQq5oi3Q3t3RxivykTLVRmRI0h4OtPOoPXa%2FhJZFvQUO%2BKnTFg5Xxn5nIPvuRpt4orGv0N60A5WZYSXDybPQQykimPbdhHJREDAix824xbje%2BDnNH55EdB13Eq8grHaHOIc%2FoldVnhpBdzimzYh4GbYJ5irjFF%2BAS%2FGjJjj%2FVJ1ncKA6n3vgup%2FdVeGl0cAgKRxzpAAH6P%2BlH9BzJc5fvUcBIR9K2MWP420PDpbZhZCnL2rrkCHpUbZ0CWQ79UCV%2FR6L7lBuoaeyxdN0%2F1fumO17fpqqH3PudF1SNJ%2F3NXXBFP3veU1bl2QvrCbGWw8hYGW4QnN0SaJkLJpIPMpRTqIIyu9XAsdL49WULxbY68axIH%2FxeScJijGiDRT%2BCaKbqIe8gDu%2BXkeu3LRnY%2FB0LCoQpFAJJduF0g98Uy3xdA%2BZkQ5X4A1yR7MecW%2FA%2FQWrOoCB8iD%2FuDF2qcqe8%2FBcLh14DmInHNG3t8kT8egdNrBgLMVjIwEYUCOywZPKhOYbBV6YPjTHoHPKvUlhyj6i2hohEg9jFHq%2FX%2FxMeeuCztUdGdWzOD3kBereaEzVUBke3A6Ql1Hg8z%2BLg4raEuY547I6mD3m3NEMhx7J4wY63aOPWgdY3RphJPO9eqGmPUoPJqYPeoPA4%2BCxQFZI9VLo06VxoUrylXJ6wINXTM6b07dCKu4NITnvv0KiwyQm7Ar9Zbd4L7CH803AgnLCPFN3pbw3NwSb8Qw6KqdxwY6sQEdyodHEG6eI33QPasQ2v890QKvNnXeMnfAgN%2B3ysLnH%2FYTExh7kcwUUHuvPccmHplQ7MMbbSiZf48GBBjb2JnH%2BFTRumBvS4C9u913wtuEVQfQsk%2BvzSIjLSh8c2kY7siY2RK0tpmJXPCk5b5maSyGZeWU%2Bli9XnUmrT5AK0C3APrpYLPzRwUNZYt5oW%2FF8FnUMNGqinRr2qp8HyO10X3SEHLG6BMyFr5a9x%2FQE%2FJp6vg%3D&Expires=1759994322
             # factory_optymize_v2: https://sketchfab-prod-media.s3.amazonaws.com/archives/0c7e077eeef94c59867ce4ee3865890f/usdz/b81fb2a0374d487181a87f6fe2762296/factory_optymize_v2.usdz?AWSAccessKeyId=ASIAZ4EAQ242HFNFVV57&Signature=Cm5jaSUIlF1yrE%2BfoYctx%2BYGoHE%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEDgaCWV1LXdlc3QtMSJGMEQCIGtyvqSFk6KQJuhWOgIaaQS1ECJoKF0LmExsfN%2FxYTDMAiBn%2BZr3p%2BJYQK0zUsRZy8O6ES6Ss0BXcRvj4BIyxg3M5iq7BQjR%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAAaDDY3ODg3NDM3MTg5MiIMgDdNic7KHonqIwbnKo8FUUdHwnLdg%2BKFuNp6l5FoLvoQmRBx4TLD%2FCySocGnWz1vDWAHzsKUdKEyXNulnKrqYkv9StF3eOvwa9VRCj19n5F5sCFiLQbedgYq72U6Z2NEniZgZpeE0n%2F4TnuqLGGn07KJZjPBsCr7Zup%2FMC4lv5LdGTHEQDG96RIXK8ldfHvIPx0azfawkl%2Fxc1JHKgwfOSppYUUusw9sL2eilXaw6q1bzaBev5J0TX9jVQOuJ9Tl770Wgx9pcnEfSaqbFeKtxxBnbodcicWyvUVqaUSGvEV3o0ls%2F93rN707boAbgqBscNhvqdAZfIjv9%2F7i%2FDu%2F5PdZJ%2FRsadrG%2FnQtc44o2k3N6ZPsMHFQ3tgknCSPa0KGinvHJtFNWG61xDbwI%2BjIopvQkTWbZQDnqLir8sBap%2FSxdmKvvEfxSX3UpobXeTefR%2Ff%2FUZT8ygZPk6w7098BV%2Bmj%2Fn%2BHREs%2B67jvJv3H7tHaRlt6nyswOk3Kfsu00TmBxKC8emzHUS2qrxOHR1wAY8WJdek%2BLy92SMZRdAaQKk0TJEh8%2Bq85V6LQWwkp9RIG9D4Fs%2FqHN7lC9BHt4hlelICerCyixFmvgDgMlmpiR3A2feTB7S4sDwvB8zcacYZ5j%2FhI9nKZcJ8iARJKvxQ%2B5LsfURY2B6GvzMBKQS4O05OlBqp3QPBtpvCgVi%2BGNLv2AekLFeuUj3p%2FshE0pu45Elma0G6yBmrppiIxgLvTlJ%2BSuLCRdhTU9tXFjLG%2FvFGGhHwtk5dxqc32exoA1Zd4w59vkFwvi3tnU04rsYbyz7bNwdpz2EX0pWSavCFT3nw5dbcwV1qb%2FIBymiDW9QDgUzjKx%2BlGJBnMWQlNbhRuxQ5FC3JCs1uUwNqoQYEDwDCk2J3HBjqyAa8DpG%2F26xaWGXMaGpV9ujIf04%2F5Wm%2Fe7NXoe5oS7CuMTLwzeqzMkIDy1x%2BLEVoMvYseoGa7Wu4p2mFrfoUg%2FZls%2B%2Fms2fxdf46lPe2m3GvDJTbeUodRXB4e0AP7xvSfeWsc40b2RhpdSWRDzohiTplCb7XnOCa9AIblWMqSKJhtsQ720oEV3ZSbH9Bgowon18jpDn5BgP29IuddZ477orfpsfgnqPR6fVJyIuEC%2F9H3byk%3D&Expires=1759998644
@@ -110,8 +110,9 @@ ASSET_DICT = {
         prim_path=f"/World/Terrain",
         spawn=UsdFileCfg(
             visible=True,
-            usd_path=f"/media/lenovo/1/Assets/uploads_files_4518977_Scene/Scene.usdc",
+            usd_path=f"{SIMULATION_DATA_DIR}/terrains/blender/uploads_files_3581843_send.usdc",
+            # https://www.cgtrader.com/items/2883707/download-page
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(-10.0, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0)),
     ),
 }

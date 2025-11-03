@@ -47,7 +47,7 @@ class GlobalMapManager(BaseMapManager):
         self.has_action_path = False
 
         # layout information --> LayoutMap
-        layout_resolution = self.cfg.layout_voxel_size * 2
+        layout_resolution = float(self.cfg.layout_voxel_size) * 2
         self.layout_map = LayoutMap(cfg, resolution=layout_resolution, percentile=90, min_area=5, kernel_size=3)
         self.binary_occ: np.ndarray = None
 
@@ -96,6 +96,7 @@ class GlobalMapManager(BaseMapManager):
         self._curr_pose: np.ndarray = None
         self._nav_path: list = []
         self._traj_path = deque(maxlen=60)
+        self._traj_path_lock = threading.Lock()  # Add a lock for thread-safe access to _traj_path
 
         self.layout_initialized = False
 
@@ -109,9 +110,6 @@ class GlobalMapManager(BaseMapManager):
             self.font = ImageFont.truetype("DejaVuSans.ttf", size=int(12 * (self.scale_factor / 2)))
         except IOError:
             self.font = ImageFont.load_default()
-
-    def append_traj(self, pose: np.ndarray) -> None:
-        self._traj_path.append(pose)
 
     def has_global_map(self) -> bool:
         return len(self.global_map) > 0
@@ -948,7 +946,8 @@ class GlobalMapManager(BaseMapManager):
 
         # Draw trajectory
         if self._traj_path and len(self._traj_path) > 1:
-            traj_points_img = [self._world_to_img(np.array(p)) for p in self._traj_path]
+            with self._traj_path_lock:  # Use the lock to ensure thread-safe access
+                traj_points_img = [self._world_to_img(np.array(p)) for p in self._traj_path]
             draw_dynamic.line(traj_points_img, fill=(0, 0, 255, 255), width=4)
 
         # Draw current pose
@@ -1088,7 +1087,8 @@ class GlobalMapManager(BaseMapManager):
         if curr_pose is not None:
             self._curr_pose = curr_pose
             self.mark_traversable_map_dirty()
-            self._traj_path.append(curr_pose[:3, 3])
+            with self._traj_path_lock:  # Use the lock to ensure thread-safe access
+                self._traj_path.append(curr_pose[:3, 3])
             self.mark_semantic_map_dirty()
         if nav_path is not None:
             self._nav_path = nav_path

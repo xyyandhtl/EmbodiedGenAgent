@@ -8,7 +8,7 @@ defaults:
 # ============================================================
 yolo:
   _target_: _self_
-  model_path: model/yolov8m-worldv2.pt
+  model_path: model/yolov8l-worldv2.pt
 
   # List of background classes
   bg_classes: ["wall", "floor", "ceiling"]
