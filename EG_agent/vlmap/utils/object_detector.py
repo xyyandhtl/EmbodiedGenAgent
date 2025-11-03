@@ -150,12 +150,15 @@ class Detector:
         if cfg.run_detection:
             # CLIP module
             logger.info(
-                f"[Detector][Init] Loading CLIP model: {cfg.clip.model_name} with pretrained weights '{cfg.clip.pretrained}'"
+                f"[Detector][Init] Loading CLIP model: {cfg.clip.model_name} "
+                f"with pretrained weights '{cfg.clip.pretrained}'"
             )
 
             self.clip_model, _, self.clip_preprocess = (
                 open_clip.create_model_and_transforms(
-                    cfg.clip.model_name, pretrained=cfg.clip.pretrained
+                    cfg.clip.model_name, 
+                    pretrained=cfg.clip.pretrained,
+                    cache_dir=cfg.clip.model_path,
                 )
             )
             self.clip_model = self.clip_model.to(cfg.device)
@@ -167,7 +170,10 @@ class Detector:
 
                 self.clip_model = reparameterize_model(self.clip_model)
 
-            self.clip_tokenizer = open_clip.get_tokenizer(cfg.clip.model_name)
+            self.clip_tokenizer = open_clip.get_tokenizer(
+                cfg.clip.model_name, 
+                cache_dir=cfg.clip.model_path
+            )
 
             # Detection module
             logger.info(

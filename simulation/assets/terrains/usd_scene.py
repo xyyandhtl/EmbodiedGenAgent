@@ -104,7 +104,7 @@ ASSET_DICT = {
             # Industrial Factory Equipment: https://sketchfab.com/3d-models/industrial-factory-equipment-9143423e241e4a7b98def7e74c15b49b
             # Factory: https://sketchfab.com/3d-models/factory-3d-model-e723f4fe48ec4b9da52ec6e4a442286b
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(10.0, 0.0, 0.0), rot=(0.7071, 0.7071, 0.0, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0), rot=(0.7071, 0.7071, 0.0, 0.0)),
     ),
     "blender": AssetBaseCfg(
         prim_path=f"/World/Terrain",
