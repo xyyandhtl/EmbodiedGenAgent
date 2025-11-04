@@ -209,1050 +209,130 @@ class LayoutMap:
 
         # print(f"[LayoutMap] Updated local occ_map region: x[{min_x}:{max_x}], y[{min_y}:{max_y}]")
 
-class RRT:
-    def __init__(self, algorithm="rrt", max_iter=1000, steer_length=5, search_radius=10, goal_sample_rate=0.1):
+class PathPlanner:
+    def __init__(self, binary_occ_map, map_origin, map_resolution, robot_radius, floor_height):
         """
-        TODO: 实际未使用，待删除
-        Initialize the RRT planner with different algorithm choices.
-
-        :param occupancy_grid_map: 2D numpy array representing the occupancy grid map (1 for free, 0 for occupied).
-        :param start: Tuple (x, y) representing the start point.
-        :param goal: Tuple (x, y) representing the goal point.
-        :param algorithm: The algorithm to use: "rrt", "rrt_sharp", or "rrt_star".
-        :param max_iter: Maximum number of iterations.
-        :param steer_length: Step size for tree expansion.
-        :param search_radius: Radius to rewire nearby nodes (only for RRT* and RRT-Sharp).
-        :param goal_sample_rate: Probability of sampling near the goal.
-        """
-
-        self.algorithm = algorithm.lower()
-        self.max_iter = max_iter
-        self.steer_length = steer_length
-        self.search_radius = search_radius
-        self.goal_sample_rate = goal_sample_rate
-
-    def set_occ_map(self, occupancy_grid_map):
-        """Set the occupancy grid map."""
-        self.occupancy_grid_map = occupancy_grid_map
-    
-    def set_start_goal(self, start, goal):
-        """Set the start point."""
-        self.start = start
-        self.goal = goal
-
-        self.tree_nodes = [start]
-        self.tree_parents = {tuple(start): None}
-        self.tree_costs = {tuple(start): 0}
-        self.tree_heuristics = {tuple(start): np.linalg.norm(np.array(start) - np.array(goal))}
-        self.kdtree = KDTree(self.tree_nodes)
-
-
-    def is_free(self, x, y):
-        """Check if the given point is free (not occupied)."""
-        return 0 <= x < self.occupancy_grid_map.shape[1] and 0 <= y < self.occupancy_grid_map.shape[0] and self.occupancy_grid_map[int(y), int(x)] == 1
-
-    def steer(self, p1, p2):
-        """Steer from point p1 to point p2 with a defined step length."""
-        diff = np.array(p2) - np.array(p1)
-        dist = np.linalg.norm(diff)
-        if dist <= self.steer_length:
-            return tuple(p2)
-        direction = diff / dist
-        return tuple(np.array(p1) + direction * self.steer_length)
-
-    def rewire(self, new_node, search_radius=10):
-        """
-        Rewires nearby nodes to improve the path by checking if any nearby node
-        can be reconnected to the new node for a lower cost.
-
-        :param new_node: The new node that was added to the tree.
-        :param search_radius: The radius within which to rewire nearby nodes.
-        """
-        # Query nearby nodes using KDTree
-        indices = self.kdtree.query_ball_point(new_node, search_radius)
-        
-        # For each nearby node, check if the path cost can be improved by connecting to new_node
-        for idx in indices:
-            node = self.tree_nodes[idx]
-            
-            # Check if the node is already in the tree_costs (this should always be the case)
-            if node not in self.tree_costs:
-                self.tree_costs[node] = float('inf')  # Initialize with a very high cost
-            
-            potential_cost = self.tree_costs[new_node] + np.linalg.norm(np.array(new_node) - np.array(node))
-            
-            # If the potential cost is lower than the current cost, update the parent and cost
-            if potential_cost < self.tree_costs[node]:
-                self.tree_parents[node] = new_node
-                self.tree_costs[node] = potential_cost
-
-    def heuristic_sampling(self):
-        """Sample near the goal with a higher probability."""
-        if random.random() < self.goal_sample_rate:
-            offset = np.random.normal(scale=5, size=2)
-            return tuple(np.array(self.goal) + offset)
-        else:
-            return (random.uniform(0, self.occupancy_grid_map.shape[1]), random.uniform(0, self.occupancy_grid_map.shape[0]))
-
-    def plan(self):
-        """Execute the chosen RRT algorithm."""
-        if self.algorithm == "rrt":
-            return self.rrt_plan()
-        elif self.algorithm == "rrt_sharp":
-            return self.rrt_sharp_plan()
-        elif self.algorithm == "rrt_star":
-            return self.rrt_star_plan()
-        else:
-            raise ValueError(f"Unknown algorithm {self.algorithm}. Choose 'rrt', 'rrt_sharp', or 'rrt_star'.")
-
-    def rrt_plan(self):
-        """Standard RRT path planning."""
-        for _ in range(self.max_iter):
-            rand_point = self.heuristic_sampling()
-            _, nearest_idx = self.kdtree.query(rand_point)
-            nearest_node = self.tree_nodes[nearest_idx]
-
-            new_node = self.steer(nearest_node, rand_point)
-            if self.is_free(*new_node):
-                self.tree_nodes.append(new_node)
-                self.tree_parents[new_node] = nearest_node
-                self.kdtree = KDTree(self.tree_nodes)
-
-                # Check if the goal is reached
-                if np.linalg.norm(np.array(new_node) - np.array(self.goal)) <= self.steer_length:
-                    self.tree_nodes.append(self.goal)
-                    self.tree_parents[self.goal] = new_node
-                    break
-
-        return self._reconstruct_path()
-
-    def rrt_sharp_plan(self):
-        """RRT-Sharp path planning with rewire and cost optimization."""
-        for _ in range(self.max_iter):
-            rand_point = self.heuristic_sampling()
-            _, nearest_idx = self.kdtree.query(rand_point)
-            nearest_node = self.tree_nodes[nearest_idx]
-
-            new_node = self.steer(nearest_node, rand_point)
-            if self.is_free(*new_node):
-                cost = self.tree_costs[nearest_node] + np.linalg.norm(np.array(nearest_node) - np.array(new_node))
-                self.tree_nodes.append(new_node)
-                self.tree_parents[new_node] = nearest_node
-                self.tree_costs[new_node] = cost
-                self.kdtree = KDTree(self.tree_nodes)
-
-                # Rewire nearby nodes
-                self.rewire(new_node)
-
-                # Check if the goal is reached
-                if np.linalg.norm(np.array(new_node) - np.array(self.goal)) <= self.steer_length:
-                    self.tree_nodes.append(self.goal)
-                    self.tree_parents[self.goal] = new_node
-                    break
-
-        return self._reconstruct_path()
-
-    def rrt_star_plan(self):
-        """RRT* path planning with optimal rewiring."""
-        for _ in range(self.max_iter):
-            rand_point = self.heuristic_sampling()
-            _, nearest_idx = self.kdtree.query(rand_point)
-            nearest_node = self.tree_nodes[nearest_idx]
-
-            new_node = self.steer(nearest_node, rand_point)
-            if self.is_free(*new_node):
-                self.tree_nodes.append(new_node)
-                self.tree_parents[new_node] = nearest_node
-                self.kdtree = KDTree(self.tree_nodes)
-
-                # Rewire nearby nodes
-                self.rewire(new_node)
-
-                # Check if the goal is reached
-                if np.linalg.norm(np.array(new_node) - np.array(self.goal)) <= self.steer_length:
-                    self.tree_nodes.append(self.goal)
-                    self.tree_parents[self.goal] = new_node
-                    break
-
-        return self._reconstruct_path()
-
-    def _reconstruct_path(self):
-        """Reconstruct the path from the goal to the start."""
-        path = []
-        current = tuple(self.goal)
-        while current is not None:
-            path.append(current)
-            current = self.tree_parents.get(current)
-
-        return path[::-1] if path and path[-1] == tuple(self.start) else []
-
-    @staticmethod
-    def visualize_occupancy_map(occupancy_grid_map, path=None):
-        """
-        Visualize the occupancy grid map and the planned path using matplotlib.
-
-        :param occupancy_grid_map: 2D numpy array representing the occupancy grid map (1 for free, 0 for occupied).
-        :param path: List of points representing the path [(x1, y1), (x2, y2), ...].
-        """
-        plt.figure(figsize=(8, 8))
-
-        # Draw the occupancy grid map
-        plt.imshow(occupancy_grid_map, cmap="Greys", origin="lower")
-
-        # Draw the path if provided
-        if path:
-            path = np.array(path)
-            plt.plot(path[:, 0], path[:, 1], color='blue', linewidth=2, marker='o')
-
-        plt.title("Occupancy Grid Map and Path")
-        plt.xlabel("X Cells")
-        plt.ylabel("Y Cells")
-        plt.grid(True)
-        plt.show()
-
-class NavigationGraph:
-    def __init__(self, cfg: Dynaconf, occupancy_grid_map: np.ndarray, x_edges: np.ndarray, y_edges: np.ndarray, cell_size: float):
-        """
-        TODO: 实际未使用，待删除
-        Initialize NavigationGraph from an occupancy grid map (1=occupied, 0=free candidate).
-        Args:
-            occupancy_grid_map: 2D array [rows(y), cols(x)]
-            x_edges, y_edges: histogram bin edges to convert grid <-> world
-            cell_size: resolution (m/cell)
-        """
-        self.cfg = cfg
-        self.cell_size = cell_size
-
-        # Grid and world bounds from edges
-        self.occupancy_grid_map = occupancy_grid_map.astype(np.uint8)
-        self.x_edges = x_edges
-        self.y_edges = y_edges
-        # origin in world coordinates
-        self.pcd_min = np.array([self.x_edges[0], self.y_edges[0], 0.0])
-        self.pcd_max = np.array([self.x_edges[-1], self.y_edges[-1], 0.0])
-        self.grid_size = np.array([self.occupancy_grid_map.shape[0], self.occupancy_grid_map.shape[1]], dtype=np.int32)
-
-        self.pos_path = []
-        self.snapped_goal = None
-
-        self.rrt = RRT(
-            algorithm="rrt_sharp",
-            max_iter=500,
-            steer_length=5,
-            search_radius=5,
-            goal_sample_rate=0.2,
-        )
-
-        # Prepare free space once
-        self._prepare_free_space()
-
-    def _prepare_free_space(self):
-        """
-        From occupancy_grid_map (1=occupied), compute dilated occupancy and largest connected free space.
-        """
-        occupancy_grid_map = self.occupancy_grid_map.copy()
-
-        # Dilate obstacles to account for robot radius
-        dilation_radius = 3  # cell size = resolution 0.05m
-        if dilation_radius > 0:
-            occupancy_grid_map = cv2.dilate(
-                occupancy_grid_map.astype(np.uint8),
-                np.ones((dilation_radius, dilation_radius), dtype=np.uint8),
-                iterations=1,
-            )
-
-        self.occupancy_grid_map = occupancy_grid_map
-
-        # Free space map: 1 = free, 0 = occupied
-        free_space_map = (occupancy_grid_map == 0).astype(np.uint8)
-
-        # Keep only largest connected free-space component
-        num_labels, labels = cv2.connectedComponents(free_space_map)
-        largest_component = 0
-        largest_size = 0
-        for label in range(1, num_labels):
-            size = np.sum(labels == label)
-            if size > largest_size:
-                largest_size = size
-                largest_component = label
-        self.free_space = (labels == largest_component).astype(np.uint8)
-
-    # here we only use voronoi graph now
-    def get_graph(self):
-        voronoi = self.get_voronoi_graph()
-        self.graph = voronoi
-
-    def get_occ_map(self):
-        # Kept for compatibility; no-op since we already have occ_map
-        _ = self.free_space
-
-    def get_occupancy_map(self):
-        # Deprecated path; kept for API compatibility
-        return self.free_space
-
-    def is_in_bounds(self, point):
-        x, y = point
-        return (0 <= x < self.free_space.shape[0]) and (0 <= y < self.free_space.shape[1])
-
-    def visualize_occupancy_map(self, occupancy_grid_map):
-        """Visualize the occupancy grid map using matplotlib."""
-        plt.figure(figsize=(8, 8))
-        # Use cmap='gray' instead of 'gray_r'
-        plt.imshow(occupancy_grid_map, cmap="gray", origin="lower", interpolation="nearest")
-        plt.colorbar(label="Occupancy")
-        plt.title("Occupancy Grid Map")
-        plt.xlabel("X Cells")
-        plt.ylabel("Y Cells")
-        plt.show()
-
-    def visualize_occupancy_map_with_point(self, occupancy_grid_map, start=None, end=None):
-        """
-        Visualize the occupancy grid map using matplotlib and optionally visualize the start and end points.
-
-        Parameters:
-        - occupancy_grid_map: 2D numpy array representing the occupancy grid map (1 for occupied, 0 for free).
-        - start: Tuple (x, y) representing the start point in grid coordinates.
-        - end: Tuple (x, y) representing the end point in grid coordinates.
-        """
-        plt.figure(figsize=(8, 8))
-
-        # Display the occupancy grid map
-        plt.imshow(occupancy_grid_map, cmap="gray", origin="lower", interpolation="nearest")
-
-        # Add the start point if provided
-        if start is not None:
-            # Check if the start point is within the grid bounds
-            if (0 <= start[0] < occupancy_grid_map.shape[1]) and (0 <= start[1] < occupancy_grid_map.shape[0]):
-                plt.scatter(start[0], start[1], color='blue', label="Start", s=50, marker='o')
-
-        # Add the end point if provided and if it is within the grid bounds
-        if end is not None:
-            # Check if the end point is within the grid bounds
-            if (0 <= end[0] < occupancy_grid_map.shape[1]) and (0 <= end[1] < occupancy_grid_map.shape[0]):
-                plt.scatter(end[0], end[1], color='red', label="End", s=50, marker='x')
-
-        # Add a colorbar, title, and labels
-        plt.colorbar(label="Occupancy")
-        plt.title("Occupancy Grid Map")
-        plt.xlabel("X Cells")
-        plt.ylabel("Y Cells")
-
-        # Display the legend if there are start/end points
-        if start is not None or end is not None:
-            plt.legend()
-
-        # Show the plot
-        plt.show()
-
-    def snap_to_free_space(self, point, free_space_map):
-        """
-        Snap a given 2D point to the nearest free space if it falls on an obstacle.
-
-        Parameters:
-        - point: Tuple (row, col) representing the 2D point (y, x).
-        - free_space_map: 2D numpy array where 1 indicates free space, 0 indicates obstacle.
-
-        Returns:
-        - Tuple (row, col): The nearest free space point.
-        """
-        y, x = int(point[0]), int(point[1])  # Unpack input point as (row, col)
-
-        # Boundary check
-        if not (0 <= y < free_space_map.shape[0] and 0 <= x < free_space_map.shape[1]):
-            print(f"Point ({y}, {x}) is out of bounds!")
-            return None
-
-        # If the point is already in free space, return directly
-        if free_space_map[y, x] == 1:
-            return (y, x)
-
-        # Get all free space points coordinates
-        free_space_indices = np.argwhere(free_space_map == 1)
-
-        # Calculate Euclidean distances to all free space points
-        distances = np.linalg.norm(free_space_indices - np.array([y, x]), axis=1)
-
-        # Find the point with the minimum distance
-        nearest_idx = np.argmin(distances)
-        nearest_point = free_space_indices[nearest_idx]
-
-        return tuple(nearest_point)  # Return the nearest free space point (row, col)
-    
-    def snap_to_free_space_directional(self, point, start_point, free_space_map, search_radius=50):
-        """
-        Snap from the target point to the nearest free space along the direction towards the start point.
+        Initializes the PathPlanner with map information.
 
         Args:
-            point: Tuple (row, col), target point (y, x).
-            start_point: Tuple (row, col), start point (y, x).
-            free_space_map: 2D numpy array, free space=1, obstacle=0.
-            search_radius: int, number of steps to search along the direction (default 10).
-
-        Returns:
-            Tuple (row, col): Snapped free space point.
+            binary_occ_map (np.array): The occupancy grid (0=free, 1=obstacle).
+            map_origin (np.array): The world coordinate of the grid's (0,0) cell.
+            map_resolution (float): The size of one grid cell in meters.
+            robot_radius (float): The robot's radius for inflating obstacles.
+            floor_height (float): The z-coordinate for the path points.
         """
-        y, x = int(point[0]), int(point[1])
+        self.map_origin = map_origin
+        self.resolution = map_resolution
+        self.floor_height = floor_height
 
-        # Boundary check
-        if not (0 <= y < free_space_map.shape[0] and 0 <= x < free_space_map.shape[1]):
-            print(f"Point ({y}, {x}) is out of bounds!")
-            return None
+        # Inflate map for collision avoidance
+        self.inflated_map = self._inflate_obstacles(binary_occ_map, robot_radius, map_resolution)
 
-        # If the target point is already in free space, return directly
-        if free_space_map[y, x] == 1:
-            return (y, x)
+        # Create the pathfinding grid object
+        self.pathfinding_matrix = np.where(self.inflated_map == 0, 1, 0)
+        self.grid = Grid(matrix=self.pathfinding_matrix.T.tolist())
 
-        # Calculate direction vector from target point to start point (normalized)
-        direction_vector = np.array(start_point) - np.array(point)
-        norm = np.linalg.norm(direction_vector)
-        if norm == 0:
-            direction_vector = np.array([0, 0])
-        else:
-            direction_vector = direction_vector / norm
-
-        # Search from target point along direction vector
-        for step in range(1, search_radius + 1):
-            offset = np.round(direction_vector * step).astype(int)
-            new_y, new_x = y + offset[0], x + offset[1]
-
-            # Boundary check
-            if 0 <= new_y < free_space_map.shape[0] and 0 <= new_x < free_space_map.shape[1]:
-                if free_space_map[new_y, new_x] == 1:
-                    return (new_y, new_x)
-
-        # Search along direction failed -> global snap
-        free_space_indices = np.argwhere(free_space_map == 1)
-        distances = np.linalg.norm(free_space_indices - np.array([y, x]), axis=1)
-        nearest_idx = np.argmin(distances)
-        nearest_point = free_space_indices[nearest_idx]
-
-        return tuple(nearest_point)
-
-    def calculate_pos_3d(self, row, col):
-        """Helper function to calculate the position in the 3D space"""
-        ## Z is defined as 0.0
-        z = self.cfg.robot_height
-        return (
-            col * self.cell_size + self.pcd_min[0],
-            row * self.cell_size + self.pcd_min[1],
-            z
-        )
-
-    def calculate_pos_2d(self, point_3d):
-        """Convert a 3D point to a 2D grid coordinate.
-
-        Args:
-            point_3d (tuple or np.ndarray): The 3D point (x, y, z).
-
-        Returns:
-            tuple: The 2D grid coordinate (row, col).
+    def _inflate_obstacles(self, binary_occ, robot_radius, resolution):
         """
-        # Ensure the point is a numpy array
-        point_3d = np.array(point_3d)
-
-        # Adjust x and y to the grid's local coordinates
-        x_adjusted = point_3d[0] - self.pcd_min[0]
-        y_adjusted = point_3d[1] - self.pcd_min[1]
-
-        # Convert to grid indices
-        col = np.floor(x_adjusted / self.cell_size).astype(int)
-        row = np.floor(y_adjusted / self.cell_size).astype(int)
-
-        return (row, col)
-
-    def get_voronoi_graph(self):
-        # deep copy the free space
-        free_space_map = np.copy(self.free_space)
-
-        boundary_map = binary_erosion(free_space_map, iterations=1).astype(np.uint8)
-
-        # get the boundary points
-        boundary_map = free_space_map - boundary_map
-
-        # self.visualize_occupancy_map(boundary_map)
-
-        rows, cols = np.where(boundary_map == 1)
-        boundaries = np.array(list(zip(rows, cols)))
-        voronoi = Voronoi(boundaries)
-
-        voronoi_graph = nx.Graph()
-
-        for simplex in voronoi.ridge_vertices:
-            simplex = np.asarray(simplex)
-            if np.any(simplex < 0):
-                continue
-            src, tar = voronoi.vertices[simplex]
-            # check on the image
-            if (
-                src[0] < 0
-                or src[0] >= self.free_space.shape[0]
-                or src[1] < 0
-                or src[1] >= self.free_space.shape[1]
-                or tar[0] < 0
-                or tar[0] >= self.free_space.shape[0]
-                or tar[1] < 0
-                or tar[1] >= self.free_space.shape[1]
-            ):
-                continue
-            # check on the free space
-            if (
-                self.free_space[int(src[0]), int(src[1])] == 0
-                or self.free_space[int(tar[0]), int(tar[1])] == 0
-            ):
-                continue
-
-            # check if src and tar already exist in the graph
-            if (src[0], src[1]) not in voronoi_graph.nodes:
-                voronoi_graph.add_node(
-                    (src[0], src[1]),
-                    # Note: pay attention to xyz for pos here
-                    pos=(
-                        src[1] * self.cell_size + self.pcd_min[0],
-                        src[0] * self.cell_size + self.pcd_min[1],
-                    )
-                )
-            if (tar[0], tar[1]) not in voronoi_graph.nodes:
-                voronoi_graph.add_node(
-                    (tar[0], tar[1]),
-                    pos=(
-                        tar[1] * self.cell_size + self.pcd_min[0],
-                        tar[0] * self.cell_size + self.pcd_min[1],
-                    )
-                )
-            # check if the edge already exists
-            if not voronoi_graph.has_edge((src[0], src[1]), (tar[0], tar[1])):
-                voronoi_graph.add_edge(
-                    (src[0], src[1]),
-                    (tar[0], tar[1]),
-                    dist=np.linalg.norm(src - tar),
-                )
-
-        # self.visualize_graph(voronoi_graph,"Test")
-
-        self.remove_degree_2_nodes_and_reconnect(voronoi_graph)
-
-        # self.visualize_graph(voronoi_graph,"remove_degree_2_nodes_and_reconnect", show_nodes=False)
-        # self.visualize_graph(voronoi_graph,"remove_degree_2_nodes_and_reconnect", show_nodes=True)
-
-        return voronoi_graph
-    
-    def visualize_graph(self, graph, title="Voronoi Graph", show_nodes=True, show_edges=True):
+        Inflates obstacles in the occupancy grid to account for the robot's radius.
         """
-        Function to visualize a graph over the free space map.
-        
-        Parameters:
-            graph (networkx.Graph): The graph to visualize.
-            title (str): The title of the plot.
-            show_nodes (bool): Whether to visualize nodes.
-            show_edges (bool): Whether to visualize edges.
+        if robot_radius == 0 or resolution == 0:
+            return binary_occ
+
+        inflation_radius_cells = int(np.ceil(robot_radius / resolution))
+        y, x = np.ogrid[-inflation_radius_cells:inflation_radius_cells + 1, -inflation_radius_cells:inflation_radius_cells + 1]
+        structure = x ** 2 + y ** 2 <= inflation_radius_cells ** 2
+
+        inflated_map = binary_dilation(binary_occ, structure=structure)
+        return inflated_map.astype(int)
+
+    def _simplify_path(self, path, min_distance=10):
         """
-        # Create a copy of the free space to work with
-        fig_free = self.free_space.copy().astype(np.uint8) * 255
-        fig_free = cv2.cvtColor(fig_free, cv2.COLOR_GRAY2BGR)
-
-        # Visualize edges if required
-        if show_edges:
-            for edge in graph.edges:
-                v1, v2 = edge
-                cv2.line(
-                    fig_free,
-                    tuple(np.int32(v1[::-1])),
-                    tuple(np.int32(v2[::-1])),
-                    (0, 0, 255),
-                    1,
-                )
-
-        # Visualize nodes if required
-        if show_nodes:
-            for node in graph.nodes:
-                node_pos = tuple(np.int32(node[::-1]))
-                cv2.circle(fig_free, node_pos, 2, (255, 0, 0), -1)
-
-        # Use matplotlib to display the image
-        plt.figure(figsize=(10, 10))
-        plt.imshow(fig_free)  # Show image
-        plt.title(title)  # Add title
-        plt.axis('off')  # Disable axis
-        plt.show()
-
-
-    def remove_degree_2_nodes_and_reconnect(self, graph):
-        # Find nodes with degree 2
-        nodes_to_remove = [node for node, degree in graph.degree() if degree == 2]
-
-        for node in nodes_to_remove:
-            # Find the neighbors of this node
-            neighbors = list(graph.neighbors(node))
-
-            # If the node has two neighbors, connect them
-            if len(neighbors) == 2:
-                n1, n2 = neighbors
-                # Add a new edge to connect the two neighbors
-                dist = np.linalg.norm(np.array(graph.nodes[n1]['pos']) - np.array(graph.nodes[n2]['pos']))
-                graph.add_edge(n1, n2, dist=dist)
-
-                # Remove the original edges connected to the degree-2 node
-                graph.remove_edge(n1, node)
-                graph.remove_edge(n2, node)
-
-            # Remove the degree-2 node
-            graph.remove_node(node)
-
-    def find_nearest_node(self, point, goal=None):
+        Simplifies a grid-based path by removing collinear points.
         """
-        Find the nearest node in the graph to the given point, considering direction and excluding nodes with degree 1.
-        
-        Args:
-            point: Target point (x, y)
-            goal: Optional, target point (x, y), used to determine direction from start to goal
-        
-        Returns:
-            nearest_node: The nearest node to the target point
-        """
-        nearest_node = None
-        min_dist = float('inf')
-
-        # If there is a goal, calculate the direction vector from start to goal
-        if goal is not None:
-            direction_vector = np.array(goal) - np.array(point)
-
-        for node in self.graph.nodes:
-            # Skip nodes with degree 1
-            if self.graph.degree(node) == 1:
-                continue
-
-            dist = np.linalg.norm(np.array(node) - np.array(point))  # Calculate Euclidean distance
-            if dist < min_dist:
-                # If there is a goal, further check if the node is in the correct direction
-                if goal is not None:
-                    node_vector = np.array(node) - np.array(point)
-                    # Calculate the dot product between direction vectors
-                    dot_product = np.dot(direction_vector, node_vector)
-                    # If the dot product is positive, the node is in the same direction
-                    if dot_product > 0:
-                        min_dist = dist
-                        nearest_node = node
-                else:
-                    # If there is no goal, only consider the distance
-                    min_dist = dist
-                    nearest_node = node
-
-        return nearest_node
-
-    def smooth_path(self, path, smoothing_factor=0.8):
-        """
-        Simple path smoothing: connect nodes in the path by linear interpolation.
-
-        Args:
-            path: Original path, list of (x1, y1), (x2, y2), ...
-            smoothing_factor: Factor controlling the degree of smoothing, closer to 1 means smoother path
-
-        Returns:
-            smooth_path: Smoothed path
-        """
-        smoothed_path = [path[0]]  # Start from the first point
-        for i in range(1, len(path) - 1):
-            prev_point = np.array(path[i-1])
-            current_point = np.array(path[i])
-            next_point = np.array(path[i+1])
-
-            # Smooth the current node by weighted average
-            smoothed_point = smoothing_factor * current_point + (1 - smoothing_factor) * (prev_point + next_point) / 2
-            smoothed_path.append(tuple(smoothed_point))
-
-        smoothed_path.append(path[-1])  # End point
-        return smoothed_path
-
-    def angle_between_points(self, p1, p2, p3):
-        """
-        Calculate the angle between three points.
-        Args:
-            p1, p2, p3: Coordinates of the points (x, y)
-        Returns:
-            angle: The angle between the three points (in degrees)
-        """
-        v1 = np.array(p2) - np.array(p1)
-        v2 = np.array(p3) - np.array(p2)
-
-        dot_product = np.dot(v1, v2)
-        norm_v1 = np.linalg.norm(v1)
-        norm_v2 = np.linalg.norm(v2)
-
-        cos_angle = dot_product / (norm_v1 * norm_v2)
-        angle = np.arccos(np.clip(cos_angle, -1.0, 1.0))
-        return np.degrees(angle)
-
-    def remove_sharp_turns(self, path, angle_threshold=30):
-        """
-        Remove sharp turns in the path; only keep path segments with angles less than angle_threshold.
-        Args:
-            path: Original path, list of (x1, y1), (x2, y2), ...
-            angle_threshold: Angle threshold; turns greater than this are considered sharp turns
-        Returns:
-            filtered_path: Path after removing sharp turns
-        """
-        filtered_path = [path[0]]  # Keep the start point
-        for i in range(1, len(path) - 1):
-            p1 = path[i - 1]
-            p2 = path[i]
-            p3 = path[i + 1]
-
-            angle = self.angle_between_points(p1, p2, p3)
-
-            # If the angle is less than the threshold, consider it a valid path and keep the current point
-            if angle < angle_threshold:
-                filtered_path.append(p2)
-
-        filtered_path.append(path[-1])  # Keep the end point
-        return filtered_path
-
-    def find_shortest_path(self, start, goal):
-        """
-        Find the shortest path from start to goal in the Voronoi graph using Dijkstra's algorithm.
-        
-        Args:
-            start: Start point coordinates (x, y)
-            goal: Goal point coordinates (x, y)
-        
-        Returns:
-            path: List of nodes representing the shortest path from start to goal
-        """
-        # Find the nearest nodes to start and goal
-        nearest_start_node = self.find_nearest_node(start, goal)
-        nearest_goal_node = self.find_nearest_node(goal, start)
-
-        # Use Dijkstra's algorithm to find the shortest path
-        try:
-            path = nx.dijkstra_path(self.graph, source=nearest_start_node, target=nearest_goal_node, weight='dist')
-
-            full_path = [start] + path + [goal]
-
-            # self.visualize_path_on_map(full_path)
-
-            path = self.remove_sharp_turns(full_path)
-
-            # self.visualize_path_on_map(path)
-
-            path = self.smooth_path(path)  # Smooth the path
-
-            # self.visualize_path_on_map(path)
-
-            # Convert the path to pos and store in a new list
-            pos_path = [self.calculate_pos_3d(x, y) for x, y in path]
-
-            # Save path and ready to send off
-            self.pos_path = pos_path
-
+        if len(path) < 3:
             return path
 
-        except nx.NetworkXNoPath:
-            print(f"No path found between {nearest_start_node} and {nearest_goal_node}")
-            return None
+        simplified_path = [path[0]]
+        for i in range(1, len(path) - 1):
+            vec1 = (path[i].x - simplified_path[-1].x, path[i].y - simplified_path[-1].y)
+            vec2 = (path[i+1].x - path[i].x, path[i+1].y - path[i].y)
+            if vec1 != vec2:
+                dist = np.sqrt((path[i].x - simplified_path[-1].x)**2 + (path[i].y - simplified_path[-1].y)**2)
+                if dist >= min_distance:
+                    simplified_path.append(path[i])
 
-    def free_space_check(self, point):
-        row, col = point
+        simplified_path.append(path[-1])
+        return simplified_path
 
-        # Check if the point is within the map boundaries
-        if 0 <= row < self.free_space.shape[0] and 0 <= col < self.free_space.shape[1]:
-            # Check if the point is in free space (value 1 indicates free space)
-            return self.free_space[row, col] == 1
-        else:
-            # If the point is out of bounds, return False
-            return False
-
-    def visualize_start_and_select_goal(self, start):
-        """
-        Visualize the occupancy map and start point, and select a goal point by mouse click.
-        If the goal point is in free space, directly perform path planning.
-        If not in free space, find the nearest node as the goal for path planning.
-
-        Args:
-            start: Start point coordinates, format (row, col).
-
-        Returns:
-            path: Generated path, list of nodes [(x1, y1), (x2, y2), ...].
-        """
-        # Create a copy of the visualization image
-        fig_free = self.free_space.copy().astype(np.uint8) * 255
-        fig_free = cv2.cvtColor(fig_free, cv2.COLOR_GRAY2BGR)
-
-        # Draw the start point
-        cv2.circle(fig_free, tuple(np.int32(start[::-1])), 2, (255, 0, 0), -1)  # Red dot represents start
-
-        # Set up matplotlib image
-        fig, ax = plt.subplots(figsize=(10, 10))
-        ax.imshow(fig_free, origin='lower')
-        ax.set_title("Click to select Goal Points (Press Q to finish)")
-        ax.axis('off')  # Hide axes
-
-        goal = [None]  # Container to store the goal point
-        path = [None]  # Container to store the path
-
-        def onclick(event):
-            """Handle mouse click event"""
-            nonlocal path
-
-            # Check if the click is within the image boundaries
-            if event.xdata is None or event.ydata is None:
-                return
-
-            # Get the goal point coordinates
-            goal_x, goal_y = int(event.xdata), int(event.ydata)
-            goal[0] = (int(event.ydata), int(event.xdata))  # Convert to (row, col)
-
-            # Clear previously drawn image content
-            ax.clear()
-            ax.imshow(fig_free, origin='lower')
-            ax.set_title("Click to select Goal Points (Press Q to finish)")
-            ax.axis('off')
-
-            # Check if the goal point is in free space
-            if self.free_space_check(goal[0]):
-                print(f"Goal Point Selected: {goal[0]} (In Free Space)")
-                path[0] = self.find_shortest_path(start, goal[0])
-            else:
-                print(f"Goal Point Selected: {goal[0]} (Not in Free Space)")
-
-                # Find snapped goal point
-                # snapped_goal = self.snap_to_free_space(goal[0], self.free_space)
-                snapped_goal = self.snap_to_free_space_directional(goal[0], start, self.free_space)
-                snapped_goal_2d = snapped_goal
-                print(f"Snapped Goal Point: {snapped_goal}, Goal Point: {goal[0]}")
-                ax.plot(
-                    snapped_goal[1],
-                    snapped_goal[0],
-                    "yo",
-                    markersize=10,
-                    label="Snapped Goal",
-                )
-
-                snapped_goal = self.calculate_pos_3d(snapped_goal[0], snapped_goal[1])
-
-                self.snapped_goal = snapped_goal
-
-                # TODO: Need to set start in this func?
-                # Use the direction to finetune the nearest goal
-                # nearest_node = self.find_nearest_node(goal[0], start)
-                nearest_node = self.find_nearest_node(snapped_goal_2d, start)
-                print(f"Nearest Node: {nearest_node}")
-                path[0] = self.find_shortest_path(start, nearest_node)
-
-            # Draw the goal point and path
-            ax.plot(goal_x, goal_y, 'bo', markersize=10, label="Goal")  # Blue dot represents goal
-            if not self.free_space_check(goal[0]):  # If the goal point is not in free space
-                ax.plot(nearest_node[1], nearest_node[0], 'go', markersize=10, label="Nearest Node")  # Green dot represents nearest node
-
-            if path[0]:  # If the path is successfully generated, draw the path
-                for i in range(len(path[0]) - 1):
-                    src, tar = path[0][i], path[0][i + 1]
-                    ax.plot([src[1], tar[1]], [src[0], tar[0]], 'g-', linewidth=1)  # Green line represents the path
-
-            # Update the image
-            fig.canvas.draw()
-            print(f"Path Generated with length: {len(path[0])}")
-
-        # Connect mouse click event
-        cid = fig.canvas.mpl_connect('button_press_event', onclick)
-
-        # Display the image and wait for user key press to end
-        plt.show()
-
-        if path[0]:
-            return path[0][-1]
-        else:
-            print("No path generated. Returning None.")
-            return None
-
-    def save_pose_path_to_disk(self, pos_path, filename="pose_path.json"):
-        """
-        Save the pose_path as a JSON file.
-        
-        Args:
-            pos_path: List of paths to save (3D coordinate list)
-            filename: Filename to store, default is "pose_path.json"
-        """
-        import json
-        # Convert pos_path to a list format to avoid serialization issues with NumPy arrays
-        pos_path_list = [list(pos) for pos in pos_path]
-
-        # Save to disk
-        with open(filename, 'w') as f:
-            json.dump(pos_path_list, f, indent=4)
-        print(f"Pose path saved to {filename}")
-
-    def visualize_path_on_map(self, path):
-        """
-        Visualize the path, showing path nodes and connected edges.
-
-        Args:
-            path: Path from start to goal, list of nodes [(x1, y1), (x2, y2), ...]
-            fig_free: Base image for displaying the path (free space map)
-
-        Returns:
-            fig_free_with_path: Image with the path drawn on the original image
-        """
-        fig_free = self.free_space.copy().astype(np.uint8) * 255
-        fig_free = cv2.cvtColor(fig_free, cv2.COLOR_GRAY2BGR)
-
-        # Iterate through the nodes on the path, draw the path
-        for i in range(len(path) - 1):
-            src = path[i]
-            tar = path[i + 1]
-
-            # Draw the edge between nodes (line connecting the path)
-            cv2.line(fig_free, tuple(np.int32(src[::-1])), tuple(np.int32(tar[::-1])), (0, 255, 0), 1)
-
-        # Iterate through path nodes, draw the nodes
-        for node in path:
-            cv2.circle(fig_free, tuple(np.int32(node[::-1])), 1, (0, 0, 255), -1)
-
-        # Display the path image
-        plt.figure(figsize=(10, 10))
-        plt.imshow(fig_free, origin='lower')
-        plt.title("Path Visualization")  # Add title
-        plt.axis('off')  # Turn off axis display
-        plt.show()
-
-        return fig_free
-
-    def sample_random_point(self):
-        """
-        Randomly sample a point on the free space image.
-
-        Returns:
-            random_point: Randomly sampled point coordinates (x, y)
-        """
-        # Get all free space indices (pixels with value 1)
-        free_space_indices = np.argwhere(self.free_space == 1)
-
-        # Randomly select one from all free space indices
-        random_index = np.random.choice(len(free_space_indices))
-
-        # Get the randomly selected point coordinates
-        random_point = tuple(free_space_indices[random_index])
-
-        return random_point
-
-    def find_rrt_path(self, start, goal):
-        print(f"{start}, {goal}")
-        print(f"x :{self.free_space.shape[1]}, y: {self.free_space.shape[0]}")
-
-        # TODO: judge whether the end point is in the occ map
-        if not self.is_in_bounds(start):
-            print("Start point is out of bounds!")
-            self.pos_path = []
-            return []
-        
-        if not self.is_in_bounds(goal):
-            print("Goal point is out of bounds!")
-            self.pos_path = []
-            return []
-
-        self.rrt.set_occ_map(self.free_space)
-
-        # self.rrt.visualize_occupancy_map(self.free_space)
-
-        start = (start[1], start[0])  # Swap x and y of start
-        goal = (goal[1], goal[0])
-
-        self.rrt.set_start_goal(start, goal)
-
-        path_rrt = self.rrt.plan()
-
-        if len(path_rrt) == 0:
-            return []
-
-        flipped_path = [(y, x) for (x, y) in path_rrt]
-
-        flipped_path = self.remove_sharp_turns(flipped_path)
-
-        flipped_path = self.smooth_path(flipped_path)
-
-        # Change 2D path to 3D
-        pos_path = [self.calculate_pos_3d(x, y) for x, y in flipped_path]
-
-        self.pos_path = pos_path
-
-        return pos_path
-
-def inflate_obstacles(binary_occ, robot_radius, resolution):
-    """
-    Inflates obstacles in the occupancy grid to account for the robot's radius.
-    """
-    if robot_radius == 0 or resolution == 0:
-        return binary_occ
-    inflation_radius_cells = int(np.ceil(robot_radius / resolution))
-    y, x = np.ogrid[-inflation_radius_cells:inflation_radius_cells + 1, -inflation_radius_cells:inflation_radius_cells + 1]
-    structure = x ** 2 + y ** 2 <= inflation_radius_cells ** 2
-    inflated_map = binary_dilation(binary_occ, structure=structure)
-    return inflated_map.astype(int)
-
-
-def plan_path_on_grid(binary_occ_map, map_origin, map_resolution, start_world, goal_world, robot_radius, floor_height):
-    """
-    A centralized function to plan a path on a given occupancy grid.
-
-    Args:
-        binary_occ_map (np.array): The occupancy grid (0=free, 1=obstacle).
-        map_origin (np.array): The world coordinate of the grid's (0,0) cell.
-        map_resolution (float): The size of one grid cell in meters.
-        start_world (np.array): The start position in world coordinates (x, y, z).
-        goal_world (np.array): The goal position in world coordinates (x, y, z).
-        robot_radius (float): The robot's radius in meters for inflation.
-        floor_height (float): The z-coordinate for the returned path.
-
-    Returns:
-        list: A list of [x, y, z] points representing the path in world coordinates, or an empty list if no path is found.
-    """
-    # 1. Inflate map（因pathfinding不自带机器人轮廓碰撞检测，因此间接膨胀障碍物实现）
-    inflated_map = inflate_obstacles(binary_occ_map, robot_radius, map_resolution)
-
-    # 2. Create pathfinding grid
-    pathfinding_matrix = np.where(inflated_map == 0, 1, 0)
-    grid = Grid(matrix=pathfinding_matrix.T.tolist())
-
-    # 3. Define coordinate conversion helpers
-    def world_to_grid(world_pos):
-        grid_pos = np.floor((np.array(world_pos[:2]) - map_origin) / map_resolution).astype(int)
+    def world_to_grid(self, world_pos):
+        grid_pos = np.floor((np.array(world_pos[:2]) - self.map_origin) / self.resolution).astype(int)
         return tuple(grid_pos)
 
-    def grid_to_world(grid_pos):
-        world_pos = (np.array(grid_pos) * map_resolution) + map_origin
-        return [world_pos[0], world_pos[1], floor_height]
+    def grid_to_world(self, grid_pos):
+        world_pos = (np.array(grid_pos) * self.resolution) + self.map_origin
+        return [world_pos[0], world_pos[1], self.floor_height]
 
-    # 4. Determine start and end points in grid coordinates
-    start_grid = world_to_grid(start_world)
-    goal_grid = world_to_grid(goal_world)
+    def sample_random_world_goal(self):
+        """
+        Samples a random traversable point from the grid and returns its world coordinate.
+        """
+        traversable_points = np.argwhere(self.pathfinding_matrix.T == 1)
+        if traversable_points.size == 0:
+            logger.warning("[PathPlanner] No traversable points found to sample from.")
+            return None
+        
+        random_index = random.choice(range(len(traversable_points)))
+        random_grid_point = tuple(traversable_points[random_index])
+        
+        return self.grid_to_world(random_grid_point)
 
-    # 5. Validate start and goal points
-    if not (0 <= start_grid[0] < grid.width and 0 <= start_grid[1] < grid.height and grid.node(start_grid[0], start_grid[1]).walkable):
-        logger.warning(f"Start point {start_grid} is on an obstacle or out of bounds. Cannot plan path.")
-        return [], inflated_map
+    def plan_path(self, start_world, goal_world):
+        """
+        Plans a path from a start to a goal in world coordinates.
 
-    if not (0 <= goal_grid[0] < grid.width and 0 <= goal_grid[1] < grid.height and grid.node(goal_grid[0], goal_grid[1]).walkable):
-        logger.warning(f"Original goal {goal_grid} is on an obstacle. Snapping to nearest walkable node.")
-        # TODO: 现是全局找，需优化到仅在目标点附近找
-        free_nodes = np.argwhere(pathfinding_matrix.T == 1)
-        if free_nodes.size == 0:
-            logger.error("No walkable nodes found on the entire map.")
-            return [], inflated_map
-        distances = np.linalg.norm(free_nodes - np.array(goal_grid), axis=1)
-        goal_grid = tuple(free_nodes[np.argmin(distances)])
-        logger.info(f"Snapped goal to {goal_grid}.")
+        Args:
+            start_world (np.array): The start position in world coordinates (x, y, z).
+            goal_world (np.array): The goal position in world coordinates (x, y, z).
 
-    # 6. Run A* pathfinding
-    start_node = grid.node(start_grid[0], start_grid[1])
-    end_node = grid.node(goal_grid[0], goal_grid[1])
-    finder = AStarFinder(diagonal_movement=True)
-    path_grid_coords, _ = finder.find_path(start_node, end_node, grid)
+        Returns:
+            list: A list of [x, y, z] points for the path, or [] if no path is found.
+        """
+        start_grid = self.world_to_grid(start_world)
+        goal_grid = self.world_to_grid(goal_world)
 
-    # 7. Convert path back to world coordinates
-    if path_grid_coords:
-        path_world_coords = [grid_to_world((p.x, p.y)) for p in path_grid_coords]
-        return path_world_coords, inflated_map
-    else:
-        logger.warning("A* failed to find a path.")
-        return [], inflated_map
+        # Validate start and goal points
+        if not (0 <= start_grid[0] < self.grid.width and 0 <= start_grid[1] < self.grid.height and self.grid.node(start_grid[0], start_grid[1]).walkable):
+            logger.warning(f"Start point {start_grid} is on an obstacle or out of bounds. Cannot plan path.")
+            return []
+
+        if not (0 <= goal_grid[0] < self.grid.width and 0 <= goal_grid[1] < self.grid.height and self.grid.node(goal_grid[0], goal_grid[1]).walkable):
+            logger.warning(f"Original goal {goal_grid} is on an obstacle. Snapping to nearest walkable node.")
+            # TODO: 现是全局找，需优化到仅在目标点附近找
+            free_nodes = np.argwhere(self.pathfinding_matrix.T == 1)
+            if free_nodes.size == 0:
+                logger.error("No walkable nodes found on the entire map.")
+                return []
+            distances = np.linalg.norm(free_nodes - np.array(goal_grid), axis=1)
+            goal_grid = tuple(free_nodes[np.argmin(distances)])
+            logger.info(f"Snapped goal to {goal_grid}.")
+
+        # Run A* pathfinding
+        start_node = self.grid.node(start_grid[0], start_grid[1])
+        end_node = self.grid.node(goal_grid[0], goal_grid[1])
+        finder = AStarFinder(diagonal_movement=True)
+        path_grid_coords, _ = finder.find_path(start_node, end_node, self.grid)
+
+        # Simplify and convert path to world coordinates
+        if path_grid_coords:
+            simplified_path_grid = self._simplify_path(path_grid_coords)
+            logger.info(f"Path simplified from {len(path_grid_coords)} to {len(simplified_path_grid)} points.")
+
+            path_world_coords = [self.grid_to_world((p.x, p.y)) for p in simplified_path_grid]
+            return path_world_coords
+        else:
+            logger.warning("A* failed to find a path.")
+            return []
 
 # functions used in core for path refine
 def remaining_path(path, current_pose):

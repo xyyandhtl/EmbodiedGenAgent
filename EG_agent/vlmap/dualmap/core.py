@@ -801,5 +801,5 @@ class Dualmap:
         if not cur_path:
             logger.info("[Core] Already reached the last waypoint: goal reached.")
             return True, None
-        return False, cur_path[min(5, len(cur_path)-1)]  # 因从nav_graph转为 pathfinding 后，其路径点更密（一个栅格一个，所以需拉长目标点位置）
+        return False, cur_path[min(1, len(cur_path)-1)]
 

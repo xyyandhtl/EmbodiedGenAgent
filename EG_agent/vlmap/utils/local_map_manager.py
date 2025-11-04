@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from EG_agent.vlmap.utils.types import Observation, GlobalObservation, GoalMode
 from EG_agent.vlmap.utils.object import LocalObject, LocalObjStatus
 from EG_agent.vlmap.utils.base_map_manager import BaseMapManager
-from EG_agent.vlmap.utils.navigation_helper import plan_path_on_grid
+from EG_agent.vlmap.utils.navigation_helper import PathPlanner
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)
@@ -44,7 +44,8 @@ class LocalMapManager(BaseMapManager):
         # Local Object Config Init
         LocalObject.initialize_config(cfg)
 
-        # For navigation
+        # For navigation --> pathfinding
+        self.path_planner: PathPlanner = None
         self.inquiry = None
         # If in Click mode, the goal by clicked
         self.click_goal = None
@@ -983,14 +984,23 @@ class LocalMapManager(BaseMapManager):
             self, curr_pose, goal_mode=GoalMode.POSE, resolution=0.03, goal_position=None
     ):
         """
-        Calculates the local path by calling the centralized planner.
+        Calculates the local path by creating and using a PathPlanner instance.
         """
         # 1. Create dynamic occupancy map
         binary_occ, x_edges, y_edges, map_res = self._create_dynamic_occupancy_map(resolution)
         if binary_occ is None:
             return []
 
-        # 2. Determine goal in world coordinates
+        # 2. Initialize the planner
+        self.path_planner = PathPlanner(
+            binary_occ_map=binary_occ,
+            map_origin=np.array([x_edges[0], y_edges[0]]),
+            map_resolution=map_res,
+            robot_radius=self.cfg.get('robot_radius', 0.25),
+            floor_height=self.cfg.get('floor_height', 0.0)
+        )
+
+        # 3. Determine goal in world coordinates
         goal_world = None
         if goal_mode == GoalMode.POSE and goal_position is not None:
             goal_world = goal_position
@@ -1006,32 +1016,26 @@ class LocalMapManager(BaseMapManager):
             # Step 2. Within filtered objects, find the best score object
             local_goal_candidate, candidate_score = self.find_best_candidate_with_inquiry(candidate_objects)
             # If the score is very far from the global score, return None
-            diff_score = abs(candidate_score - self.global_score)
-            if diff_score > 0.1:
+            if abs(candidate_score - self.global_score) > 0.1:
                 logger.warning(f"[LocalMapManager][calculate_local_path] Local score {candidate_score:.2f} differs too much from global score {self.global_score:.2f}.")
                 return []
             goal_world = local_goal_candidate.bbox.get_center()
 
         if goal_world is None:
-            logger.warning("[LocalMapManager][calculate_local_path] No valid goal could be determined for local path.")
+            logger.warning(f"[LocalMapManager][calculate_local_path] No valid goal for mode {goal_mode}.")
             return []
 
-        # 3. Call the centralized path planner
-        path, _ = plan_path_on_grid(
-            binary_occ_map=binary_occ,
-            map_origin=np.array([x_edges[0], y_edges[0]]),
-            map_resolution=map_res,
+        # 4. Plan the path
+        path = self.path_planner.plan_path(
             start_world=curr_pose[:3, 3],
-            goal_world=goal_world,
-            robot_radius=self.cfg.get('robot_radius', 0.25),
-            floor_height=self.cfg.get('floor_height', 0.0)
+            goal_world=goal_world
         )
 
-        # 4. Return path
+        # 5. Return path
         if path:
-            logger.info(f"[LocalMapManager][calculate_local_path] Centralized planner found a local path with {len(path)} points.")
+            logger.info(f"[LocalMapManager][calculate_local_path] Found a local path with {len(path)} points.")
         else:
-            logger.warning("[LocalMapManager][calculate_local_path] Centralized planner failed to find a local path.")
+            logger.warning("[LocalMapManager][calculate_local_path] Failed to find a local path.")
         
         return path
 
