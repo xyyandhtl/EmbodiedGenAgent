@@ -904,7 +904,7 @@ class GlobalMapManager(BaseMapManager):
             path_points_img = [self._world_to_img(np.array(p)) for p in self._nav_path]
             draw_dynamic.line(path_points_img, fill=(0, 255, 0, 255), width=6)
             for point in path_points_img:
-                draw_dynamic.ellipse([point[0] - 3, point[1] - 3, point[0] + 3, point[1] + 3], fill=(255, 255, 0))
+                draw_dynamic.ellipse([point[0] - 3, point[1] - 3, point[0] + 3, point[1] + 3], fill=(255, 165, 0))
 
         # Draw trajectory
         if self._traj_path and len(self._traj_path) > 1:

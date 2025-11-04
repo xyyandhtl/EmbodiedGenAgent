@@ -230,7 +230,7 @@ class PathPlanner:
 
         # Create the pathfinding grid object
         self.pathfinding_matrix = np.where(self.inflated_map == 0, 1, 0)
-        self.grid = Grid(matrix=self.pathfinding_matrix.T.tolist())
+        self.grid = Grid(matrix=self.pathfinding_matrix.T.tolist())  # 虽内部使用 (y,x) 格式的矩阵，但其公共接口（.node()等）都封装成接收 (x,y) 坐标
 
     def _inflate_obstacles(self, binary_occ, robot_radius, resolution):
         """
@@ -277,14 +277,15 @@ class PathPlanner:
         """
         Samples a random traversable point from the grid and returns its world coordinate.
         """
-        traversable_points = np.argwhere(self.pathfinding_matrix.T == 1)
-        if traversable_points.size == 0:
+        traversable_points_yx = np.argwhere(self.pathfinding_matrix.T == 1)
+        if traversable_points_yx.size == 0:
             logger.warning("[PathPlanner] No traversable points found to sample from.")
             return None
-        
-        random_index = random.choice(range(len(traversable_points)))
-        random_grid_point = tuple(traversable_points[random_index])
-        
+
+        random_index = random.choice(range(len(traversable_points_yx)))
+        random_grid_point_yx = traversable_points_yx[random_index]
+        random_grid_point = (random_grid_point_yx[1], random_grid_point_yx[0])
+
         return self.grid_to_world(random_grid_point)
 
     def plan_path(self, start_world, goal_world):
@@ -303,19 +304,21 @@ class PathPlanner:
 
         # Validate start and goal points
         if not (0 <= start_grid[0] < self.grid.width and 0 <= start_grid[1] < self.grid.height and self.grid.node(start_grid[0], start_grid[1]).walkable):
-            logger.warning(f"Start point {start_grid} is on an obstacle or out of bounds. Cannot plan path.")
+            logger.warning(f"[PathPlanner] Start point {start_grid} is on an obstacle or out of bounds. Cannot plan path.")
             return []
 
         if not (0 <= goal_grid[0] < self.grid.width and 0 <= goal_grid[1] < self.grid.height and self.grid.node(goal_grid[0], goal_grid[1]).walkable):
-            logger.warning(f"Original goal {goal_grid} is on an obstacle. Snapping to nearest walkable node.")
-            # TODO: 现是全局找，需优化到仅在目标点附近找
-            free_nodes = np.argwhere(self.pathfinding_matrix.T == 1)
-            if free_nodes.size == 0:
-                logger.error("No walkable nodes found on the entire map.")
+            logger.warning(f"[PathPlanner] Original goal {goal_grid} is on an obstacle or out of bounds. Snapping to nearest walkable node.")
+            free_nodes_yx = np.argwhere(self.pathfinding_matrix.T == 1)  # np.argwhere returns coordinates in (row, col) format, which is (y, x)
+            if free_nodes_yx.size == 0:
+                logger.error("[PathPlanner] No walkable nodes found on the entire map.")
                 return []
-            distances = np.linalg.norm(free_nodes - np.array(goal_grid), axis=1)
-            goal_grid = tuple(free_nodes[np.argmin(distances)])
-            logger.info(f"Snapped goal to {goal_grid}.")
+            goal_grid_yx = np.array([goal_grid[1], goal_grid[0]])  # goal_grid is (x, y)
+            distances = np.linalg.norm(free_nodes_yx - goal_grid_yx, axis=1)
+
+            snapped_yx = free_nodes_yx[np.argmin(distances)]
+            goal_grid = (snapped_yx[1], snapped_yx[0])  # convert it back to (x, y)
+            logger.info(f"[PathPlanner] Snapped goal to {goal_grid}.")
 
         # Run A* pathfinding
         start_node = self.grid.node(start_grid[0], start_grid[1])
@@ -326,12 +329,12 @@ class PathPlanner:
         # Simplify and convert path to world coordinates
         if path_grid_coords:
             simplified_path_grid = self._simplify_path(path_grid_coords)
-            logger.info(f"Path simplified from {len(path_grid_coords)} to {len(simplified_path_grid)} points.")
+            logger.info(f"[PathPlanner] Path simplified from {len(path_grid_coords)} to {len(simplified_path_grid)} points.")
 
             path_world_coords = [self.grid_to_world((p.x, p.y)) for p in simplified_path_grid]
             return path_world_coords
         else:
-            logger.warning("A* failed to find a path.")
+            logger.warning("[PathPlanner] A* failed to find a path.")
             return []
 
 # functions used in core for path refine
