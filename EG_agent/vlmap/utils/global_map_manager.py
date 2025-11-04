@@ -18,11 +18,10 @@ import torch.nn.functional as F
 from EG_agent.vlmap.utils.object import GlobalObject
 from EG_agent.vlmap.utils.types import Observation, GoalMode, ObjectClasses
 from EG_agent.vlmap.utils.base_map_manager import BaseMapManager
-from EG_agent.vlmap.utils.navigation_helper import NavigationGraph, LayoutMap
+from EG_agent.vlmap.utils.navigation_helper import LayoutMap, PathPlanner
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)
-
 
 
 class GlobalMapManager(BaseMapManager):
@@ -40,8 +39,9 @@ class GlobalMapManager(BaseMapManager):
 
         GlobalObject.initialize_config(cfg)
 
-        # For navigation --> NavigationGraph
-        self.nav_graph: NavigationGraph = None
+        # For navigation --> Pathfinding
+        self.path_planner: PathPlanner = None
+        self.last_inflated_map = None
         self.inquiry = ''
         self.action_path = []
         self.has_action_path = False
@@ -353,7 +353,7 @@ class GlobalMapManager(BaseMapManager):
                 # set red
                 curr_obj_color = (255, 0, 0)
 
-            if self.nav_graph is not None and self.nav_graph.pos_path is not None:
+            if self._nav_path:
                 if global_obj.nav_goal:
                     # set red
                     curr_obj_color = (255, 0, 0)
@@ -499,9 +499,9 @@ class GlobalMapManager(BaseMapManager):
 
         # Draw the global path if available
         global_path_entity = "world/global_path"
-        if self.nav_graph is not None and self.nav_graph.pos_path is not None:
+        if self._nav_path:
             # Create a list of 3D points from the pos_path
-            path_points = np.array(self.nav_graph.pos_path)
+            path_points = np.array(self._nav_path)
 
             path_color = self.cfg.global_path_color
 
@@ -548,71 +548,55 @@ class GlobalMapManager(BaseMapManager):
 
         pass
 
-    def create_nav_graph(self, curr_pose, resolution=0.03) -> None:
-        """
-            Generates the NavigationGraph based on the current layout occ_map.
-        """
-        logger.info("[GlobalMapManager] [create_nav_graph] Creating navigation graph from occ_map...")
-
-        if self.layout_map is None or self.layout_map.occ_map is None:
-            logger.warning("[GlobalMapManager] [create_nav_graph] occ_map not available.")
-            self.nav_graph = None
-            return
-
-        try:
-            # processed_occ = self.layout_map.process_binary_map()
-            if self.binary_occ is None or self.binary_occ.size == 0:
-                logger.warning("[GlobalMapManager] [create_nav_graph] Processed occ_map is empty.")
-                self.nav_graph = None
-                return
-
-            occ_for_nav = self.binary_occ.T  # [row(y), col(x)]
-            self.nav_graph = NavigationGraph(
-                self.cfg,
-                occupancy_grid_map=occ_for_nav,
-                x_edges=self.layout_map.x_edges,
-                y_edges=self.layout_map.y_edges,
-                # 关键修正：使用 LayoutMap 的分辨率，避免坐标映射误差
-                cell_size=self.layout_map.resolution,
-            )
-            self.nav_graph.get_graph()
-        except Exception as e:
-            logger.error(f"[GlobalMapManager] [create_nav_graph] Failed to create navigation graph: {e}")
-            self.nav_graph = None
-
     def calculate_global_path(
-        self, curr_pose, goal_mode=GoalMode.POSE, resolution=0.03, goal_position=None
+        self, curr_pose, goal_mode=GoalMode.POSE, goal_position=None
     ) -> List:
-        # Step 1: Construct NavigationGraph and 2D occupancy map
-        self.create_nav_graph(curr_pose, resolution)
-        if self.nav_graph is None:
-            logger.warning("[LocalMapManager] [calculate_local_path] Navigation graph not available. Skipping local_path calculation.")
+        """
+        Calculates the global path by creating and using a PathPlanner instance.
+        """
+        if self.binary_occ is None or self.binary_occ.size == 0:
+            logger.warning("[GlobalMapManager][calculate_global_path] Binary occ_map not available.")
             return []
-        nav_graph = self.nav_graph
 
-        # Step 2: Set Start point and goal point
-        # transform curr pose to 2d coordinate
-        curr_position = curr_pose[:3, 3]
-        start_position_grid = nav_graph.calculate_pos_2d(curr_position)
+        # 1. Initialize the planner
+        self.path_planner = PathPlanner(
+            binary_occ_map=self.binary_occ,
+            map_origin=np.array([self.layout_map.x_edges[0], self.layout_map.y_edges[0]]),
+            map_resolution=self.layout_map.resolution,
+            robot_radius=self.cfg.get('robot_radius', 0.25),
+            floor_height=self.cfg.get('floor_height', 0.0)
+        )
 
-        # Select and process goal based on mode
-        self.goal_grid = self.get_goal_position(nav_graph, start_position_grid, goal_position, goal_mode)
-            
-        # Step 3: Find shortest path
-        if self.goal_grid is not None:
-            path = nav_graph.find_shortest_path(start_position_grid, self.goal_grid)
-            if path:
-                logger.info("[GlobalMap][Path] Path successfully generated.")
-                return nav_graph.pos_path
-            else:
-                logger.info("[GlobalMap][Path] Failed to generate a valid path.")
-                return []
-        else:
-            logger.info("[GlobalMap][Path] No valid goal position provided.")
+        # 2. Determine goal in world coordinates
+        goal_world = None
+        if goal_mode == GoalMode.POSE and goal_position is not None:
+            goal_world = goal_position
+        elif goal_mode == GoalMode.RANDOM:
+            logger.info("[GlobalMapManager] Goal mode: RANDOM. Sampling a random goal.")
+            goal_world = self.path_planner.sample_random_world_goal()
+        # elif goal_mode == GoalMode.CLICK:
+        #     goal_world = None
+        # elif goal_mode == GoalMode.INQUIRY:  # 已在 DualMap.query_object() 中查询
+        #         goal_world = None
+
+        if goal_world is None:
+            logger.warning(f"[GlobalMapManager][calculate_global_path] No valid goal could be determined for mode {goal_mode}!")
             return []
+
+        # 3. Plan the path
+        path = self.path_planner.plan_path(
+            start_world=curr_pose[:3, 3],
+            goal_world=goal_world
+        )
+
+        # 4. Update caches and return path
+        self.last_inflated_map = self.path_planner.inflated_map
+        self.mark_semantic_map_dirty()
+        return path
 
     def get_goal_position(self, nav_graph, start_position_grid, goal_position_world, goal_mode):
         """
+        TODO: 获取目标点位置 直接在 DualMap.run_path_planning_thread() 中判断，这里实际未使用，待删除
         Get the goal position based on the specified mode.
 
         Parameters:
@@ -678,30 +662,6 @@ class GlobalMapManager(BaseMapManager):
 
         logger.warning(f"[GlobalMap][Path] Invalid goal mode: {goal_mode}")
         return None
-
-    def get_random_walkable_goal(self):
-        """
-        Samples a random walkable goal from the navigation graph's free space.
-
-        Returns:
-            np.ndarray: A 3D point representing a random goal, or None if not possible.
-        """
-        if self.nav_graph is None or self.nav_graph.graph is None:
-            logger.warning("[GlobalMapManager] Navigation graph not created. Cannot sample a random goal.")
-            return None
-
-        random_grid_point = self.nav_graph.sample_random_point()
-        if random_grid_point is None:
-            logger.warning("[GlobalMapManager] Failed to sample a random point from the navigation graph.")
-            return None
-
-        # Convert grid coordinates back to world coordinates
-        # TODO: Check if this is correct, 是否可以使用 self.nav_graph.calculate_pos_3d()
-        world_pos_2d = random_grid_point * self.nav_graph.cell_size + self.nav_graph.pcd_min
-        world_pos_3d = np.append(world_pos_2d, self.cfg.floor_height)
-
-        logger.info(f"[GlobalMapManager] Sampled random walkable goal at {world_pos_3d}")
-        return world_pos_3d
 
     def find_best_candidate_with_inquiry(self):
         """
@@ -801,7 +761,7 @@ class GlobalMapManager(BaseMapManager):
                     self._update_semantic_map_cache(
                         resolution=0.03,
                     )
-                if self.nav_graph:
+                if self.last_inflated_map is not None:
                     self._update_traversable_map_cache()
                 
                 # Sleep for a short time to prevent busy waiting
@@ -843,7 +803,7 @@ class GlobalMapManager(BaseMapManager):
             min_coords = np.min(all_points[:, :2], axis=0)
             max_coords = np.max(all_points[:, :2], axis=0)
             map_size = max_coords - min_coords
-            
+
             padding = 100
             width = int((map_size[0]) / resolution * self.scale_factor) + padding
             height = int((map_size[1]) / resolution * self.scale_factor) + padding
@@ -943,6 +903,8 @@ class GlobalMapManager(BaseMapManager):
         if self._nav_path and len(self._nav_path) > 1:
             path_points_img = [self._world_to_img(np.array(p)) for p in self._nav_path]
             draw_dynamic.line(path_points_img, fill=(0, 255, 0, 255), width=6)
+            for point in path_points_img:
+                draw_dynamic.ellipse([point[0] - 3, point[1] - 3, point[0] + 3, point[1] + 3], fill=(255, 165, 0))
 
         # Draw trajectory
         if self._traj_path and len(self._traj_path) > 1:
@@ -978,22 +940,23 @@ class GlobalMapManager(BaseMapManager):
 
     def _update_traversable_map_cache(self):
         """
-        Optimized method to update the cached traversable map image.
+        Optimized method to update the cached traversable map image from the last inflated map.
         """
-        if not self.nav_graph or self.nav_graph.free_space is None:
+        if self.last_inflated_map is None or self.layout_map is None:
             self.cached_traversable_map = None
             return
 
         # Check if static elements need to be updated
         if self.traversable_map_dirty:
             self.traversable_map_dirty = False
-            free_grid = self.nav_graph.free_space
-            h, w = free_grid.shape
+            # Transpose because inflated_map is (x, y) but we want to treat it as (h, w) for image
+            grid_to_display = self.last_inflated_map.T
+            h, w = grid_to_display.shape
 
             # Create base image for static elements
             static_image = np.zeros((h, w, 3), dtype=np.uint8)
-            static_image[free_grid == 1] = [255, 255, 255]  # White for free space
-            static_image[free_grid == 0] = [100, 100, 100]  # Gray for occupied
+            static_image[grid_to_display == 0] = [255, 255, 255]  # White for free space
+            static_image[grid_to_display == 1] = [100, 100, 100]  # Gray for occupied
 
             # Flip the image vertically to correct orientation
             static_image = cv2.flip(static_image, 0)
@@ -1001,8 +964,8 @@ class GlobalMapManager(BaseMapManager):
             # Convert to PIL image
             self._cached_static_traversable_image = Image.fromarray(static_image, 'RGB')
             self._cached_traversable_metadata = {
-                'origin': self.nav_graph.pcd_min,
-                'resolution': self.nav_graph.cell_size,
+                'origin': np.array([self.layout_map.x_edges[0], self.layout_map.y_edges[0]]),
+                'resolution': self.layout_map.resolution,
                 'height': h,
                 'width': w
             }
@@ -1070,7 +1033,7 @@ class GlobalMapManager(BaseMapManager):
         Returns the latest cached traversable map image.
         The static map elements with dynamic elements are updated in the background thread.
         """
-        if not self.nav_graph or self.cached_traversable_map is None:
+        if self.cached_traversable_map is None:
             return None
 
         start = time.time()

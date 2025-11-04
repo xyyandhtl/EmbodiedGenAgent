@@ -6,13 +6,13 @@ import numpy as np
 import networkx as nx
 from dynaconf import Dynaconf
 import open3d as o3d
-# import torch
-# import torch.nn.functional as F
+import torch
+import torch.nn.functional as F
 
 from EG_agent.vlmap.utils.types import Observation, GlobalObservation, GoalMode
 from EG_agent.vlmap.utils.object import LocalObject, LocalObjStatus
 from EG_agent.vlmap.utils.base_map_manager import BaseMapManager
-from EG_agent.vlmap.utils.navigation_helper import NavigationGraph
+from EG_agent.vlmap.utils.navigation_helper import PathPlanner
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)
@@ -44,8 +44,8 @@ class LocalMapManager(BaseMapManager):
         # Local Object Config Init
         LocalObject.initialize_config(cfg)
 
-        # For navigation
-        self.nav_graph = None
+        # For navigation --> pathfinding
+        self.path_planner: PathPlanner = None
         self.inquiry = None
         # If in Click mode, the goal by clicked
         self.click_goal = None
@@ -936,14 +936,12 @@ class LocalMapManager(BaseMapManager):
                 obj_names, obj_colors, obj_bboxes
             )
 
-    def create_nav_graph(self, resolution=0.03) -> None:
+    def _create_dynamic_occupancy_map(self, resolution=0.03):
         """
-            Generates the NavigationGraph based on the current local map.
-            (A computationally intensive operation)
+        Creates a dynamic occupancy map from the current local and global objects.
+        Returns the binary occupancy map, x_edges, and y_edges.
         """
-        logger.info("[LocalMapManager] [create_nav_graph] Creating navigation graph...")
-
-        # 1. Get all objects' pcd from the current local map
+        logger.info("[LocalMapManager] Creating dynamic occupancy map...")
         total_pcd = o3d.geometry.PointCloud()
         for obj in self.local_map:
             if obj.observed_num <= 3:
@@ -964,91 +962,82 @@ class LocalMapManager(BaseMapManager):
         # total_pcd += curr_point
 
         if not total_pcd.has_points():
-            logger.warning("[LocalMapManager] [create_nav_graph] No points in map to create navigation graph.")
-            self.nav_graph = None
-            return
+            logger.warning("[LocalMapManager][create_nav_graph] No points in map to create occupancy map!")
+            return None, None, None
 
-        # 3. Construct NavigationGraph and 2D occupancy map
-        try:
-            nav_graph = NavigationGraph(self.cfg, total_pcd, cell_size=resolution)
-            self.nav_graph = nav_graph
+        # 3. Create occ_map
+        points = np.asarray(total_pcd.points)
+        xy_points = points[:, :2]
+        x_min, y_min = np.min(xy_points, axis=0)
+        x_max, y_max = np.max(xy_points, axis=0)
 
-            nav_graph.get_occ_map()
-        except Exception as e:
-            logger.error(f"[LocalMapManager] [create_nav_graph] Failed to create navigation graph: {e}")
-            self.nav_graph = None
+        occ_map, x_edges, y_edges = np.histogram2d(
+            xy_points[:, 0],
+            xy_points[:, 1],
+            bins=(int((x_max - x_min) / resolution), int((y_max - y_min) / resolution))
+        )
+        # convert to binary_map
+        binary_map = (occ_map > 0).astype(np.uint8)
+        return binary_map, x_edges, y_edges, resolution
 
     def calculate_local_path(
             self, curr_pose, goal_mode=GoalMode.POSE, resolution=0.03, goal_position=None
     ):
-        # Step 1: Construct NavigationGraph and 2D occupancy map
-        self.create_nav_graph(resolution=resolution)
-        if self.nav_graph is None:
-            logger.warning("[LocalMapManager] [calculate_local_path] Navigation graph not available. Skipping local_path calculation.")
-            return []
-        nav_graph = self.nav_graph
-
-        # Step 2: Get start and goal position
-        curr_position = curr_pose[:3, 3]
-        start_position_grid = nav_graph.calculate_pos_2d(curr_position)
-
-        goal_position_grid = self.get_goal_position(nav_graph, start_position_grid, goal_position, goal_mode)
-
-        if goal_position_grid is None:
-            logger.warning("[LocalMap][Path] No goal position found!")
+        """
+        Calculates the local path by creating and using a PathPlanner instance.
+        """
+        # 1. Create dynamic occupancy map
+        binary_occ, x_edges, y_edges, map_res = self._create_dynamic_occupancy_map(resolution)
+        if binary_occ is None:
             return []
 
-        # Step 3: Calculate path
-        rrt_path = nav_graph.find_rrt_path(start_position_grid, goal_position_grid)
+        # 2. Initialize the planner
+        self.path_planner = PathPlanner(
+            binary_occ_map=binary_occ,
+            map_origin=np.array([x_edges[0], y_edges[0]]),
+            map_resolution=map_res,
+            robot_radius=self.cfg.get('robot_radius', 0.25),
+            floor_height=self.cfg.get('floor_height', 0.0)
+        )
 
-        if len(rrt_path) == 0:
-            logger.warning("[LocalMap][Path] No path found!")
-            return []
-        else:
-            return rrt_path
-
-    def get_goal_position(self, nav_graph, start_position_grid, goal_position_world, goal_mode):
-        if goal_mode == GoalMode.CLICK:
-            logger.info("[LocalMap][Path] Local Goal mode: CLICK")
-            return nav_graph.calculate_pos_2d(self.click_goal)
-
-        if goal_mode == GoalMode.POSE:
-            logger.info("[LocalMap][Path] Local Goal mode: POSE")
-            if goal_position_world is not None:
-                return nav_graph.calculate_pos_2d(goal_position_world)
-            else:
-                return None
-
-        if goal_mode == GoalMode.INQUIRY:
-            logger.info("[LocalMap][Path] Local Goal mode: INQUIRY")
+        # 3. Determine goal in world coordinates
+        goal_world = None
+        if goal_mode == GoalMode.POSE and goal_position is not None:
+            goal_world = goal_position
+        # elif goal_mode == GoalMode.CLICK and self.click_goal is not None:
+        #     goal_world = self.click_goal
+        elif goal_mode == GoalMode.INQUIRY:
+            logger.info("[LocalMapManager][calculate_local_path] Local Goal mode: INQUIRY")
             # Step 1, find local objects within the global best candidate
             candidate_objects = self.filter_objects_in_global_bbox(expand_ratio=0.1)
-
-            if len(candidate_objects) == 0:
-                logger.warning("[LocalMap][Path] No local objects found within the global best candidate!")
-                return None
-
+            if not candidate_objects:
+                logger.warning("[LocalMapManager][calculate_local_path] No local objects found within the global best candidate!")
+                return []
             # Step 2. Within filtered objects, find the best score object
             local_goal_candidate, candidate_score = self.find_best_candidate_with_inquiry(candidate_objects)
-
             # If the score is very far from the global score, return None
-            # TODO: Magic number, using given threshold to judge whether the local score is okay or not
-            diff_score = abs(candidate_score - self.global_score)
-            if diff_score > 0.1:
-                logger.warning("[LocalMap][Path] The local score is too far from the global score: ", diff_score)
-                return None
+            if abs(candidate_score - self.global_score) > 0.1:
+                logger.warning(f"[LocalMapManager][calculate_local_path] Local score {candidate_score:.2f} differs too much from global score {self.global_score:.2f}.")
+                return []
+            goal_world = local_goal_candidate.bbox.get_center()
 
-            goal_3d = local_goal_candidate.bbox.get_center()
-            goal_2d = nav_graph.calculate_pos_2d(goal_3d)
+        if goal_world is None:
+            logger.warning(f"[LocalMapManager][calculate_local_path] No valid goal for mode {goal_mode}.")
+            return []
 
-            # TODO: Check whether to use the global map or the local map
-            if not nav_graph.free_space_check(goal_2d) is False:
+        # 4. Plan the path
+        path = self.path_planner.plan_path(
+            start_world=curr_pose[:3, 3],
+            goal_world=goal_world
+        )
 
-                snapped_goal = self.nav_graph.snap_to_free_space(goal_2d, self.nav_graph.free_space)
-
-                goal_2d = np.array(snapped_goal)
-
-            return goal_2d
+        # 5. Return path
+        if path:
+            logger.info(f"[LocalMapManager][calculate_local_path] Found a local path with {len(path)} points.")
+        else:
+            logger.warning("[LocalMapManager][calculate_local_path] Failed to find a local path.")
+        
+        return path
 
     def filter_objects_in_global_bbox(self, expand_ratio=0.1):
         """

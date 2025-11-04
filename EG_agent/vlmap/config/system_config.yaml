@@ -180,3 +180,6 @@ path_planning_interval: 10.0
 # Editing wall if the wall generation result is not good
 edit_wall: False
 save_wall: False
+
+# Robot radius, for collision detection in path planning
+robot_radius: 0.18

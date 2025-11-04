@@ -631,8 +631,7 @@ class Dualmap:
         # Get 3D path point in world coordinate
         # 计算 全局路径
         self.curr_global_path = self.global_map_manager.calculate_global_path(
-            self.curr_pose, goal_mode=self.goal_mode,
-            resolution=self.cfg.resolution, goal_position=self.goal_pose
+            self.curr_pose, goal_mode=self.goal_mode, goal_position=self.goal_pose
         )
 
         self.global_map_manager.update_pose_path(nav_path=self.curr_global_path)
@@ -688,10 +687,10 @@ class Dualmap:
         start_pose[1, 3] = y  # Y direction translation
         start_pose[2, 3] = z  # Z direction translation
 
-        # for CLick mode, pass the click goal to local from global
-        if self.global_map_manager.nav_graph.snapped_goal:
-            click_goal = self.global_map_manager.nav_graph.snapped_goal
-            self.local_map_manager.set_click_goal(click_goal)
+        # for CLick mode, pass the click goal to local from global (not use now, because the nav_graph is deleted)
+        # if self.global_map_manager.nav_graph.snapped_goal:
+        #     click_goal = self.global_map_manager.nav_graph.snapped_goal
+        #     self.local_map_manager.set_click_goal(click_goal)
 
         # for Inquiry mode, pass the inquiry goal bbox to local from global
         if self.global_map_manager.global_candidate_bbox is not None:
