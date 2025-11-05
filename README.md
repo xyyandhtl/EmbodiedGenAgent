@@ -48,6 +48,8 @@ And then in the GUI:
 
 Some demo videos can be watched in [link](https://drive.google.com/drive/folders/1_V_zZ-w5djCpGRBKAjWJipEXnaxWuuTM?usp=drive_link).
 
+Some scene assets in the simulation: [link](https://drive.google.com/drive/folders/1SiGH3LGDxikIS0cmn6WFqujwO8liKcSE?usp=drive_link).
+
 
 ## Plans
 Base Version:
@@ -77,3 +79,5 @@ Future Work:
 - Object/Place querying in the unkown world using open-vocabulary mapping: https://github.com/Eku127/DualMap.git
 - Simulator: https://github.com/isaac-sim/IsaacLab.git
 - Go2W locomotion policy from: https://github.com/VisionTrekker/legged-loco
+- The mainly used scene assets from: https://sketchfab.com/
+- Livox lidar implementation in isaaclab from: https://github.com/aCodeDog/OmniPerception

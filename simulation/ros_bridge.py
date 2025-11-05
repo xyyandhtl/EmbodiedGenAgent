@@ -4,13 +4,14 @@ import numpy as np
 import zmq
 import pickle
 
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image, CameraInfo, PointCloud2, PointField
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Int32
 from cv_bridge import CvBridge
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import PointStamped
+import struct
 
 class ROSBridge(Node):
     """
@@ -56,6 +57,7 @@ class ROSBridge(Node):
         self.depth_pub = self.create_publisher(Image, "/camera/depth/image_raw", 10)
         self.pose_pub = self.create_publisher(Odometry, "/camera/pose", 10)
         self.camera_info_pub = self.create_publisher(CameraInfo, "/camera_info", 10)
+        self.lidar_pub = self.create_publisher(PointCloud2, "/lidar/pointcloud", 10)
 
         # --- Prepare CameraInfo message (sent every tick with fresh header) ---
         self.camera_info_msg = self._prepare_camera_info(camera_params)
@@ -100,7 +102,7 @@ class ROSBridge(Node):
         ros_time = self.get_clock().now().to_msg()
 
         # --- Pose and TF ---
-        pose_tuple = sensor_data.get("pose")
+        pose_tuple = sensor_data.get("pose_camera")
         if pose_tuple is not None:
             pos_np, quat_wxyz_np = pose_tuple
             quat_xyzw_np = np.roll(quat_wxyz_np, -1)
@@ -159,6 +161,66 @@ class ROSBridge(Node):
         self.camera_info_msg.header.stamp = ros_time
         self.camera_info_msg.header.frame_id = "camera_link"
         self.camera_info_pub.publish(self.camera_info_msg)
+
+        pose_tuple = sensor_data.get("pose_agent")
+        if pose_tuple is not None:
+            pos_np, quat_wxyz_np = pose_tuple
+            quat_xyzw_np = np.roll(quat_wxyz_np, -1)
+            t = TransformStamped()
+            t.header.stamp = ros_time
+            t.header.frame_id = 'map'
+            t.child_frame_id = 'base_link'
+            t.transform.translation.x = float(pos_np[0])
+            t.transform.translation.y = float(pos_np[1])
+            t.transform.translation.z = float(pos_np[2])
+            t.transform.rotation.x = float(quat_xyzw_np[0])
+            t.transform.rotation.y = float(quat_xyzw_np[1])
+            t.transform.rotation.z = float(quat_xyzw_np[2])
+            t.transform.rotation.w = float(quat_xyzw_np[3])
+            self.tf_broadcaster.sendTransform(t)
+
+        # --- LiDAR PointCloud ---
+        pose_tuple = sensor_data.get("pose_lidar")
+        if pose_tuple is not None:
+            pos_np, quat_wxyz_np = pose_tuple
+            quat_xyzw_np = np.roll(quat_wxyz_np, -1)
+            t = TransformStamped()
+            t.header.stamp = ros_time
+            t.header.frame_id = 'map'
+            t.child_frame_id = 'lidar_link'
+            t.transform.translation.x = float(pos_np[0])
+            t.transform.translation.y = float(pos_np[1])
+            t.transform.translation.z = float(pos_np[2])
+            t.transform.rotation.x = float(quat_xyzw_np[0])
+            t.transform.rotation.y = float(quat_xyzw_np[1])
+            t.transform.rotation.z = float(quat_xyzw_np[2])
+            t.transform.rotation.w = float(quat_xyzw_np[3])
+            self.tf_broadcaster.sendTransform(t)
+
+        lidar_np = sensor_data.get("lidar")
+        if lidar_np is not None:
+            pointcloud_msg = self._create_pointcloud2_msg(lidar_np, ros_time)
+            self.lidar_pub.publish(pointcloud_msg)
+
+    def _create_pointcloud2_msg(self, pointcloud: np.ndarray, timestamp) -> PointCloud2:
+        """Convert a numpy array to a PointCloud2 ROS message."""
+        msg = PointCloud2()
+        msg.header.stamp = timestamp
+        # msg.header.frame_id = "map"     # pointcloud_in_world_frame=True
+        msg.header.frame_id = "lidar_link" 
+        msg.height = 1
+        msg.width = pointcloud.shape[0]
+        msg.fields = [
+            PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
+        ]
+        msg.is_bigendian = False
+        msg.point_step = 12  # 3 floats * 4 bytes each
+        msg.row_step = msg.point_step * pointcloud.shape[0]
+        msg.is_dense = True
+        msg.data = np.asarray(pointcloud, dtype=np.float32).tobytes()
+        return msg
 
     # --- Callbacks: forward ROS messages into ZMQ for simulation ---
     def _cmd_vel_callback(self, msg: Twist):

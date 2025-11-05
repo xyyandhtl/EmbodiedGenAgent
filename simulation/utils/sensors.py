@@ -4,10 +4,12 @@ import torch
 import threading
 import time
 from typing import TYPE_CHECKING
+from dynaconf import Dynaconf
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab.sensors.camera.camera import Camera
+    from simulation.assets.sensors.lidar_sensor import LidarSensor
 
 from isaaclab.utils.math import (
     quat_mul,
@@ -25,7 +27,7 @@ class IsaacLabSensorHandler:
     when a new frame is available.
     """
 
-    def __init__(self, env: ManagerBasedRLEnv, camera_name: str = "rgbd_camera"):
+    def __init__(self, env: ManagerBasedRLEnv, enable_depth: bool = True, enable_lidar: bool = False):
         """
         Initializes the sensor handler.
 
@@ -34,17 +36,22 @@ class IsaacLabSensorHandler:
             camera_name: The name of the camera entity in the scene.
         """
         self.env = env
-        self.camera_name = camera_name
-        self.camera: Camera = self.env.unwrapped.scene[self.camera_name]
+        self.enable_depth = enable_depth
+        self.enable_lidar = enable_lidar
+        self.camera: Camera = self.env.unwrapped.scene["rgbd_camera"]
         self.cam_offset_pos = torch.tensor(self.camera.cfg.offset.pos, device=self.env.device).unsqueeze(0)
         self.cam_offset_quat = torch.tensor(self.camera.cfg.offset.rot, device=self.env.device).unsqueeze(0)
-        # self.new_frame_event = threading.Event()  # remove event usage, kept for backward compatibility
+        if self.enable_lidar:
+            self.lidar: LidarSensor = self.env.unwrapped.scene["lidar_sensor"]
+            self.lidar_offset_pos = torch.tensor(self.lidar.cfg.offset.pos, device=self.env.device).unsqueeze(0)
+            self.lidar_offset_quat = torch.tensor(self.lidar.cfg.offset.rot, device=self.env.device).unsqueeze(0)
         self.data_lock = threading.Lock()
 
         # Internal storage for an atomic snapshot of a frame (protected by data_lock)
         self._rgb: torch.Tensor | None = None
         self._depth: torch.Tensor | None = None
         self._pose_camera: tuple[torch.Tensor, torch.Tensor] | None = None
+        self._pose_lidar: tuple[torch.Tensor, torch.Tensor] | None = None
         self._pose_agent: tuple[torch.Tensor, torch.Tensor] | None = None
         self._intrinsics: torch.Tensor | None = None
         self._ts: float | None = None  # timestamp of the last atomic capture
@@ -72,22 +79,36 @@ class IsaacLabSensorHandler:
 
             # Snapshot camera outputs
             output = self.camera.data.output
-            rgb = output["rgb"].clone() if "rgb" in output else None
-            depth = output["distance_to_image_plane"].clone() if "distance_to_image_plane" in output else None
+            self._rgb = output["rgb"].clone() if "rgb" in output else None
 
+            if self.enable_depth:
+                self._depth  = output["distance_to_image_plane"].clone() if "distance_to_image_plane" in output else None
+            if self.enable_lidar:
+                self._lidar = self.lidar.data.pointcloud.clone()
+                # self._lidar = self.lidar.data.ray_hits_w.clone()
+                # compute lidar pose from base + offset
+                lidar_pos_w = base_pos_w + quat_apply(base_quat_w, self.lidar_offset_pos)
+                lidar_quat_w_world = quat_mul(base_quat_w, self.lidar_offset_quat)
+                lidar_quat_w_ros = convert_camera_frame_orientation_convention(lidar_quat_w_world, origin="world", target="ros")
+                # lidar_pos_w = self.lidar.data.pos_w[0].unsqueeze(0)
+                # lidar_quat_w_world = self.lidar.data.quat_w[0].unsqueeze(0)
+                # lidar_quat_w_ros = convert_camera_frame_orientation_convention(lidar_quat_w_world, origin="world", target="ros")
+                self._pose_lidar = (lidar_pos_w.clone(), base_quat_w.clone())
+                
             # Compute camera pose from base + offset
             cam_pos_w = base_pos_w + quat_apply(base_quat_w, self.cam_offset_pos)
             cam_quat_w_world = quat_mul(base_quat_w, self.cam_offset_quat)
             cam_quat_w_ros = convert_camera_frame_orientation_convention(cam_quat_w_world, origin="world", target="ros")
+            # pos_cam = self.camera.data.pos_w[0].unsqueeze(0)
+            # quat_cam_w_world = self.camera.data.quat_w_world[0].unsqueeze(0)
+            # quat_cam_w_ros = convert_camera_frame_orientation_convention(quat_cam_w_world, origin="world", target="ros")
 
             # Store atomically
-            self._rgb = rgb
-            self._depth = depth
             self._pose_camera = (cam_pos_w.clone(), cam_quat_w_ros.clone())
             self._pose_agent = (base_pos_w.clone(), base_quat_ros.clone())
             self._ts = time.time()
-
-        return self._rgb, self._depth, self._pose_camera, self._pose_agent
+        
+        return self._rgb, self._depth, self._lidar, self._pose_camera, self._pose_lidar, self._pose_agent
 
     def get_rgb_frame(self) -> torch.Tensor | None:
         """Returns the latest snapshot RGB frame (non-blocking)."""
@@ -117,6 +138,11 @@ class IsaacLabSensorHandler:
         """Returns the latest snapshot intrinsics (non-blocking)."""
         with self.data_lock:
             return self._intrinsics.clone() if self._intrinsics is not None else None
+
+    def get_lidar_pointcloud(self) -> torch.Tensor | None:
+        """Returns the latest snapshot LiDAR point cloud (non-blocking)."""
+        with self.data_lock:
+            return self._lidar.clone() if self._lidar is not None else None
 
     def get_timestamp(self) -> float | None:
         """Returns the capture timestamp of the latest snapshot."""

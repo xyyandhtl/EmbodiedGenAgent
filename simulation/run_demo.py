@@ -96,7 +96,7 @@ def main():
         add_collision_and_material(terrain_prim, static_friction=0.8, dynamic_friction=0.6)
 
     # --- 3. Initialize Sensor Handlers and ZMQ Bridge ---
-    sensor_handler = IsaacLabSensorHandler(env, camera_name="rgbd_camera")
+    sensor_handler = IsaacLabSensorHandler(env, enable_depth=CFG.enable_depth, enable_lidar=CFG.enable_lidar)
     print(f"[INFO] SensorHandler: {sensor_handler}")
 
     # One bridge for pub/sub
@@ -188,20 +188,26 @@ def main():
             now = time.time()
             if now - last_sensor_pub_ts >= sensor_publish_dt:
                 # 仅在到达发布间隔时采集并发布（一次性同步到CPU，减小不同步）
-                rgb_tensor, depth_tensor, pose_camera_tuple, pose_agent_tuple = sensor_handler.capture_frame(gpu_sync=True)
+                rgb_tensor, depth_tensor, lidar_tensor, pose_camera_tuple, pose_lidar_tuple, pose_agent_tuple = \
+                    sensor_handler.capture_frame(gpu_sync=True)
                 data_to_send = {}
                 if rgb_tensor is not None:
                     data_to_send['rgb'] = rgb_tensor[0, :, :, :3].to("cpu", non_blocking=False).numpy().astype(np.uint8)
-                if depth_tensor is not None:
+                if sensor_handler.enable_depth and depth_tensor is not None:
                     depth_data = (depth_tensor[0] * 1000).to("cpu", non_blocking=False).numpy()
                     # depth_data[depth_data > 65535] = 0    # uint16 truncate
                     depth_data[depth_data > 20000] = 0      # depth camera max range truncate (set 10m)
                     data_to_send['depth'] = depth_data.astype(np.uint16)
+                if sensor_handler.enable_lidar and lidar_tensor is not None:
+                    # Shape: (num_envs, num_rays, 3)
+                    data_to_send['lidar'] = lidar_tensor[0].to("cpu", non_blocking=False).numpy()
                 if pose_camera_tuple is not None:
-                    data_to_send['pose'] = (pose_camera_tuple[0][0].cpu().numpy(), pose_camera_tuple[1][0].cpu().numpy())
-                # [DEBUG]
+                    data_to_send['pose_camera'] = (pose_camera_tuple[0][0].cpu().numpy(), pose_camera_tuple[1][0].cpu().numpy())
+                if pose_lidar_tuple is not None:
+                    data_to_send['pose_lidar'] = (pose_lidar_tuple[0][0].cpu().numpy(), pose_lidar_tuple[1][0].cpu().numpy())
                 if pose_agent_tuple is not None:
                     data_to_send['pose_agent'] = (pose_agent_tuple[0][0].cpu().numpy(), pose_agent_tuple[1][0].cpu().numpy())
+
                 # 可按需获取时间戳用于下游对齐：sensor_handler.get_timestamp()
                 if data_to_send:
                     zmq.publish_data(data_to_send)

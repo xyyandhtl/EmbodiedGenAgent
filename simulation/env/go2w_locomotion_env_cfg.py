@@ -6,8 +6,8 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import CameraCfg
-# from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
+from isaaclab.sensors import CameraCfg, RayCasterCfg
+from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
 # from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 # from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
@@ -23,6 +23,8 @@ import simulation.mdp as user_mdp
 from simulation.assets.robots.unitree import UNITREE_GO2W_CFG
 from simulation.assets.terrains.terrain_cfg import FLAT_TERRAINS_CFG
 from simulation.utils import compute_cam_cfg
+from simulation.assets.sensors.patterns_cfg import LivoxPatternCfg
+from simulation.assets.sensors.lidar_sensor_cfg import LidarSensorCfg
 
 
 GO2W_LEG_JOINT_NAMES = [
@@ -78,7 +80,7 @@ class VelocitySceneCfg(InteractiveSceneCfg):
         update_period=0.06, # ~15Hz, close to realsense, > self.sim.render_interval
         height=480,
         width=640,
-        data_types=["rgb", "distance_to_image_plane"],
+        data_types=["rgb"],  # 
         spawn=compute_cam_cfg(W=640, H=480, fov_deg_x=90.0),
         # spawn=sim_utils.PinholeCameraCfg(
         #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=54.0, clipping_range=(0.1, 1.0e5)
@@ -88,16 +90,19 @@ class VelocitySceneCfg(InteractiveSceneCfg):
         colorize_instance_id_segmentation=False,
         colorize_instance_segmentation=False,
     )
-    # lidar = 
-    # height_scanner = RayCasterCfg(
+
+    # Grid lidar
+    # lidar_sensor = RayCasterCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base",
-    #     offset=RayCasterCfg.OffsetCfg(pos=[0.0, 0.0, 20.0]),
-    #     ray_alignment='yaw',
-    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
-    #     debug_vis=False,
-    #     mesh_prim_paths=["/World/ground"],
+    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.2)),
+    #     ray_alignment='base',
+    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=(1.6, 1.0)),
+    #     debug_vis=True,
+    #     mesh_prim_paths=["/World/Terrain"],
     #     max_distance=100.0,
     # )
+
+    # Contact sensor
     # contact_forces = ContactSensorCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/.*",
     #     update_period=0.0,
@@ -106,6 +111,29 @@ class VelocitySceneCfg(InteractiveSceneCfg):
     #     track_air_time=True
     # )
 
+    # Livox lidar
+    lidar_sensor = LidarSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base",
+        offset=LidarSensorCfg.OffsetCfg(pos=(0.0, 0.0, 0.2), rot=(0, 1, 0., 0.)),
+        # attach_yaw_only=False,
+        ray_alignment = "base",
+        pattern_cfg=LivoxPatternCfg(
+            sensor_type="mid360",
+            samples=24000,  # Reduced for better performance with 1024 envs
+            use_simple_grid=False,
+        ),
+        mesh_prim_paths=["/World/Terrain"], #this is for global dynamic and static mesh
+        # You can also specify specific prim paths for dynamic objects if needed
+
+        max_distance=40.0,
+        min_range=0.2,
+        return_pointcloud=True,  # Disable pointcloud for performance
+        pointcloud_in_world_frame=False, # simulation directly in world frame to reduce computation
+        enable_sensor_noise=False,  # Disable noise for pure performance test
+        random_distance_noise=0.0,
+        update_frequency=25.0,  # 25 Hz for better performance
+        debug_vis=True,  # Disable visualization for performance
+    )
 
 @configclass
 class CommandsCfg:
