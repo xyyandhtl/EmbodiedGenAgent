@@ -3,7 +3,7 @@ defaults:
 #  - override hydra/job_logging: stdout
 
 # scene config
-terrain: "sketchfab"   # see assets/terrains/usd_scene.py
+terrain: "city"   # see assets/terrains/usd_scene.py
 add_physics: True # if the terrain usd dont have collision
 
 # locomotion config
@@ -14,6 +14,8 @@ policy_device: cuda:0
 
 # camera config
 publish_dt: 0.1
+enable_depth: True
+enable_lidar: True
 sensors:
   camera:
     width: 640
@@ -23,7 +25,7 @@ sensors:
     cx: 320.0
     cy: 240.0
 monitor_camera: False
-camera_follow: True
+camera_follow: False
 
 # ui config
 sim_app:

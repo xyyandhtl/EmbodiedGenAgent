@@ -79,8 +79,6 @@ show_fastsam_debug: False
 ## Detection Refinement
 # skip refinement will be faster but less accurate
 skip_refinement: False
-# small mask filtering threshold
-small_mask_th: 50
 
 ## Feature Settings
 # Use Text and Image weighted feats for object feature
@@ -89,16 +87,6 @@ use_weighted_feature: True
 image_weight: 0.7
 # Use average feat for unknown classes detected by FastSAM
 use_avg_feat_for_unknown: True
-
-## PCD Settings
-# minimum points threshold for object's PCD
-min_points_threshold: 5
-# pcd params
-downsample_voxel_size: 0.05
-dbscan_remove_noise: !!bool True
-dbscan_eps: 0.1
-dbscan_min_points: 10
-pcd_sample_ratio: 0.1
 
 ### MATCHING CONFIG
 # similarity threshold for matching
@@ -157,9 +145,7 @@ save_global_map: True
 save_cropped: False
 
 ### LAYOUT CONFIG
-layout_voxel_size: 0.05 
 save_layout: True
-layout_update_radius: 10.0  # m
 
 # ============================================================
 # PRELOADING CONFIG

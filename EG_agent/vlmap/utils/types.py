@@ -16,6 +16,7 @@ class DataInput:
     color: np.ndarray = field(default_factory=lambda: np.empty((0, 0, 3), dtype=np.uint8))
     # Depth in H, W, 1
     depth: np.ndarray = field(default_factory=lambda: np.empty((0, 0), dtype=np.float32))
+    lidar: np.ndarray = field(default_factory=lambda: np.empty((0, 3), dtype=np.float32))
     color_name: str = ""
     # Intrinsic in 3*3
     intrinsics: np.ndarray = field(default_factory=lambda: np.eye(3))

@@ -505,7 +505,7 @@ class LocalObject(BaseObject):
         return max_common_tuple
 
     def update_info_from_observations(
-        self,
+        self, dbscan_remove_noise: bool = True
     ) -> None:
         # This function will be used to update the object class info based on all observations
         # ALso can use iteration of the update_info function
@@ -522,8 +522,9 @@ class LocalObject(BaseObject):
         # downsample pcd
         self.pcd = self.pcd.voxel_down_sample(voxel_size=self._cfg.downsample_voxel_size)
         # Group to majority
-        self.pcd = init_pcd_denoise_dbscan(
-            self.pcd, self._cfg.dbscan_eps, self._cfg.dbscan_min_points)
+        if dbscan_remove_noise:
+            self.pcd = init_pcd_denoise_dbscan(
+                self.pcd, self._cfg.dbscan_eps, self._cfg.dbscan_min_points)
 
         # self.bbox = self.pcd.get_oriented_bounding_box(robust=True)
         self.bbox = self.pcd.get_axis_aligned_bounding_box()

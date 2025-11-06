@@ -10,7 +10,8 @@ from rclpy.publisher import Publisher
 from rclpy.executors import MultiThreadedExecutor
 from geometry_msgs.msg import Twist, PoseStamped, PointStamped
 from std_msgs.msg import Int32
-from sensor_msgs.msg import Image, CompressedImage, CameraInfo
+from sensor_msgs.msg import Image, CompressedImage, CameraInfo, PointCloud2
+import sensor_msgs_py.point_cloud2 as pc2
 from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge
 from message_filters import Subscriber, ApproximateTimeSynchronizer
@@ -142,6 +143,7 @@ class IsaacsimEnv(BaseAgentEnv):
         self.cam_aspect = float(cfg.camera.aspect)
         self.use_compressed_topic = bool(cfg.ros.use_compressed_topic)
         self.near_dist = float(cfg.camera.near_dist)
+        self.range_sensor: str = cfg.range_sensor
 
         # Init rclpy if needed
         if not rclpy.ok():
@@ -166,11 +168,21 @@ class IsaacsimEnv(BaseAgentEnv):
 
         self._odom_sub = Subscriber(self.ros_node, Odometry, cfg.ros.topics.odom)
 
-        self._sync = ApproximateTimeSynchronizer(
-            [self._rgb_sub, self._depth_sub, self._odom_sub],
-            queue_size=10,
-            slop=float(cfg.ros.sync_threshold)
-        )
+        if self.range_sensor == "lidar":
+            self._lidar_sub = Subscriber(self.ros_node, PointCloud2, cfg.ros.topics.lidar)
+            self._sync = ApproximateTimeSynchronizer(
+                [self._rgb_sub, self._lidar_sub, self._odom_sub],
+                queue_size=10,
+                slop=float(cfg.ros.sync_threshold)
+            )
+        elif self.range_sensor == "depth":  
+            self._sync = ApproximateTimeSynchronizer(
+                [self._rgb_sub, self._depth_sub, self._odom_sub],
+                queue_size=10,
+                slop=float(cfg.ros.sync_threshold)
+            )
+        else:
+            raise NotImplementedError(f"Unsupported range_sensor type: {self.range_sensor}")
         self._sync.registerCallback(self._synced_callback)
 
         # Start spinning
@@ -190,23 +202,33 @@ class IsaacsimEnv(BaseAgentEnv):
         period = 1.0 / float(cfg.ros.ros_rate)
         self._ros_pub_timer = self.ros_node.create_timer(period, self._ros_pub_tick)
 
-    def _synced_callback(self, rgb_msg, depth_msg, odom_msg):
+    def _synced_callback(self, rgb_msg, range_msg, odom_msg):
         """RGB/Depth/Odom 同步回调：解码 -> 位姿矩阵 -> 推送到 VLMap 后端 -> 更新可视状态"""
         # Timestamp
         timestamp = rgb_msg.header.stamp.sec + rgb_msg.header.stamp.nanosec * 1e-9
         # print(f"Received synced data at time {timestamp}")
 
-        # RGB/Depth conversion
+        # RGB/Depth or Lidar conversion
         if self.use_compressed_topic:
             # Minimal compressed support via CvBridge; if not supported fallback to no-op
             rgb_img = self._bridge.compressed_imgmsg_to_cv2(rgb_msg, desired_encoding='rgb8')
-            depth_cv = self._bridge.compressed_imgmsg_to_cv2(depth_msg, desired_encoding='16UC1')
         else:
             rgb_img = self._bridge.imgmsg_to_cv2(rgb_msg, desired_encoding='rgb8')
-            depth_cv = self._bridge.imgmsg_to_cv2(depth_msg, desired_encoding='16UC1')
 
-        depth_img = depth_cv.astype(_np.float32) / 1000.0
-        depth_img = _np.expand_dims(depth_img, axis=-1)
+        if self.range_sensor == "lidar":
+            lidar_points = _np.vstack(pc2.read_points(range_msg, 
+                                      field_names=["x", "y", "z"], 
+                                      skip_nans=True).tolist())
+            lidar_points = lidar_points[_np.isfinite(lidar_points).all(1)]
+            # print("Lidar points shape:", lidar_points)
+            depth_img = None
+        elif self.range_sensor == "depth":
+            lidar_points = None
+            depth_cv = self._bridge.imgmsg_to_cv2(range_msg, desired_encoding='16UC1')
+            depth_img = depth_cv.astype(_np.float32) / 1000.0
+            depth_img = _np.expand_dims(depth_img, axis=-1)
+        else:
+            raise NotImplementedError(f"Unsupported range_sensor type: {self.range_sensor}")
 
         # Pose matrix from odom
         t = _np.array([
@@ -224,7 +246,7 @@ class IsaacsimEnv(BaseAgentEnv):
         pose[:3, 3] = t
 
         # Forward to backend directly
-        self._vlmap_backend.push_data(rgb_img, depth_img, pose, timestamp)
+        self._vlmap_backend.push_data(rgb_img, depth_img, lidar_points, pose, timestamp)
 
         # Recompute real-time FOV visibility check using cam_pose_w
         self._update_goal_inview()

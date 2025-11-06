@@ -524,7 +524,7 @@ class LocalMapManager(BaseMapManager):
                     # TODO: ALso we actually no need to delete
                     obj.observations = [ob for ob in obj.observations if ob.class_id != class_id or ob.idx != obs.idx]
             # new obj update
-            new_obj.update_info_from_observations()
+            new_obj.update_info_from_observations(bool(self.cfg.dbscan_remove_noise))
 
             # add to local map
             self.local_map.append(new_obj)
@@ -603,7 +603,7 @@ class LocalMapManager(BaseMapManager):
                 new_obj.add_observation(obs)
 
         # Update the info of the new object
-        new_obj.update_info_from_observations()
+        new_obj.update_info_from_observations(bool(self.cfg.dbscan_remove_noise))
         new_obj.is_merged = True
         return new_obj
 

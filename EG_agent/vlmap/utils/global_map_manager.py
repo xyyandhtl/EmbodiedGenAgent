@@ -47,7 +47,13 @@ class GlobalMapManager(BaseMapManager):
         self.has_action_path = False
 
         # layout information --> LayoutMap
-        layout_resolution = float(self.cfg.layout_voxel_size) * 2
+        if self.cfg.range_sensor == "lidar":
+            layout_resolution = float(self.cfg.layout_voxel_size)
+        elif self.cfg.range_sensor == "depth":
+            layout_resolution = float(self.cfg.layout_voxel_size) * 2
+        else:
+            raise NotImplementedError(f"Unsupported range_sensor type: {self.cfg.range_sensor}")
+        
         self.layout_map = LayoutMap(cfg, resolution=layout_resolution, percentile=90, min_area=5, kernel_size=3)
         self.binary_occ: np.ndarray = None
 
@@ -784,26 +790,21 @@ class GlobalMapManager(BaseMapManager):
         # Check if static elements need to be updated
         if self.semantic_map_dirty:
             self.semantic_map_dirty = False
-            # 1. Aggregate all points to determine map boundaries
-            all_points_lists = [
-                np.asarray(obj.pcd_2d.points)
-                for obj in self.global_map if not obj.pcd_2d.is_empty()
-            ]
-            if not all_points_lists:
+
+            # 1. Determine map boundaries from occ_map
+            if self.layout_map.occ_map is None:
                 self.cached_semantic_map = None
                 return
 
-            all_points = np.vstack(all_points_lists)
-            all_points = all_points[np.isfinite(all_points).all(axis=1)]
-            if all_points.size == 0:
-                self.cached_semantic_map = None
-                return
+            self.binary_occ = self.layout_map.process_binary_map()
+            x_edges = self.layout_map.x_edges
+            y_edges = self.layout_map.y_edges
 
-            # 2. Update map dimensions and metadata
-            min_coords = np.min(all_points[:, :2], axis=0)
-            max_coords = np.max(all_points[:, :2], axis=0)
+            min_coords = np.array([x_edges[0], y_edges[0]])
+            max_coords = np.array([x_edges[-1], y_edges[-1]])
             map_size = max_coords - min_coords
 
+            # 2. Update map dimensions and metadata
             padding = 100
             width = int((map_size[0]) / resolution * self.scale_factor) + padding
             height = int((map_size[1]) / resolution * self.scale_factor) + padding
@@ -828,20 +829,15 @@ class GlobalMapManager(BaseMapManager):
             placed_label_boxes = []
 
             # Draw walls from occ_map
-            if self.layout_map.occ_map is not None:
-                self.binary_occ = self.layout_map.process_binary_map()
-                x_edges = self.layout_map.x_edges
-                y_edges = self.layout_map.y_edges
-                wall_color = (160, 160, 160)
-
-                for i in range(self.binary_occ.shape[0]):
-                    for j in range(self.binary_occ.shape[1]):
-                        if self.binary_occ[i, j] == 1:
-                            p0 = world_to_img(np.array([x_edges[i], y_edges[j], 0.0]))
-                            p1 = world_to_img(np.array([x_edges[i + 1], y_edges[j + 1], 0.0]))
-                            left, right = min(p0[0], p1[0]), max(p0[0], p1[0])
-                            top, bottom = min(p0[1], p1[1]), max(p0[1], p1[1])
-                            draw.rectangle([left, top, right, bottom], fill=wall_color)
+            wall_color = (160, 160, 160)
+            for i in range(self.binary_occ.shape[0]):
+                for j in range(self.binary_occ.shape[1]):
+                    if self.binary_occ[i, j] == 1:
+                        p0 = world_to_img(np.array([x_edges[i], y_edges[j], 0.0]))
+                        p1 = world_to_img(np.array([x_edges[i + 1], y_edges[j + 1], 0.0]))
+                        left, right = min(p0[0], p1[0]), max(p0[0], p1[0])
+                        top, bottom = min(p0[1], p1[1]), max(p0[1], p1[1])
+                        draw.rectangle([left, top, right, bottom], fill=wall_color)
 
             # Draw objects and their labels
             for obj in self.global_map:

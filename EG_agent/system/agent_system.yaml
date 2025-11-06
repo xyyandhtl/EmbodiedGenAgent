@@ -1,3 +1,5 @@
+range_sensor: "depth"
+
 ros:
   use_compressed_topic: false
   ros_rate: 10
@@ -5,6 +7,7 @@ ros:
   topics:
     rgb: /camera/rgb/image_raw
     depth: /camera/depth/image_raw
+    lidar: /lidar/pointcloud
     odom: /camera/pose
     camera_info: /camera_info
   pubs:
