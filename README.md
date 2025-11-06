@@ -50,6 +50,8 @@ Some demo videos can be watched in [link](https://drive.google.com/drive/folders
 
 Some scene assets in the simulation: [link](https://drive.google.com/drive/folders/1SiGH3LGDxikIS0cmn6WFqujwO8liKcSE?usp=drive_link).
 
+Range sensor currently can be `lidar` or `depth`, settings are in [simulator_settings](simulation/settings.yaml) and [agent_settings](EG_agent/system/agent_system.yaml), and you can use rviz2 to visualize the map / nav status: ![rviz2](docs/assets/rviz.jpg)
+
 
 ## Plans
 Base Version:
@@ -67,9 +69,9 @@ Future Work:
 - [ ] Continue optimize system logic to run long-time stable
 - [ ] Maybe use fine-tuned vlm model with memory / map for better intent understanding or trajectory generation
 - [ ] Support user-defined object classes in the GUI window, and some preset scene classes templates
-- [ ] Replace the point cloud layout representation with TSDF for better memory efficiency and accuracy
+- [ ] Replace the point cloud layout representation with ESDF VoxelGrid or OctoTree for better memory efficiency and accuracy
 - [x] The frontier self-exploration navigator for `Find` action when target not found
-- [ ] Conitune dev and opt the vlmap backend, adding support for additional range sensors beyond the depth camera
+- [x] Conitune dev and opt the vlmap backend, adding support for additional range sensors beyond the depth camera
 - [ ] Real world deployment with a legged robot
 
 
