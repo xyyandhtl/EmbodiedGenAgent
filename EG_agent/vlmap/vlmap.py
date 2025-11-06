@@ -15,11 +15,17 @@ class VLMapNav:
     VLMap navigation backend without ROS2 dependencies.
     EGAgentSystem feeds observations; this class maintains Dualmap and exposes navigation APIs.
     """
-    def __init__(self):
+    def __init__(self, range_sensor: str = "depth"):
         cfg_files = [f"{AGENT_VLMAP_PATH}/config/base_config.yaml",
                      f"{AGENT_VLMAP_PATH}/config/system_config.yaml",
                      f"{AGENT_VLMAP_PATH}/config/mobility_config.yaml",
                      f"{AGENT_VLMAP_PATH}/config/rerun_config.yaml"]
+        if range_sensor == "lidar":
+            cfg_files.append(f"{AGENT_VLMAP_PATH}/config/lidar_config.yaml")
+        elif range_sensor == "depth":
+            cfg_files.append(f"{AGENT_VLMAP_PATH}/config/depth_config.yaml")
+        else:
+            raise ValueError(f"range_sensor must be 'lidar' or 'depth', but got {range_sensor}")
         self.cfg = Dynaconf(settings_files=cfg_files, lowercase_read=True, merge_enabled=False)
         self.cfg.output_path = f'{AGENT_VLMAP_PATH}/{self.cfg.output_path}'
         self.cfg.logging_config = f'{AGENT_VLMAP_PATH}/{self.cfg.logging_config}'
@@ -30,8 +36,9 @@ class VLMapNav:
 
         # Let the received intrinsics topic decide
         # self.intrinsics = None
-        self.intrinsics = self.load_intrinsics(self.cfg)
-        self.extrinsics = self.load_extrinsics(self.cfg)
+        self.intrinsics: np.ndarray = self.load_intrinsics(self.cfg)
+        self.extrinsics = self.load_extrinsics(self.cfg, name='extrinsics')
+        self.lidar_extrinsics = self.load_extrinsics(self.cfg, name='lidar_extrinsics')
 
         self.kf_idx = 0
         self.last_message_time = None
@@ -47,23 +54,21 @@ class VLMapNav:
     # ===============================================
     def load_intrinsics(self, dataset_cfg):
         """Load camera intrinsics from config file."""
-        intrinsic_cfg = dataset_cfg.get('intrinsic', None)
-        if intrinsic_cfg:
-            fx, fy, cx, cy = intrinsic_cfg['fx'], intrinsic_cfg['fy'], intrinsic_cfg['cx'], intrinsic_cfg['cy']
-            self.logger.info("[Main] Loaded intrinsics from config.")
-            return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
-        self.logger.warning("[Main] No intrinsics provided.")
-        return None
-
-    def load_extrinsics(self, dataset_cfg):
+        intrinsic_cfg = dataset_cfg.intrinsic
+        fx, fy, cx, cy = intrinsic_cfg['fx'], intrinsic_cfg['fy'], intrinsic_cfg['cx'], intrinsic_cfg['cy']
+        self.logger.info("[Main] Loaded intrinsics from config.")
+        return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+        
+    def load_extrinsics(self, dataset_cfg, name='lidar_extrinsics'):
         """Load camera extrinsics from config file."""
-        extrinsic_cfg = dataset_cfg.get('extrinsics', None)
+        # extrinsic_cfg = dataset_cfg.get('extrinsics', None)
+        extrinsic_cfg = dataset_cfg.get(name, None)
         if extrinsic_cfg:
             matrix = np.array(extrinsic_cfg)
             if matrix.shape == (4, 4):
-                self.logger.info("[Main] Loaded extrinsics from config.")
+                self.logger.info(f"[Main] Loaded [{name}] from config.")
                 return matrix
-        self.logger.warning("[Main] No valid extrinsics provided. Using identity matrix.")
+        self.logger.warning(f"[Main] No valid [{name}] provided. Using identity matrix.")
         return np.eye(4)
 
     def create_world_transform(self):
@@ -101,17 +106,24 @@ class VLMapNav:
         transformation_matrix[:3, 3] = translation
         return transformation_matrix
 
-    def push_data(self, rgb_img, depth_img, pose, timestamp):
+    def push_data(self, rgb_img, depth_img, lidar_points, pose, timestamp):
         """Push synchronized input data into queue for processing."""
         # 用于灵活调整世界坐标系的方向
         # 目前：world_transform 和 extrinsics 是 单位阵，pose 是相机的世界坐标系(ROS系统，前进轴为Z，上轴为-Y)）
         transformed_pose = self.create_world_transform() @ (pose @ self.extrinsics)
+        # print("transformed_pose:", transformed_pose)
+        # print("lidar_points:", lidar_points.shape)
+
+        if lidar_points is not None:
+            lidar_points = (self.lidar_extrinsics @ np.hstack(
+                (lidar_points, np.ones((len(lidar_points), 1)))).T).T[:, :3]
 
         data_input = DataInput(
             idx=self.kf_idx,
             time_stamp=timestamp,
             color=rgb_img,
             depth=depth_img,
+            lidar=lidar_points,
             color_name=str(timestamp),
             intrinsics=self.intrinsics,
             pose=transformed_pose

@@ -125,7 +125,7 @@ ASSET_DICT = {
         prim_path=f"/World/Terrain",
         spawn=UsdFileCfg(
             visible=True,
-            usd_path=f"{SIMULATION_DATA_DIR}/terrains/sketchfab/city.usdz",
+            usd_path=f"{SIMULATION_DATA_DIR}/terrains/City/city.usdz",
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0)),
     ),

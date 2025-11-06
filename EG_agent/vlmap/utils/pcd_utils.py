@@ -1,8 +1,69 @@
 import numpy as np
 import open3d as o3d
 import torch
+from scipy.spatial import cKDTree
 
 from collections import Counter
+
+def map_rgb_mask_to_lidar_points(lidar_points, rgb_image, intrinsics, masks):
+    """
+    Map RGB masks to lidar points using nearest-neighbor ray mapping.
+
+    Args:
+        lidar_points (np.ndarray): Lidar points in shape (N, 3).
+        rgb_image (np.ndarray): RGB image in shape (H, W, 3).
+        intrinsics (np.ndarray): Camera intrinsics matrix (3x3).
+        masks (np.ndarray): Binary masks in shape (M, H, W), where M is the number of masks.
+
+    Returns:
+        mask_indices (list): A list of arrays, where each array contains the indices of lidar points
+                             corresponding to each mask.
+        mask_colors (list): A list of arrays, where each array contains the RGB colors of lidar points
+                            corresponding to each mask.
+    """
+    # 提取相机内参
+    fx = intrinsics[0, 0]
+    fy = intrinsics[1, 1]
+    cx = intrinsics[0, 2]
+    cy = intrinsics[1, 2]
+
+    # Lidar 点投影到图像平面
+    X = lidar_points[:, 0]
+    Y = lidar_points[:, 1]
+    Z = lidar_points[:, 2]
+    
+    # 过滤掉Z<=0的点（在相机后方）
+    valid_mask = Z > 0
+    X = X[valid_mask]
+    Y = Y[valid_mask]
+    Z = Z[valid_mask]
+    valid_indices = np.where(valid_mask)[0]
+
+    # 投影到像素坐标
+    u = (fx * X / Z + cx).astype(np.int32)
+    v = (fy * Y / Z + cy).astype(np.int32)
+
+    H, W, _ = rgb_image.shape
+    # 过滤掉投影在图像外的点
+    in_image_mask = (u >= 0) & (u < W) & (v >= 0) & (v < H)
+    u = u[in_image_mask]
+    v = v[in_image_mask]
+    valid_indices = valid_indices[in_image_mask]
+
+    mask_indices = []
+    mask_colors = []
+
+    # 对每个mask判断点是否在mask内
+    for m in range(masks.shape[0]):
+        mask = masks[m]  # H x W
+        inside_mask = mask[v, u] > 0
+        indices_in_mask = valid_indices[inside_mask]
+        colors_in_mask = rgb_image[v[inside_mask], u[inside_mask], :]
+        
+        mask_indices.append(indices_in_mask)
+        mask_colors.append(colors_in_mask)
+
+    return mask_indices, mask_colors
 
 def mask_depth_to_points(
     depth: torch.Tensor,
@@ -87,7 +148,7 @@ def init_pcd_denoise_dbscan(pcd: o3d.geometry.PointCloud, eps=0.02, min_points=1
         
     return pcd
 
-def refine_points_with_clustering(points, colors, eps=0.05, min_points=10):
+def refine_points_with_clustering(points_np, colors_np, eps=0.05, min_points=10):
     """
     Cluster the point cloud using Open3D's DBSCAN and extract the largest cluster.
 
@@ -102,8 +163,8 @@ def refine_points_with_clustering(points, colors, eps=0.05, min_points=10):
     - refined_colors: Filtered point cloud colors (numpy.ndarray).
     """
     # Convert to numpy format
-    points_np = points.cpu().numpy()
-    colors_np = colors.cpu().numpy()
+    # points_np = points.cpu().numpy()
+    # colors_np = colors.cpu().numpy()
 
     # If there are no points, return empty arrays to avoid further processing
     if points_np.shape[0] == 0:

@@ -146,6 +146,7 @@ class Dualmap:
             ("Use Rerun for Visualization?", self.cfg.use_rerun),
             ("Camera Intrinsics", str(self.cfg.intrinsic)),
             # ("Cmaera Extrinsics": str(self.cfg.extrinsics)},
+            ("Range Sensor", str(self.cfg.range_sensor)),
         ]
 
         # Define separator line length
@@ -154,6 +155,7 @@ class Dualmap:
         for key, value in cfg_items:
             print(f"{key:<30} : {value}")
         print("=" * line_length)
+        logger.info(f"Config {cfg_items}")
 
     def save_map(self, map_path=None):
         """

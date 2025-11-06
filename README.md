@@ -65,9 +65,9 @@ Base Version:
 
 Future Work:
 - [ ] Continue optimize system logic to run long-time stable
-- [ ] Enhance the prompts engineering with memory / map for better reasoning and interactive task
+- [ ] Maybe use fine-tuned vlm model with memory / map for better intent understanding or trajectory generation
 - [ ] Support user-defined object classes in the GUI window, and some preset scene classes templates
-- [ ] More scenes in the Isaacsim simulator
+- [ ] Replace the point cloud layout representation with TSDF for better memory efficiency and accuracy
 - [x] The frontier self-exploration navigator for `Find` action when target not found
 - [ ] Conitune dev and opt the vlmap backend, adding support for additional range sensors beyond the depth camera
 - [ ] Real world deployment with a legged robot

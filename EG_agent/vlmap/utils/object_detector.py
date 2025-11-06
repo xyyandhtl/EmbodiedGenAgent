@@ -21,6 +21,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from EG_agent.vlmap.utils.types import DataInput, ObjectClasses, LocalObservation
 from EG_agent.vlmap.utils.pcd_utils import (
     mask_depth_to_points,
+    map_rgb_mask_to_lidar_points,
     refine_points_with_clustering,
     safe_create_bbox,
 )
@@ -97,7 +98,6 @@ class Detector:
             bg_classes=cfg.yolo.bg_classes,
             skip_bg=cfg.yolo.skip_bg,
         )
-        # --- END ---
 
         # get detection paths
         self.detection_path = Path(cfg.detection_path)
@@ -105,6 +105,7 @@ class Detector:
 
         # Configs
         self.cfg = cfg
+        self.device = str(self.cfg.device)
         # Detection results
         # NOTICE: Detection results are stored in Batch, it is not separated by objects
         self.curr_results = {}
@@ -150,29 +151,29 @@ class Detector:
         if cfg.run_detection:
             # CLIP module
             logger.info(
-                f"[Detector][Init] Loading CLIP model: {cfg.clip.model_name} "
-                f"with pretrained weights '{cfg.clip.pretrained}'"
+                f"[Detector][Init] Loading CLIP model: {str(cfg.clip.model_name)} "
+                f"with pretrained weights '{str(cfg.clip.pretrained)}'"
             )
 
             self.clip_model, _, self.clip_preprocess = (
                 open_clip.create_model_and_transforms(
-                    cfg.clip.model_name, 
-                    pretrained=cfg.clip.pretrained,
-                    cache_dir=cfg.clip.model_path,
+                    str(cfg.clip.model_name), 
+                    pretrained=str(cfg.clip.pretrained),
+                    cache_dir=str(cfg.clip.model_path),
                 )
             )
-            self.clip_model = self.clip_model.to(cfg.device)
+            self.clip_model = self.clip_model.to(self.device)
             self.clip_model.eval()
 
             # Only reparameterize if the model is MobileCLIP
-            if "MobileCLIP" in cfg.clip.model_name:
+            if "MobileCLIP" in str(cfg.clip.model_name):
                 from mobileclip.modules.common.mobileone import reparameterize_model
 
                 self.clip_model = reparameterize_model(self.clip_model)
 
             self.clip_tokenizer = open_clip.get_tokenizer(
-                cfg.clip.model_name, 
-                cache_dir=cfg.clip.model_path
+                str(cfg.clip.model_name), 
+                cache_dir=str(cfg.clip.model_path)
             )
 
             # Detection module
@@ -241,10 +242,10 @@ class Detector:
             with timing_context("Detection Filter", self):
                 self.filter = Filter(
                     classes=self.obj_classes,
-                    small_mask_size=self.cfg.small_mask_th,
-                    skip_refinement=self.cfg.skip_refinement,
+                    small_mask_size=int(cfg.small_mask_th),
+                    skip_refinement=bool(cfg.skip_refinement),
                 )
-                self.filter.set_device(self.cfg.device)
+                self.filter.set_device(self.device)
 
         logger.info(f"[Detector][Init] Finish Init.")
 
@@ -279,7 +280,12 @@ class Detector:
         # Initialize prev_kf_data and layout_pointcloud
         if self.prev_kf_data is None:
             self.prev_kf_data = self.curr_data.copy()
-            layout_pcd = self.depth_to_point_cloud(sample_rate=16)
+            if self.cfg.range_sensor == "lidar":
+                layout_pcd = self.lidar_to_point_cloud(sample_rate=2)
+            elif self.cfg.range_sensor == "depth":
+                layout_pcd = self.depth_to_point_cloud(sample_rate=16)
+            else:
+                raise NotImplementedError(f"Unsupported range_sensor type: {self.cfg.range_sensor}")
             with self.layout_lock:  # Ensure thread safety for layout_pointcloud
                 self.layout_pointcloud += layout_pcd.voxel_down_sample(
                     voxel_size=self.cfg.layout_voxel_size
@@ -290,39 +296,43 @@ class Detector:
             return
 
         # Print current frame index
-        logger.debug(f"[Detector][Layout] Processing frame idx: {self.curr_data.idx}")
+        # logger.debug(f"[Detector][Layout] Processing frame idx: {self.curr_data.idx}")
 
         # Check if layout_pointcloud needs to be updated
         if self.check_keyframe_for_layout_pcd():
             start_time = time.time()
 
             # Generate current frame point cloud
-            current_pcd = self.depth_to_point_cloud(sample_rate=16)
+            if self.cfg.range_sensor == "lidar":
+                current_pcd = self.lidar_to_point_cloud(sample_rate=2)
+            elif self.cfg.range_sensor == "depth":
+                current_pcd = self.depth_to_point_cloud(sample_rate=16)
+            else:
+                raise NotImplementedError(f"Unsupported range_sensor type: {self.cfg.range_sensor}")
 
             # Merge point clouds
             with self.layout_lock:
                 self.layout_pointcloud += current_pcd
-                logger.debug(
-                    f"[Detector][Layout] Points before downsample: {len(self.layout_pointcloud.points)}"
-                )
+                before_downsample = len(self.layout_pointcloud.points)
                 self.layout_pointcloud = self.layout_pointcloud.voxel_down_sample(
                     voxel_size=self.cfg.layout_voxel_size
                 )
-                logger.info(
-                    f"[Detector][Layout] Points after downsample: {len(self.layout_pointcloud.points)}"
+                after_downsample = len(self.layout_pointcloud.points)
+                logger.debug(
+                    f"[Detector][Layout] Points before/after downsample: "
+                    f"{before_downsample}/{after_downsample}"
                 )
 
             # Update prev_kf_data
             self.prev_kf_data = self.curr_data.copy()
-            logger.debug("[Detector][Layout] Updated layout pointcloud.")
 
             # Update time and count
-            end_time = time.time()
-            layout_time = end_time - start_time
+            layout_time = time.time() - start_time
             self.layout_time += layout_time
             self.layout_num += 1
-            logger.debug(
-                f"[Detector][Layout] Layout update took {layout_time:.4f} seconds, total {self.layout_num} layouts."
+            logger.info(
+                f"[Detector][Layout] Layout update took {layout_time:.4f} seconds, "
+                f"total {self.layout_num} layouts with {after_downsample} points"
             )
 
     def get_layout_pointcloud(self):
@@ -351,8 +361,8 @@ class Detector:
     def save_layout(self):
         if self.layout_pointcloud is not None:
             layout_pcd = self.get_layout_pointcloud()
-            save_dir = self.cfg.map_save_path
-            layout_pcd_path = save_dir + "/layout.pcd"
+            save_dir = str(self.cfg.map_save_path)
+            layout_pcd_path = os.path.join(save_dir, "layout.pcd")
             o3d.io.write_point_cloud(layout_pcd_path, layout_pcd)
             logger.info(f"[Detector][Layout] Saving layout to: {layout_pcd_path}")
 
@@ -362,11 +372,11 @@ class Detector:
         if not exist, use map_save_path. Skip loading if path or file is missing.
         """
         # Prefer preload_layout_path, if not exist then use map_save_path
-        if os.path.exists(self.cfg.preload_path):
-            load_dir = self.cfg.preload_path
+        if os.path.exists(str(self.cfg.preload_path)):
+            load_dir = str(self.cfg.preload_path)
             logger.info(f"[Detector][Layout] Using preload layout path: {load_dir}")
         else:
-            load_dir = self.cfg.map_save_path
+            load_dir = str(self.cfg.map_save_path)
             logger.info(
                 f"[Detector][Layout] Preload layout path not found. Using default map save path: {load_dir}"
             )
@@ -736,7 +746,7 @@ class Detector:
                         self.clip_model,
                         self.clip_tokenizer,
                         self.clip_preprocess,
-                        self.cfg.device,
+                        self.device,
                         self.obj_classes.get_classes_arr(),
                     )
                 )
@@ -767,7 +777,6 @@ class Detector:
         Processes the given masks to extract and refine 3D points and colors.
 
         Args:
-            self: The object containing configuration and data attributes.
             masks: A NumPy array of shape (N, H, W), where N is the number of masks.
 
         Returns:
@@ -778,107 +787,113 @@ class Detector:
         with timing_context("Create Object Pointcloud", self):
             N, _, _ = masks.shape
 
-            # Convert input data to tensors
-            depth_tensor = (
-                torch.from_numpy(self.curr_data.depth)
-                .to(self.cfg.device)
-                .float()
-                .squeeze()
-            )
-            masks_tensor = torch.from_numpy(masks).to(self.cfg.device).float()
-            intrinsic_tensor = (
-                torch.from_numpy(self.curr_data.intrinsics).to(self.cfg.device).float()
-            )
-            image_rgb_tensor = (
-                torch.from_numpy(self.curr_data.color).to(self.cfg.device).float()
-                / 255.0
-            )
+            # Process based on range sensor type
+            if self.cfg.range_sensor == "lidar":
+                lidar_points = self.curr_data.lidar
+                mask_indices, mask_colors = map_rgb_mask_to_lidar_points(
+                    lidar_points,
+                    self.curr_data.color,
+                    self.curr_data.intrinsics,
+                    masks,
+                )
+                # print(f"masks: {masks.shape}/{masks}")
+                # print(f"lidar_points: {lidar_points.shape}")
+                # print(f"mask_indices: {len(mask_indices)}/{mask_indices}")
+                # print(f"mask_colors: {len(mask_colors)}/{mask_colors}")
+                refined_points_list = []
+                refined_colors_list = []
 
-            # Generate 3D points and colors for the masks
-            points_tensor, colors_tensor = mask_depth_to_points(
-                depth_tensor,
-                image_rgb_tensor,
-                intrinsic_tensor,
-                masks_tensor,
-                self.cfg.device,
-            )
+                for indices, colors in zip(mask_indices, mask_colors):
+                    if len(indices) < self.cfg.min_points_threshold:
+                        refined_points_list.append(None)
+                        refined_colors_list.append(None)
+                        continue
 
-            refined_points_list = []
-            refined_colors_list = []
+                    points = lidar_points[indices]
 
-            # Process each mask
-            for i in range(N):
-                mask_points = points_tensor[i]
-                mask_colors = colors_tensor[i]
+                    if self.cfg.dbscan_remove_noise:
+                        refined_points, refined_colors = refine_points_with_clustering(
+                            points,
+                            colors,
+                            eps=self.cfg.dbscan_eps,
+                            min_points=self.cfg.dbscan_min_points,
+                        )
+                        refined_points_list.append(refined_points)
+                        refined_colors_list.append(refined_colors)
+                    else:
+                        refined_points_list.append(points)
+                        refined_colors_list.append(colors)
 
-                # Filter valid points based on Z-axis > 0
-                valid_points_mask = mask_points[:, :, 2] > 0
+            elif self.cfg.range_sensor == "depth":
+                depth_tensor = torch.from_numpy(self.curr_data.depth).to(self.device).float().squeeze()
+                intrinsic_tensor = torch.from_numpy(self.curr_data.intrinsics).to(self.device).float()
+                image_rgb_tensor = torch.from_numpy(self.curr_data.color).to(self.device).float() / 255.0
+                masks_tensor = torch.from_numpy(masks).to(self.device).float()
 
-                if torch.sum(valid_points_mask) < self.cfg.min_points_threshold:
-                    refined_points_list.append(None)
-                    refined_colors_list.append(None)
-                    continue
-
-                valid_points = mask_points[valid_points_mask]
-                valid_colors = mask_colors[valid_points_mask]
-
-                # Random sampling based on sample ratio
-                sample_ratio = self.cfg.pcd_sample_ratio
-                num_points = valid_points.shape[0]
-
-                if sample_ratio < 1.0:
-                    sample_count = int(num_points * sample_ratio)
-                    sample_indices = torch.randperm(num_points)[:sample_count]
-                    downsampled_points = valid_points[sample_indices]
-                    downsampled_colors = valid_colors[sample_indices]
-                else:
-                    downsampled_points = valid_points
-                    downsampled_colors = valid_colors
-
-                # Refine points using clustering
-                refined_points, refined_colors = refine_points_with_clustering(
-                    downsampled_points,
-                    downsampled_colors,
-                    eps=self.cfg.dbscan_eps,
-                    min_points=self.cfg.dbscan_min_points,
+                points_tensor, colors_tensor = mask_depth_to_points(
+                    depth_tensor,
+                    image_rgb_tensor,
+                    intrinsic_tensor,
+                    masks_tensor,
+                    self.device,
                 )
 
-                refined_points_list.append(refined_points)
-                refined_colors_list.append(refined_colors)
+                refined_points_list = []
+                refined_colors_list = []
+
+                # Process each mask
+                for i in range(N):
+                    mask_points = points_tensor[i]
+                    mask_colors = colors_tensor[i]
+
+                    # Filter valid points based on Z-axis > 0
+                    valid_points_mask = mask_points[:, :, 2] > 0
+
+                    if torch.sum(valid_points_mask) < self.cfg.min_points_threshold:
+                        refined_points_list.append(None)
+                        refined_colors_list.append(None)
+                        continue
+
+                    valid_points = mask_points[valid_points_mask]
+                    valid_colors = mask_colors[valid_points_mask]
+
+                    # Random sampling based on sample ratio
+                    sample_ratio = float(self.cfg.pcd_sample_ratio)
+                    num_points = valid_points.shape[0]
+
+                    if sample_ratio < 1.0:
+                        sample_count = int(num_points * sample_ratio)
+                        sample_indices = torch.randperm(num_points)[:sample_count]
+                        downsampled_points = valid_points[sample_indices]
+                        downsampled_colors = valid_colors[sample_indices]
+                    else:
+                        downsampled_points = valid_points
+                        downsampled_colors = valid_colors
+
+                    # Refine points using clustering
+                    if self.cfg.dbscan_remove_noise:
+                        refined_points, refined_colors = refine_points_with_clustering(
+                            downsampled_points.cpu().numpy(),
+                            downsampled_colors.cpu().numpy(),
+                            eps=self.cfg.dbscan_eps,
+                            min_points=self.cfg.dbscan_min_points,
+                        )
+
+                        refined_points_list.append(refined_points)
+                        refined_colors_list.append(refined_colors)
+                    else:
+                        refined_points_list.append(downsampled_points)
+                        refined_colors_list.append(downsampled_colors)
+
+            else:
+                raise NotImplementedError(f"Unknown range sensor type: {self.cfg.range_sensor}")
 
         self.masked_points = refined_points_list
         self.masked_colors = refined_colors_list
 
-    def compute_max_cos_sim(self, image_feats, class_feats):
-        """
-        Compute the cosine similarity between image_feats and class_feats, and return the class index with the maximum similarity for each image_feat.
-
-        Args:
-            image_feats (np.ndarray): CLIP features of all current images, shape (N, 512).
-            class_feats (np.ndarray): CLIP features of classes, shape (C, 512).
-
-        Returns:
-            max_indices (np.ndarray): The class index with the maximum cosine similarity for each image_feat, shape (N,).
-        """
-        # Normalize the features to compute cosine similarity
-        image_feats_norm = image_feats / np.linalg.norm(
-            image_feats, axis=1, keepdims=True
-        )  # Normalize image_feats
-        class_feats_norm = class_feats / np.linalg.norm(
-            class_feats, axis=1, keepdims=True
-        )  # Normalize class_feats
-
-        # Compute cosine similarity: (N, 512) @ (512, C) -> (N, C)
-        cos_sim = np.dot(image_feats_norm, class_feats_norm.T)
-
-        # Find the index of the maximum similarity for each image
-        max_indices = np.argmax(cos_sim, axis=1)  # shape (N,)
-
-        return max_indices
-
     def depth_to_point_cloud(self, sample_rate=1) -> o3d.geometry.PointCloud:
         """
-        Convert depth image to a point cloud and transform it to world coordinates.
+        Convert depth image to a point cloud with RGB colors and transform it to world coordinates.
 
         Parameters:
         - sample_rate: The downsampling rate for pixel selection. (1 means all pixels, 2 means every other pixel)
@@ -933,9 +948,43 @@ class Detector:
         # Discard the homogeneous coordinate (last column) to get the final 3D points in world coordinates
         points_world = points_world_homogeneous[:, :3]
 
-        # Create a PointCloud object and set its points
+        # Get the corresponding RGB colors for valid pixels
+        colors = self.curr_data.color[v, u] / 255.0
+
+        # Create a PointCloud object and set its points and colors
         point_cloud = o3d.geometry.PointCloud()
         point_cloud.points = o3d.utility.Vector3dVector(points_world)
+        point_cloud.colors = o3d.utility.Vector3dVector(colors)
+
+        return point_cloud
+
+    def lidar_to_point_cloud(self, sample_rate=1) -> o3d.geometry.PointCloud:
+        """
+        Convert lidar points to a point cloud with RGB colors in world coordinates.
+
+        Returns:
+            point_cloud: The point cloud in world coordinates as an Open3D PointCloud object.
+        """
+        lidar_points = self.curr_data.lidar
+        pose = self.curr_data.pose
+
+        lidar_points = lidar_points[::sample_rate]
+        points_homogeneous = np.hstack((lidar_points, np.ones((lidar_points.shape[0], 1))))
+        points_world_homogeneous = (pose @ points_homogeneous.T).T
+        points_world = points_world_homogeneous[:, :3]
+
+        # mask_indices, mask_colors = map_rgb_mask_to_lidar_points(
+        #     lidar_points,
+        #     self.curr_data.color,
+        #     self.curr_data.intrinsics,
+        #     np.ones((1, *self.curr_data.color.shape[:2]), dtype=bool),
+        # )
+
+        # colors = mask_colors[0] / 255.0 if mask_colors else np.zeros_like(points_world)
+
+        point_cloud = o3d.geometry.PointCloud()
+        point_cloud.points = o3d.utility.Vector3dVector(points_world)
+        # point_cloud.colors = o3d.utility.Vector3dVector(colors)
 
         return point_cloud
 
@@ -1041,6 +1090,8 @@ class Detector:
             pcd.points = o3d.utility.Vector3dVector(self.masked_points[i])
             pcd.colors = o3d.utility.Vector3dVector(self.masked_colors[i])
             pcd.transform(self.curr_data.pose)
+  
+            # o3d.io.write_point_cloud(f"{self.cfg.map_save_path}/{i}.pcd", pcd)
 
             # 2. Get bbox of pcd
             bbox = safe_create_bbox(pcd)

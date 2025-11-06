@@ -28,7 +28,10 @@ class EGAgentSystem:
     bt_name: str = "behavior_tree"
 
     def __init__(self):
-        """Initialize generators, environment runtime, and UI caches."""
+        # 加载配置
+        cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
+        self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
+
         # QT 监听器与缓存
         self._listeners: Dict[str, List[Callable[[Any], None]]] = {}
         self._conversation: List[str] = ["智能体: 请先创建后台"]
@@ -47,13 +50,11 @@ class EGAgentSystem:
                                         key_objects=[])
 
         # VLM-Backend 后台
-        self.vlmap_backend = VLMapNav()
+        self.vlmap_backend = VLMapNav(range_sensor=str(self.cfg.range_sensor))
         self.dm: Dualmap = None
 
         # Agent-Env 部署环境
         self.agent_env = IsaacsimEnv()
-        cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
-        self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
         self.agent_env.set_vlmap_backend(self.vlmap_backend)
 
         # 运行控制

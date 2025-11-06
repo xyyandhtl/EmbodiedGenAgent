@@ -80,7 +80,7 @@ class VelocitySceneCfg(InteractiveSceneCfg):
         update_period=0.06, # ~15Hz, close to realsense, > self.sim.render_interval
         height=480,
         width=640,
-        data_types=["rgb"],  # 
+        data_types=["rgb", "distance_to_image_plane"],  # "distance_to_image_plane"
         spawn=compute_cam_cfg(W=640, H=480, fov_deg_x=90.0),
         # spawn=sim_utils.PinholeCameraCfg(
         #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=54.0, clipping_range=(0.1, 1.0e5)
@@ -114,7 +114,7 @@ class VelocitySceneCfg(InteractiveSceneCfg):
     # Livox lidar
     lidar_sensor = LidarSensorCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
-        offset=LidarSensorCfg.OffsetCfg(pos=(0.0, 0.0, 0.2), rot=(0, 1, 0., 0.)),
+        offset=LidarSensorCfg.OffsetCfg(pos=(0.0, 0.0, 0.2), rot=(1, 0, 0., 0.)),
         # attach_yaw_only=False,
         ray_alignment = "base",
         pattern_cfg=LivoxPatternCfg(
@@ -125,14 +125,14 @@ class VelocitySceneCfg(InteractiveSceneCfg):
         mesh_prim_paths=["/World/Terrain"], #this is for global dynamic and static mesh
         # You can also specify specific prim paths for dynamic objects if needed
 
-        max_distance=40.0,
+        max_distance=20.0,
         min_range=0.2,
         return_pointcloud=True,  # Disable pointcloud for performance
         pointcloud_in_world_frame=False, # simulation directly in world frame to reduce computation
         enable_sensor_noise=False,  # Disable noise for pure performance test
         random_distance_noise=0.0,
         update_frequency=25.0,  # 25 Hz for better performance
-        debug_vis=True,  # Disable visualization for performance
+        debug_vis=False,  # Disable visualization for performance
     )
 
 @configclass

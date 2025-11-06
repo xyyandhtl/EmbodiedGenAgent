@@ -1,0 +1,24 @@
+# ============================================================
+# RANGE SENSOR CONFIG
+# ============================================================
+range_sensor: "depth"
+
+# ============================================================
+# PCD CONFIG
+# ============================================================
+layout_voxel_size: 0.05
+layout_update_radius: 10.0
+
+# small mask filtering threshold
+small_mask_th: 50
+
+# minimum points threshold for object's PCD
+min_points_threshold: 5
+
+# pcd params
+downsample_voxel_size: 0.05
+dbscan_remove_noise: True
+dbscan_eps: 0.1
+dbscan_min_points: 10
+pcd_sample_ratio: 0.1
+
