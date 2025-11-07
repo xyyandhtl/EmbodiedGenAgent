@@ -29,6 +29,7 @@ natsort
 kornia
 tabulate
 pympler
+pathfinding
 rerun-sdk==0.22.1
 git+https://github.com/ultralytics/CLIP.git
 git+https://github.com/apple/ml-mobileclip.git # --no-deps

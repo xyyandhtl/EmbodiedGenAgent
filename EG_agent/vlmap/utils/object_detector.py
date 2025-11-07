@@ -265,17 +265,9 @@ class Detector:
     def set_data_input(self, curr_data: DataInput) -> None:
         self.curr_data = curr_data
 
-        # If a thread is already running, wait for it to finish
-        if self.data_thread and self.data_thread.is_alive():
-            self.data_thread.join()
-
-        # Create a new thread to process data input
-        self.data_thread = threading.Thread(target=self._process_data_input_thread)
-        self.data_thread.start()
-
-    def _process_data_input_thread(self):
+    def run_layout_thread(self):
         """
-        Logic executed in the background thread.
+        Logic executed in the layout thread.
         """
         # Initialize prev_kf_data and layout_pointcloud
         if self.prev_kf_data is None:
@@ -294,9 +286,6 @@ class Detector:
                 f"[Detector][Layout] Initialized layout pointcloud with {len(self.layout_pointcloud.points)} points."
             )
             return
-
-        # Print current frame index
-        # logger.debug(f"[Detector][Layout] Processing frame idx: {self.curr_data.idx}")
 
         # Check if layout_pointcloud needs to be updated
         if self.check_keyframe_for_layout_pcd():

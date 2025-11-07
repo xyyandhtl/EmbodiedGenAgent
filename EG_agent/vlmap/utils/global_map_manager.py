@@ -99,7 +99,7 @@ class GlobalMapManager(BaseMapManager):
             skip_bg=self.cfg.yolo.skip_bg)
 
         # Store dynamic parameters for background updates
-        self._curr_pose: np.ndarray = None
+        self._curr_pose: np.ndarray = None  # Real-time pose
         self._nav_path: list = []
         self._traj_path = deque(maxlen=60)
         self._traj_path_lock = threading.Lock()  # Add a lock for thread-safe access to _traj_path
@@ -121,16 +121,16 @@ class GlobalMapManager(BaseMapManager):
     def has_global_map(self) -> bool:
         return len(self.global_map) > 0
 
-    def set_layout_info(self, layout_pcd, force_full_update=False, current_pose=None, update_radius=None):
+    def set_layout_info(self, layout_pcd, force_full_update=False, update_radius=None):
         if force_full_update or not self.layout_initialized:
             # First time or forced: process the whole layout
-            self.layout_map.set_layout_pcd(layout_pcd)
+            self.layout_map.set_layout_pcd(layout_pcd, self._curr_pose[2, 3])
             self.layout_initialized = True
             logger.info("[GlobalMapManager] Initialized/updated layout map (occ_map only).")
         else:
             # Subsequent live updates: process only a local part
-            if current_pose is not None and update_radius:
-                self.layout_map.update_local_layout_occmap(layout_pcd, current_pose, update_radius)
+            if self._curr_pose is not None and update_radius:
+                self.layout_map.update_local_layout_occmap(layout_pcd, self._curr_pose, update_radius)
                 logger.debug("[GlobalMapManager] Updated layout occ_map with partial point cloud.")
             else:
                 logger.warning("[GlobalMapManager] Skipping live layout update because current_pose is not provided or update_radius is 0.")
@@ -553,121 +553,55 @@ class GlobalMapManager(BaseMapManager):
         self.prev_entities = new_logged_entities
 
         pass
-
-    def calculate_global_path(
-        self, curr_pose, goal_mode=GoalMode.POSE, goal_position=None
-    ) -> List:
-        """
-        Calculates the global path by creating and using a PathPlanner instance.
-        """
+    
+    def update_path_planner(self) -> bool:
         if self.binary_occ is None or self.binary_occ.size == 0:
-            logger.warning("[GlobalMapManager][calculate_global_path] Binary occ_map not available.")
-            return []
+            logger.warning("[GlobalMapManager][update_path_planner] Binary occ_map not available.")
+            return False
 
         # 1. Initialize the planner
         self.path_planner = PathPlanner(
             binary_occ_map=self.binary_occ,
             map_origin=np.array([self.layout_map.x_edges[0], self.layout_map.y_edges[0]]),
             map_resolution=self.layout_map.resolution,
-            robot_radius=self.cfg.get('robot_radius', 0.25),
-            floor_height=self.cfg.get('floor_height', 0.0)
+            robot_radius=self.cfg.robot_radius,
+            floor_height=self.cfg.floor_height
         )
+        return True
+
+    def calculate_global_path(
+        self, goal_mode=GoalMode.POSE, goal_position=None
+    ) -> List:
+        """
+        Calculates the global path by creating and using a PathPlanner instance.
+        """
+        if not self.update_path_planner():
+            return []
 
         # 2. Determine goal in world coordinates
-        goal_world = None
-        if goal_mode == GoalMode.POSE and goal_position is not None:
-            goal_world = goal_position
-        elif goal_mode == GoalMode.RANDOM:
-            logger.info("[GlobalMapManager] Goal mode: RANDOM. Sampling a random goal.")
-            goal_world = self.path_planner.sample_random_world_goal()
+        # goal_world = None
+        # if goal_mode == GoalMode.POSE and goal_position is not None:
+        #     goal_world = goal_position
+        # elif goal_mode == GoalMode.RANDOM:
+        #     logger.info("[GlobalMapManager] Goal mode: RANDOM. Sampling a random goal.")
+        #     goal_world = self.path_planner.sample_random_world_goal()
         # elif goal_mode == GoalMode.CLICK:
-        #     goal_world = None
-        # elif goal_mode == GoalMode.INQUIRY:  # 已在 DualMap.query_object() 中查询
-        #         goal_world = None
+        #     TODO
 
-        if goal_world is None:
+        if goal_position is None:
             logger.warning(f"[GlobalMapManager][calculate_global_path] No valid goal could be determined for mode {goal_mode}!")
             return []
 
         # 3. Plan the path
         path = self.path_planner.plan_path(
-            start_world=curr_pose[:3, 3],
-            goal_world=goal_world
+            start_world=self._curr_pose[:3, 3],
+            goal_world=goal_position
         )
 
         # 4. Update caches and return path
         self.last_inflated_map = self.path_planner.inflated_map
         self.mark_semantic_map_dirty()
         return path
-
-    def get_goal_position(self, nav_graph, start_position_grid, goal_position_world, goal_mode):
-        """
-        TODO: 获取目标点位置 直接在 DualMap.run_path_planning_thread() 中判断，这里实际未使用，待删除
-        Get the goal position based on the specified mode.
-
-        Parameters:
-        - nav_graph: An instance of NavigationGraph.
-        - start_position: The starting position in the graph.
-        - goal_mode: The mode to select the goal.
-
-        Returns:
-        - goal_position: The selected goal position.
-        """
-        if goal_mode == GoalMode.RANDOM:
-            if self.goal_grid is None or not nav_graph.free_space_check(self.goal_grid):
-                return nav_graph.sample_random_point()
-            else:
-                return self.goal_grid
-
-        if goal_mode == GoalMode.CLICK:
-            return nav_graph.visualize_start_and_select_goal(start_position_grid)
-
-        if goal_mode == GoalMode.POSE:
-            if not goal_position_world:
-                return None
-            return nav_graph.calculate_pos_2d(goal_position_world)
-
-        if goal_mode == GoalMode.INQUIRY:
-            # Step 1, from gloabl map find the best candidate
-            global_goal_candidate, score = self.find_best_candidate_with_inquiry()
-
-            # --- FIX: Check if a candidate was actually found ---
-            if global_goal_candidate is None:
-                logger.error("[GlobalMap][Path] Could not find a suitable goal candidate for the inquiry.")
-                return None
-            # --- END FIX ---
-
-            # Get center of the best candidate
-            goal_3d = global_goal_candidate.bbox_2d.get_center()
-
-            # pass to the local map manager
-            self.global_candidate_bbox = global_goal_candidate.bbox_2d
-            if self.global_candidate_score == 0.0:
-                self.global_candidate_score = score
-
-            # save the queried obj into ignore list
-            self.ignore_global_obj_list.append(global_goal_candidate.uid)
-
-            # step 2, using navgraph to switch best candidate into specific goal point
-            goal_2d = nav_graph.calculate_pos_2d(goal_3d)
-            # check if is in free space, actually the goal is not
-            if not nav_graph.free_space_check(goal_2d) is False:
-                snapped_goal = nav_graph.snap_to_free_space_directional(goal_2d, start_position_grid, nav_graph.free_space)
-                # nearest_node = nav_graph.find_nearest_node(goal_2d)
-
-                if self.cfg.use_directional_path:
-                    nearest_node = nav_graph.find_nearest_node(snapped_goal, start_position_grid)
-                else:
-                    nearest_node = nav_graph.find_nearest_node(goal_2d)
-
-                goal_2d = tuple(nearest_node)
-
-            logger.info(f"[GlobalMap][Path] Nearest node: {goal_2d}")
-
-            return goal_2d
-
-        logger.warning(f"[GlobalMap][Path] Invalid goal mode: {goal_mode}")
-        return None
 
     def find_best_candidate_with_inquiry(self):
         """

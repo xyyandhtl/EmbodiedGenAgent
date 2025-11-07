@@ -38,7 +38,7 @@ class LayoutMap:
         self.x_edges: np.ndarray = None
         self.y_edges: np.ndarray = None
 
-    def set_layout_pcd(self, layout_pcd):
+    def set_layout_pcd(self, layout_pcd, current_z):
         """
         Load point cloud and generate Occupancy Map.
 
@@ -46,16 +46,16 @@ class LayoutMap:
             layout_pcd: Point cloud data.
         """
         self.point_cloud = layout_pcd
-        self.occ_map, self.x_edges, self.y_edges = self.create_occupancy_map()
+        self.occ_map, self.x_edges, self.y_edges = self.create_occupancy_map(current_z)
         print("Occupancy Map created.")
 
-    def create_occupancy_map(self):
+    def create_occupancy_map(self, current_z):
         """
         Create Occupancy Map from point cloud data.
         """
         points = np.asarray(self.point_cloud.points)
         # 只保留 z 在 0.15 ~ 0.65 的点
-        points = points[(points[:, 2] > 0.20) & (points[:, 2] < 0.70)]
+        points = points[(points[:, 2] > current_z - 0.4) & (points[:, 2] < current_z + 0.1)]
         xy_points = points[:, :2]
         x_min, y_min = np.min(xy_points, axis=0)
         x_max, y_max = np.max(xy_points, axis=0)
@@ -196,7 +196,8 @@ class LayoutMap:
         self.occ_map[min_x:max_x+1, min_y:max_y+1] = 0
 
         points = np.asarray(partial_pcd.points)
-        points = points[(points[:, 2] > 0.20) & (points[:, 2] < 0.70)]
+        current_z = center_world[2]
+        points = points[(points[:, 2] > current_z - 0.4) & (points[:, 2] < current_z + 0.1)]
         if points.shape[0] > 0:
             xy_points = points[:, :2]
             new_occ, _, _ = np.histogram2d(
@@ -280,7 +281,7 @@ class PathPlanner:
         traversable_points_yx = np.argwhere(self.pathfinding_matrix.T == 1)
         if traversable_points_yx.size == 0:
             logger.warning("[PathPlanner] No traversable points found to sample from.")
-            return None
+            return []
 
         random_index = random.choice(range(len(traversable_points_yx)))
         random_grid_point_yx = traversable_points_yx[random_index]
@@ -288,49 +289,44 @@ class PathPlanner:
 
         return self.grid_to_world(random_grid_point)
 
-    def plan_path(self, start_world, goal_world):
-        """
-        Plans a path from a start to a goal in world coordinates.
-
-        Args:
-            start_world (np.array): The start position in world coordinates (x, y, z).
-            goal_world (np.array): The goal position in world coordinates (x, y, z).
-
-        Returns:
-            list: A list of [x, y, z] points for the path, or [] if no path is found.
-        """
+    def plan_path(self, start_world, goal_world, clear_radius=10):
         start_grid = self.world_to_grid(start_world)
         goal_grid = self.world_to_grid(goal_world)
 
-        # Validate start and goal points
-        if not (0 <= start_grid[0] < self.grid.width and 0 <= start_grid[1] < self.grid.height and self.grid.node(start_grid[0], start_grid[1]).walkable):
-            logger.warning(f"[PathPlanner] Start point {start_grid} is on an obstacle or out of bounds. Cannot plan path.")
-            return []
+        # 如果 start 不可行走，则临时清除周围障碍
+        start_node = self.grid.node(start_grid[0], start_grid[1])
+        if not start_node.walkable:
+            logger.warning(f"[PathPlanner] Start point {start_grid} is on an obstacle or out of bounds. Clearing nearby obstacles.")
+            for dx in range(-clear_radius, clear_radius + 1):
+                for dy in range(-clear_radius, clear_radius + 1):
+                    nx, ny = start_grid[0] + dx, start_grid[1] + dy
+                    if 0 <= nx < self.grid.width and 0 <= ny < self.grid.height:
+                        self.grid.node(nx, ny).walkable = True
 
-        if not (0 <= goal_grid[0] < self.grid.width and 0 <= goal_grid[1] < self.grid.height and self.grid.node(goal_grid[0], goal_grid[1]).walkable):
+        # 如果 goal 不可行走，则寻找最近 walkable 点
+        goal_node = self.grid.node(goal_grid[0], goal_grid[1])
+        if not goal_node.walkable:
             logger.warning(f"[PathPlanner] Original goal {goal_grid} is on an obstacle or out of bounds. Snapping to nearest walkable node.")
-            free_nodes_yx = np.argwhere(self.pathfinding_matrix.T == 1)  # np.argwhere returns coordinates in (row, col) format, which is (y, x)
+            free_nodes_yx = np.argwhere(self.pathfinding_matrix.T == 1)
             if free_nodes_yx.size == 0:
                 logger.error("[PathPlanner] No walkable nodes found on the entire map.")
                 return []
-            goal_grid_yx = np.array([goal_grid[1], goal_grid[0]])  # goal_grid is (x, y)
+            goal_grid_yx = np.array([goal_grid[1], goal_grid[0]])
             distances = np.linalg.norm(free_nodes_yx - goal_grid_yx, axis=1)
-
             snapped_yx = free_nodes_yx[np.argmin(distances)]
-            goal_grid = (snapped_yx[1], snapped_yx[0])  # convert it back to (x, y)
+            goal_grid = (snapped_yx[1], snapped_yx[0])
             logger.info(f"[PathPlanner] Snapped goal to {goal_grid}.")
 
-        # Run A* pathfinding
+        # A* 寻路
         start_node = self.grid.node(start_grid[0], start_grid[1])
         end_node = self.grid.node(goal_grid[0], goal_grid[1])
         finder = AStarFinder(diagonal_movement=True)
         path_grid_coords, _ = finder.find_path(start_node, end_node, self.grid)
 
-        # Simplify and convert path to world coordinates
+        # 简化并转换回世界坐标
         if path_grid_coords:
             simplified_path_grid = self._simplify_path(path_grid_coords)
             logger.info(f"[PathPlanner] Path simplified from {len(path_grid_coords)} to {len(simplified_path_grid)} points.")
-
             path_world_coords = [self.grid_to_world((p.x, p.y)) for p in simplified_path_grid]
             return path_world_coords
         else:

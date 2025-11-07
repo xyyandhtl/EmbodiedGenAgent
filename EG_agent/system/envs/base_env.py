@@ -29,6 +29,7 @@ class BaseAgentEnv:
         self.last_tick_output: str = ""
         self.tick_updated = False
         
+        # the explore button
         self.is_explore = False
 
         self.cur_target: str = ""
@@ -81,7 +82,7 @@ class BaseAgentEnv:
         self._last_tick_time = now  # 更新时间点，保证间隔准确
         self.step_num += 1
         if self.is_explore:
-            self.run_action("cmd_vel", self.get_cur_cmd_vel())
+            self.run_action("walk")
             return False
 
         if self.bt is None:
@@ -126,7 +127,7 @@ class BaseAgentEnv:
     def close(self):
         raise NotImplementedError
     
-    def run_action(self, action_type: str, action: tuple | None, verbose=False):
+    def run_action(self, action_type: str, action: tuple | None = None, verbose=False):
         raise NotImplementedError
     
     def get_cur_cmd_vel(self) -> tuple:

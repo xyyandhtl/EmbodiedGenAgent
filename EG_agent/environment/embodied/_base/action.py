@@ -31,15 +31,13 @@ class EmbodiedAction(Action):
                 cur_action_done = True
             elif self.agent_env._vlmap_backend.is_exploring(self.args[0]):
                 # self.logger.debug(f"Executing action: {cur_action} on target: {target_obj} running")
-                cur_cmd_vel = self.agent_env.get_cur_cmd_vel()
-                self.agent_env.run_action("cmd_vel", cur_cmd_vel)
+                self.agent_env.run_action("walk")
             else:
                 self.logger.info(f"Executing action: {cur_action} on target: {target_obj} begin")
                 self.agent_env._vlmap_backend.dualmap.reset_query_and_navigation()
                 self.agent_env._vlmap_backend.start_find(self.args[0])
         elif cur_action == "walk":
-            cur_cmd_vel = self.agent_env.get_cur_cmd_vel()
-            self.agent_env.run_action("cmd_vel", cur_cmd_vel)
+            self.agent_env.run_action("walk")
             # If current target has entered camera FOV, consider walk complete
             if self.agent_env.goal_inview.get(target_obj, False):
                 # self.agent_env._vlmap_backend.dualmap.reset_query_and_navigation()
