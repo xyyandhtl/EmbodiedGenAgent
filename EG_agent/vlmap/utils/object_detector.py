@@ -265,17 +265,9 @@ class Detector:
     def set_data_input(self, curr_data: DataInput) -> None:
         self.curr_data = curr_data
 
-        # If a thread is already running, wait for it to finish
-        if self.data_thread and self.data_thread.is_alive():
-            self.data_thread.join()
-
-        # Create a new thread to process data input
-        self.data_thread = threading.Thread(target=self._process_data_input_thread)
-        self.data_thread.start()
-
-    def _process_data_input_thread(self):
+    def run_layout_thread(self):
         """
-        Logic executed in the background thread.
+        Logic executed in the layout thread.
         """
         # Initialize prev_kf_data and layout_pointcloud
         if self.prev_kf_data is None:
@@ -294,9 +286,6 @@ class Detector:
                 f"[Detector][Layout] Initialized layout pointcloud with {len(self.layout_pointcloud.points)} points."
             )
             return
-
-        # Print current frame index
-        # logger.debug(f"[Detector][Layout] Processing frame idx: {self.curr_data.idx}")
 
         # Check if layout_pointcloud needs to be updated
         if self.check_keyframe_for_layout_pcd():
@@ -709,6 +698,7 @@ class Detector:
 
         if self.curr_detections.is_empty():
             logger.debug("[Detector] No detections found in curr frame, skip!")
+            self.annotated_image = color
             return
         
         with timing_context("Detection Filter", self):
@@ -720,6 +710,7 @@ class Detector:
                 "[Detector] No valid detections in curr frame after filtering."
             )
             self.curr_results = {}
+            self.annotated_image = color
             return
 
         # 1.3 add extra detections from FastSAM results
@@ -739,7 +730,7 @@ class Detector:
             # 2.2 主线程中：使用 CLIP 对每个实例分割物体提取 图像、文本特征
             with timing_context("CLIP", self):
                 # 裁剪后的 物体图像、对应图像特征、对应类别文本特征
-                image_crops, image_feats, text_feats = (
+                _, image_feats, text_feats = (
                     self.compute_clip_features_batched(
                         color,
                         filtered_detections,

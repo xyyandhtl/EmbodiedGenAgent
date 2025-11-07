@@ -39,6 +39,7 @@ class IsaacsimEnv(BaseAgentEnv):
         # Real-time visibility state: {goal_name_lower: bool}
         self.goal_inview = {}
         self.near_dist = 3.0  # meters
+        self.internal_nav = True
 
         # Defer ROS init to configure_ros
         self.ros_node: Node | None = None
@@ -72,9 +73,11 @@ class IsaacsimEnv(BaseAgentEnv):
         self._action_count: int = 0
         self.cur_goal_places = dict()  # str -> [x,y,z]
         self.cur_cmd_vel: tuple = (0.0, 0.0, 0.0)  # vx, vy, wz
+        self.cur_goal_pose: tuple = ()  # [x,y,z,qw,qx,qy,qz]
 
         # 可扩展动作分发表（运行时绑定）
         self._action_dispatch = {
+            "walk": self._handle_walk,
             "cmd_vel": self._handle_cmd_vel,
             "cmdvel": self._handle_cmd_vel,
             "cmd-vel": self._handle_cmd_vel,
@@ -123,7 +126,7 @@ class IsaacsimEnv(BaseAgentEnv):
         # Recompute visibility when goal set changes
         self._update_goal_inview()
 
-    def get_cur_target(self):
+    def get_cur_target(self) -> list[float]:
         return self._vlmap_backend.dualmap.goal_pose
 
     def reset(self):
@@ -269,7 +272,7 @@ class IsaacsimEnv(BaseAgentEnv):
     # ==========================================
     # Action Implementation
     # ==========================================
-    def run_action(self, action_type: str, action: tuple | None, verbose=False):
+    def run_action(self, action_type: str, action: tuple | None = None, verbose=False):
         """
         严格动作格式：
           - 'cmd_vel': [vx, vy, wz]
@@ -304,7 +307,7 @@ class IsaacsimEnv(BaseAgentEnv):
         if verbose:
             print(f"[IsaacsimEnv] Published cmd_vel: vx={vx}, vy={vy}, wz={wz}")
 
-    def _handle_nav_pose(self, action, verbose: bool):
+    def _handle_nav_pose(self, action, verbose: bool):        
         if not isinstance(action, (list, tuple, _np.ndarray)) or len(action) != 7:
             raise ValueError("nav_pose action must be a list/tuple/ndarray of 7 elements: [x,y,z,qw,qx,qy,qz].")
         x, y, z = float(action[0]), float(action[1]), float(action[2])
@@ -322,6 +325,19 @@ class IsaacsimEnv(BaseAgentEnv):
         self.nav_pose_pub.publish(ps)
         if verbose:
             print(f"[IsaacsimEnv] Published nav_pose: pos=({x},{y},{z}) quat=({qw},{qx},{qy},{qz})")
+
+    def _handle_walk(self, action, verbose: bool):
+        # a wrapper for walk action
+        if self.internal_nav:
+            # if use vlmap internal nav system
+            cur_cmd_vel = self.get_cur_cmd_vel()
+            self.run_action("cmd_vel", cur_cmd_vel)
+        else:
+            # if use a external nav system
+            goal_pose = tuple(self.get_cur_target() + [1, 0, 0, 0])
+            if goal_pose != self.cur_goal_pose:
+                self.run_action("goal_pose", goal_pose)
+                self.cur_goal_pose = goal_pose
 
     def _handle_enum(self, action, verbose: bool):
         to_publish = []

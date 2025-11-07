@@ -181,8 +181,7 @@ class ObjectClasses:
         return {str(i): self.class_to_color[self.classes[i]] for i in range(len(self.classes))}
     
 class GoalMode(Enum):
-    RANDOM = "random"
+    RANDOM = "random"   # deprecated, has moved to inquiry mode with inquiry "explore"
     CLICK = "click"
-    INQUIRY = "inquiry"
     POSE = "pose"
     NONE = "none"

@@ -87,9 +87,9 @@ class Dualmap:
         self.rotation_threshold = cfg.rotation_threshold
 
         # pose memory
-        self.curr_pose: np.ndarray = None
+        self.curr_pose: np.ndarray = None   # Keyframe pose
         self.prev_pose: np.ndarray = None
-        self.goal_pose: list | None = None
+        self.goal_pose: list = []
         self.wait_count = 0
 
         # --- 2. Threads & Queues ---
@@ -114,13 +114,15 @@ class Dualmap:
         self.path_counter = 0
 
         # Queue provided by DualmapInterface for raw frames
-        self.last_keyframe_idx = -1
+        self.last_layout_kf_idx = -1
+        self.last_detector_kf_idx = -1
         self.input_queue = deque(maxlen=1)
         self.detection_results_queue = queue.Queue(maxsize=10)
 
         self.detector_thread = None
         self.mapping_thread = None
         self.path_planning_thread = None
+        self.layout_thread = None  # New thread for layout processing
 
     # ===============================================
     # Basic Utilities
@@ -292,6 +294,12 @@ class Dualmap:
         self.path_planning_thread.start()
         logger.info("[Core] Path planning thread started.")
 
+        self.layout_thread = threading.Thread(
+            target=self.run_layout_thread, daemon=True
+        )
+        self.layout_thread.start()
+        logger.info("[Core] Layout thread started.")
+
     def stop_threading(self):
         self.stop_thread = True
         self.goal_event.set()  # 唤醒线程以退出
@@ -302,7 +310,10 @@ class Dualmap:
             self.mapping_thread.join()
         if self.path_planning_thread and self.path_planning_thread.is_alive():
             self.path_planning_thread.join()
+        if self.layout_thread and self.layout_thread.is_alive():
+            self.layout_thread.join()
         logger.info("[Core] Stopped detector, mapping and path planning thread.")
+        logger.info("[Core] Stopped layout thread.")
 
     def end_process(self):
         """
@@ -362,7 +373,22 @@ class Dualmap:
             detector_time_path = f"{self.cfg.map_save_path}/../detector_time.csv"
             save_timing_results(self.detector.timing_results, detector_time_path)
 
-    # 尝试改为 detector 也放在子线程, 但 dectector 抢占不到计算资源, 以后有空再排查, 先不用
+    def run_layout_thread(self):
+        """
+        Independent thread for layout processing.
+        """
+        while not self.stop_thread:
+            data_input: DataInput = self.input_queue[-1]
+            if data_input.idx == self.last_layout_kf_idx:
+                continue
+            self.last_layout_kf_idx = data_input.idx
+
+            self.detector.run_layout_thread()
+            self.goal_event.wait(timeout=2)  # Wait for 2 seconds before next loop
+            self.goal_event.clear()
+
+        logger.info("[Core] Layout thread exiting.")
+
     def run_detector_thread(self):
         """
         Independent thread:
@@ -375,9 +401,9 @@ class Dualmap:
         # set_thread_priority()
         while not self.stop_thread:
             data_input: DataInput = self.input_queue[-1]
-            if data_input.idx == self.last_keyframe_idx:
+            if data_input.idx == self.last_detector_kf_idx:
                 continue
-            self.last_keyframe_idx = data_input.idx
+            self.last_detector_kf_idx = data_input.idx
 
             # Get current frame id
             self.curr_frame_id = data_input.idx
@@ -513,37 +539,40 @@ class Dualmap:
                 self.global_map_manager.set_layout_info(layout_pcd)
             else:
                 update_radius = self.cfg.layout_update_radius
-                layout_pcd_partial = self.detector.get_partial_layout_pcd(self.curr_pose, 
-                                                                          update_radius)
-                self.global_map_manager.set_layout_info(layout_pcd_partial, 
-                                                        current_pose=self.curr_pose, 
-                                                        update_radius=update_radius)
+                layout_pcd_partial = self.detector.get_partial_layout_pcd(
+                    self.global_map_manager._curr_pose, update_radius)
+                self.global_map_manager.set_layout_info(
+                    layout_pcd_partial, update_radius=update_radius)
+            self.global_map_manager.process_binary_map()
 
-            # 如果 goal_pose 存在，直接计算路径
-            # 否则用 inquiry 查询目标位置，若查询到则将目标赋给goal_pose，否则自主探索
+            # 开始模式判断和路径规划
             if self.goal_pose:
-                self.goal_mode = GoalMode.POSE
-                logger.debug(f"[PathPlanningThread] goal_pose exists, "
-                             f"directly compute path to {self.goal_pose}")
+                if self.goal_mode == GoalMode.NONE:
+                    self.goal_mode = GoalMode.POSE
+            elif self.inquiry == "explore":
+                self.goal_pose = self.query_object("explore")
+                if self.goal_pose:
+                    self.goal_mode = GoalMode.RANDOM
+                else:
+                    self.goal_mode = GoalMode.NONE
             elif self.inquiry:
                 self.goal_pose = self.query_object(self.inquiry)
                 if self.goal_pose:
-                    # self.curr_global_path = []
                     self.goal_mode = GoalMode.POSE
                     self.inquiry_found.add(self.inquiry)
-                    logger.debug(f"[PathPlanningThread] compute path to {self.inquiry} "
-                                 f"with query position {self.goal_pose}")
                 else:
-                    # self.curr_global_path = []
-                    self.goal_mode = GoalMode.RANDOM
-                    # self.inquiry_found.discard(self.inquiry)    # 静态环境不存在这种情况
-                    logger.debug(f"[PathPlanningThread] compute path to {self.inquiry} "
-                                    f"with random goal")
+                    # when inquiry not found, try explore
+                    self.goal_pose = self.query_object("explore")
+                    if self.goal_pose:
+                        self.goal_mode = GoalMode.RANDOM
+                    else:
+                        self.goal_mode = GoalMode.NONE
             else:
-                logger.debug(f"[PathPlanningThread] No need to plan path.")
                 self.goal_mode = GoalMode.NONE
-                continue
-
+            
+            logger.debug(f"[PathPlanningThread] inquiry {self.inquiry}, "
+                         f"goal_pose {self.goal_pose}, "
+                         f"goal_mode {self.goal_mode}")
             if self.goal_mode != GoalMode.NONE:     # and not self.path_exists()
                 logger.info(f"[PathPlanningThread] calculating global_path with "
                             f"goal_mode {self.goal_mode}, "
@@ -560,15 +589,14 @@ class Dualmap:
         """重置 Find 涉及的导航状态，包括清除索引目标和已索引到的目标位置。"""
         self.inquiry = ""
         self.inquiry_feat = None
-        self.goal_mode = GoalMode.NONE
         
         self.reset_goal_position()
-
         self.global_map_manager.mark_semantic_map_dirty()
 
     def reset_goal_position(self):
         """仅重置目标位置，保留查询内容不变。"""
-        self.goal_pose = None
+        self.goal_mode = GoalMode.NONE
+        self.goal_pose = []
         self.global_map_manager.goal_grid = None
         
         self.action_path = []
@@ -580,9 +608,21 @@ class Dualmap:
         return len(self.curr_global_path) > 0
 
     def query_object(self, query: str):
+        """
+        根据查询字符串在全局地图中寻找目标位置。
+        支持两种查询模式：
+        1. "explore"：随机采样一个目标位置用于探索。
+        2. "ObjectName" 或 "RobotNear(ObjectName)"：根据物体名称查询其位置。
+        """
         if query == "explore":
             logger.info("[Core][Query] set explore mode")
-            return None
+            if self.global_map_manager.path_planner is None:
+                planner_ok = self.global_map_manager.update_path_planner()
+                if not planner_ok:
+                    return []
+            position = self.global_map_manager.path_planner.sample_random_world_goal()
+            return position
+        
         # 1. 从查询（如："desk"/"RobotNear(ControlRoom)"）中提取物体名称
         match = re.search(r'\((.*?)\)', query)
         if match:
@@ -595,7 +635,7 @@ class Dualmap:
         # 2. 检查全局地图是否存在
         if not self.global_map_manager.has_global_map():
             logger.debug("[VLMapNav] [query_object] Global map is empty. Cannot find object.")
-            return None
+            return []
 
         # 3. 将对象名称转换为 CLIP 特征向量，并传给 global_map_manager 为在 INQUIRY 模式下获取目标点坐标
         self.inquiry_feat = self.convert_inquiry_to_feat(object_name)
@@ -616,7 +656,7 @@ class Dualmap:
                 return position
         
         logger.warning(f"[VLMapNav] [query_object] No object found for query '{object_name}'")
-        return None
+        return []
 
     def compute_global_path(self):
         """
@@ -624,7 +664,8 @@ class Dualmap:
         """
         if not self.global_map_manager.has_global_map():
             logger.warning("[Core] No global map available for path planning.")
-            return None
+            self.reset_goal_position()
+            return
 
         self.global_map_manager.has_action_path = False
 
@@ -633,8 +674,11 @@ class Dualmap:
         # Get 3D path point in world coordinate
         # 计算 全局路径
         self.curr_global_path = self.global_map_manager.calculate_global_path(
-            self.curr_pose, goal_mode=self.goal_mode, goal_position=self.goal_pose
+            goal_mode=self.goal_mode, goal_position=self.goal_pose
         )
+        if not self.curr_global_path:
+            self.reset_goal_position()
+            return
 
         self.global_map_manager.update_pose_path(nav_path=self.curr_global_path)
 
@@ -798,10 +842,7 @@ class Dualmap:
             cur_path = self.action_path
         if not cur_path:
             logger.debug("[Core] No path available for next waypoint computation.")
-            return False, None
-        cur_path = remaining_path(cur_path, self.curr_pose)
-        if not cur_path:
-            logger.info("[Core] Already reached the last waypoint: goal reached.")
-            return True, None
-        return False, cur_path[min(1, len(cur_path)-1)]
+            return None
+        remain_path = remaining_path(cur_path, self.curr_pose)
+        return remain_path[min(2, len(remain_path)-1)]
 
