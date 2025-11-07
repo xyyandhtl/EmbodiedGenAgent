@@ -158,7 +158,7 @@ class VLMapNav:
     
     def get_global_path(self, goal_pose: np.ndarray):
         """ 已弃用,全局路径规划已放至后台线程 """
-        self.dualmap.goal_pose = goal_pose
+        self.dualmap.goal_pose = goal_pose.tolist()
         self.dualmap.compute_global_path()
 
     def get_local_path(self):
@@ -169,42 +169,44 @@ class VLMapNav:
 
     def get_cmd_vel(self) -> tuple:
         """
+        A simple Controller to follow the planned path.
         Generate a velocity command toward the next waypoint.
-        Now supports simple back-off behavior when stuck or facing wall.
         """
-        start = time.time()
-        arrived, next_waypoint = self.dualmap.compute_next_waypoint()
-        if arrived:
-            self.logger.info("[VLMapNav] goal_pose arrived")
-            self.dualmap.reset_goal_position()
+        # start = time.time()
+        goal_pos = self.dualmap.goal_pose
+        if not goal_pos:
+            self.logger.debug("[VLMapNav] [get_cmd_vel] goal_pose is None!")
             return (0.0, 0.0, 0.0)
+        
+        next_waypoint = self.dualmap.compute_next_waypoint()
+
         if next_waypoint is None:
             self.logger.debug("[VLMapNav] [get_cmd_vel] get_next_waypoint failed!")
             return (0.0, 0.0, 0.0)
         
-        # Controller parameters
-        kp_ang = 0.8
-        kp_lin = 0.8
-        min_lin_vel = 0.6
-        max_lin_vel = 2.5
-        max_ang_vel = 1.0
-        yaw_error_threshold = 0.8
-        goal_reached_threshold = 0.1
-
         # === 1. 获取相机位姿 ===
         camera_pose_ros = self.realtime_pose.copy()
         cam_pos = camera_pose_ros[:3, 3]
         cam_rot = camera_pose_ros[:3, :3]
 
-        waypoint_pos = np.array(next_waypoint)
-        delta_world = waypoint_pos - cam_pos
-
-        # Distance to goal
-        dist_to_goal = np.linalg.norm(delta_world[:2])
-        if dist_to_goal <= goal_reached_threshold:
+        dist_to_goal = np.linalg.norm(np.array(goal_pos)[:2] - cam_pos[:2])
+        if  dist_to_goal < 0.5:
             self.logger.info(f"[VLMapNav] goal_pose arrived")
             self.dualmap.reset_goal_position()
             return (0.0, 0.0, 0.0)
+
+        delta_world = np.array(next_waypoint) - cam_pos
+        dist_to_waypoint = np.linalg.norm(delta_world[:2])
+        if dist_to_waypoint < 0.1:
+            return (0.0, 0.0, 0.0)
+
+        # Controller parameters
+        kp_ang = 0.6
+        kp_lin = 0.6
+        min_lin_vel = 0.6
+        max_lin_vel = 2.5
+        max_ang_vel = 1.0
+        yaw_error_threshold = 0.8
 
         # === 2. 世界 -> base_link 坐标变换 ===
         delta_body = cam_rot.T @ delta_world
@@ -239,12 +241,11 @@ class VLMapNav:
             self.logger.debug("[VLMapNav] [get_cmd_vel] Backing off due to large yaw error near wall")
 
         # === 6. 输出 ===
-        end = time.time()
-        self.logger.debug(
-            f"[VLMapNav] [get_cmd_vel] Time={end - start:.4f}s | "
-            f"Pose=({cam_pos[0]:.2f},{cam_pos[1]:.2f}) -> Goal=({waypoint_pos[0]:.2f},{waypoint_pos[1]:.2f}), "
-            f"Dist={dist_to_goal:.2f}, YawErr={yaw_error:.2f}, CMD=({lin_vel_x:.2f},0,{ang_vel_z:.2f})"
-        )
-
+        # end = time.time()
+        # self.logger.debug(
+        #     f"[VLMapNav] [get_cmd_vel] Time={end - start:.4f}s | "
+        #     f"Pose=({cam_pos[0]:.2f},{cam_pos[1]:.2f}) -> Goal=({next_waypoint[0]:.2f},{next_waypoint[1]:.2f}), "
+        #     f"Dist={dist_to_goal:.2f}, YawErr={yaw_error:.2f}, CMD=({lin_vel_x:.2f},0,{ang_vel_z:.2f})"
+        # )
         return (float(lin_vel_x), 0.0, float(ang_vel_z))
 

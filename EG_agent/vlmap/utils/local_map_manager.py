@@ -145,10 +145,10 @@ class LocalMapManager(BaseMapManager):
         # if first, then just insert
         if not self.is_initialized:
             # Init the local map
-            logger.info("[LocalMap] Init Local Map by first observation")
+            logger.info("[LocalMap] BeginInit Local Map by first observation")
 
             if len(curr_observations) == 0:
-                logger.warning("[LocalMap] No observation in this frame")
+                logger.debug("[LocalMap] No observation in this frame")
                 return
 
             self.init_from_observation(curr_observations)
@@ -936,7 +936,7 @@ class LocalMapManager(BaseMapManager):
                 obj_names, obj_colors, obj_bboxes
             )
 
-    def _create_dynamic_occupancy_map(self, resolution=0.03):
+    def _create_dynamic_occupancy_map(self, resolution=0.05):
         """
         Creates a dynamic occupancy map from the current local and global objects.
         Returns the binary occupancy map, x_edges, and y_edges.
@@ -981,7 +981,7 @@ class LocalMapManager(BaseMapManager):
         return binary_map, x_edges, y_edges, resolution
 
     def calculate_local_path(
-            self, curr_pose, goal_mode=GoalMode.POSE, resolution=0.03, goal_position=None
+            self, curr_pose, goal_mode=GoalMode.POSE, resolution=0.05, goal_position=None
     ):
         """
         Calculates the local path by creating and using a PathPlanner instance.

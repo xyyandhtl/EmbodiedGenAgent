@@ -55,7 +55,7 @@ class LayoutMap:
         """
         points = np.asarray(self.point_cloud.points)
         # 只保留 z 在 0.15 ~ 0.65 的点
-        points = points[(points[:, 2] > current_z - 0.4) & (points[:, 2] < current_z + 0.1)]
+        # points = points[(points[:, 2] > current_z - 0.45) & (points[:, 2] < current_z + 0.05)]
         xy_points = points[:, :2]
         x_min, y_min = np.min(xy_points, axis=0)
         x_max, y_max = np.max(xy_points, axis=0)
@@ -68,6 +68,73 @@ class LayoutMap:
             bins=(int((x_max - x_min) / self.resolution), int((y_max - y_min) / self.resolution))
         )
         return occ_map, x_edges, y_edges
+
+    def update_local_layout_occmap(self, partial_pcd, current_pose, update_radius):
+        """
+        Update the layout occ_map with a partial point cloud in a local region.
+        Expands the occ_map size if necessary.
+        """
+        if self.occ_map is None:
+            print("[LayoutMap] Occupancy map not initialized. Cannot perform local update.")
+            return
+
+        # 1) Calculate the bounds of the local update region in world coordinates
+        center_world = current_pose[:3, 3]
+        min_bound_world = center_world - update_radius
+        max_bound_world = center_world + update_radius
+
+        # 2) Check if the current occ_map bounds are sufficient
+        x_min_world, x_max_world = self.x_edges[0], self.x_edges[-1]
+        y_min_world, y_max_world = self.y_edges[0], self.y_edges[-1]
+
+        expand_left = max(0, int(np.ceil((x_min_world - min_bound_world[0]) / self.resolution)))
+        expand_right = max(0, int(np.ceil((max_bound_world[0] - x_max_world) / self.resolution)))
+        expand_bottom = max(0, int(np.ceil((y_min_world - min_bound_world[1]) / self.resolution)))
+        expand_top = max(0, int(np.ceil((max_bound_world[1] - y_max_world) / self.resolution)))
+
+        if expand_left > 0 or expand_right > 0 or expand_bottom > 0 or expand_top > 0:
+            # Expand occ_map and update x_edges and y_edges
+            new_x_bins = self.occ_map.shape[0] + expand_left + expand_right
+            new_y_bins = self.occ_map.shape[1] + expand_bottom + expand_top
+
+            new_occ_map = np.zeros((new_x_bins, new_y_bins), dtype=self.occ_map.dtype)
+            new_occ_map[expand_left:expand_left + self.occ_map.shape[0],
+                        expand_bottom:expand_bottom + self.occ_map.shape[1]] = self.occ_map
+
+            self.occ_map = new_occ_map
+            self.x_edges = np.linspace(x_min_world - expand_left * self.resolution,
+                                        x_max_world + expand_right * self.resolution,
+                                        new_x_bins + 1)
+            self.y_edges = np.linspace(y_min_world - expand_bottom * self.resolution,
+                                        y_max_world + expand_top * self.resolution,
+                                        new_y_bins + 1)
+
+        # 3) Calculate the grid indices for the local update region
+        min_x_grid = np.floor((min_bound_world[0] - self.x_edges[0]) / self.resolution).astype(int)
+        min_y_grid = np.floor((min_bound_world[1] - self.y_edges[0]) / self.resolution).astype(int)
+        max_x_grid = np.ceil((max_bound_world[0] - self.x_edges[0]) / self.resolution).astype(int)
+        max_y_grid = np.ceil((max_bound_world[1] - self.y_edges[0]) / self.resolution).astype(int)
+
+        # Clamp to the map boundaries
+        min_x = max(0, min_x_grid)
+        min_y = max(0, min_y_grid)
+        max_x = min(self.occ_map.shape[0] - 1, max_x_grid)
+        max_y = min(self.occ_map.shape[1] - 1, max_y_grid)
+
+        # 4) Clear the local region and update with new data
+        self.occ_map[min_x:max_x + 1, min_y:max_y + 1] = 0
+
+        points = np.asarray(partial_pcd.points)
+        current_z = center_world[2]
+        points = points[(points[:, 2] > current_z - 0.45) & (points[:, 2] < current_z + 0.05)]
+        if points.shape[0] > 0:
+            xy_points = points[:, :2]
+            new_occ, _, _ = np.histogram2d(
+                xy_points[:, 0],
+                xy_points[:, 1],
+                bins=[self.x_edges, self.y_edges]
+            )
+            self.occ_map += new_occ
 
     def calculate_threshold(self, method="percentile"):
         """
@@ -90,16 +157,27 @@ class LayoutMap:
         """
         Process binary map with connected component filtering and morphological operations.
         """
+        if self.occ_map is None:
+            logger.warning("[LayoutMap][process_binary_map] occ_map is None, return.")
+            return None
+        
         # Binarization
         # threshold = self.calculate_threshold()
         # print(f"[LayoutMap] Binarization threshold: {threshold}")
         binary_map = (self.occ_map > 0).astype(np.uint8)
 
         # Remove small connected components
-        cleaned_map = self.remove_small_components(binary_map)
+        cleaned_map = np.zeros_like(binary_map, dtype=np.uint8)
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary_map, connectivity=8)
+
+        for label in range(1, num_labels):
+            area = stats[label, cv2.CC_STAT_AREA]
+            if area >= self.min_area:
+                cleaned_map[labels == label] = 1
 
         # Morphological operation (closing)
-        processed_map = self.apply_morphological_operations(cleaned_map)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (self.kernel_size, self.kernel_size))
+        processed_map = cv2.morphologyEx(cleaned_map, cv2.MORPH_CLOSE, kernel)
 
         if self.cfg.edit_wall:
             processed_map = self.visualize_and_edit_map(processed_map)
@@ -146,70 +224,6 @@ class LayoutMap:
         cv2.destroyAllWindows()
         return edited_map
 
-    def remove_small_components(self, binary_map):
-        """
-        Remove small connected components.
-        """
-        cleaned_map = np.zeros_like(binary_map, dtype=np.uint8)
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary_map, connectivity=8)
-
-        for label in range(1, num_labels):
-            area = stats[label, cv2.CC_STAT_AREA]
-            if area >= self.min_area:
-                cleaned_map[labels == label] = 1
-
-        return cleaned_map
-
-    def apply_morphological_operations(self, binary_map):
-        """
-        Apply morphological operations to the binary image.
-        """
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (self.kernel_size, self.kernel_size))
-        return cv2.morphologyEx(binary_map, cv2.MORPH_CLOSE, kernel)
-
-    def update_local_layout_occmap(self, partial_pcd, current_pose, update_radius):
-        """
-        Update the layout occ_map with a partial point cloud in a local region.
-        注：不再生成/维护 wall_pcd；形态学与连通域在全局 process_binary_map 时统一处理。
-        """
-        if self.occ_map is None:
-            print("[LayoutMap] Occupancy map not initialized. Cannot perform local update.")
-            return
-
-        # 1) 计算局部区域在网格上的索引范围（基于 x_edges/y_edges 与 resolution）
-        center_world = current_pose[:3, 3]
-        min_bound_world = center_world - update_radius
-        max_bound_world = center_world + update_radius
-
-        min_x_grid = np.floor((min_bound_world[0] - self.x_edges[0]) / self.resolution).astype(int)
-        min_y_grid = np.floor((min_bound_world[1] - self.y_edges[0]) / self.resolution).astype(int)
-        max_x_grid = np.ceil((max_bound_world[0] - self.x_edges[0]) / self.resolution).astype(int)
-        max_y_grid = np.ceil((max_bound_world[1] - self.y_edges[0]) / self.resolution).astype(int)
-
-        # Clamp 到地图边界；注意 occ_map 形状为 [x_bins, y_bins]
-        min_x = max(0, min_x_grid)
-        min_y = max(0, min_y_grid)
-        max_x = min(self.occ_map.shape[0] - 1, max_x_grid)
-        max_y = min(self.occ_map.shape[1] - 1, max_y_grid)
-
-        # 2) 清零局部区域后，根据 partial_pcd 重新统计直方图再叠加（与原逻辑一致）
-        self.occ_map[min_x:max_x+1, min_y:max_y+1] = 0
-
-        points = np.asarray(partial_pcd.points)
-        current_z = center_world[2]
-        points = points[(points[:, 2] > current_z - 0.4) & (points[:, 2] < current_z + 0.1)]
-        if points.shape[0] > 0:
-            xy_points = points[:, :2]
-            new_occ, _, _ = np.histogram2d(
-                xy_points[:, 0],
-                xy_points[:, 1],
-                bins=[self.x_edges, self.y_edges]
-            )
-            # 与原始实现相同：直接将局部点云的直方图累加回全局 occ_map
-            self.occ_map += new_occ
-
-        # print(f"[LayoutMap] Updated local occ_map region: x[{min_x}:{max_x}], y[{min_y}:{max_y}]")
-
 class PathPlanner:
     def __init__(self, binary_occ_map, map_origin, map_resolution, robot_radius, floor_height):
         """
@@ -231,7 +245,9 @@ class PathPlanner:
 
         # Create the pathfinding grid object
         self.pathfinding_matrix = np.where(self.inflated_map == 0, 1, 0)
-        self.grid = Grid(matrix=self.pathfinding_matrix.T.tolist())  # 虽内部使用 (y,x) 格式的矩阵，但其公共接口（.node()等）都封装成接收 (x,y) 坐标
+        self.grid = Grid(matrix=self.pathfinding_matrix.T.tolist())
+        # cv2.imwrite("inflated_map.png", self.inflated_map * 255)
+        logger.info(f"[PathPlanner] Grid {self.grid}, map origin: {map_origin}, resolution: {map_resolution}")
 
     def _inflate_obstacles(self, binary_occ, robot_radius, resolution):
         """
@@ -276,22 +292,56 @@ class PathPlanner:
 
     def sample_random_world_goal(self):
         """
-        Samples a random traversable point from the grid and returns its world coordinate.
+        Samples a random traversable point from the grid with higher probability near edges,
+        and returns its world coordinate.
         """
         traversable_points_yx = np.argwhere(self.pathfinding_matrix.T == 1)
         if traversable_points_yx.size == 0:
             logger.warning("[PathPlanner] No traversable points found to sample from.")
             return []
 
-        random_index = random.choice(range(len(traversable_points_yx)))
+        H, W = self.pathfinding_matrix.shape
+
+        # 计算每个点距离边界的最小距离（越靠边，值越小）
+        distances_to_edge = np.min(
+            np.stack([
+                traversable_points_yx[:, 0],              # distance to top
+                H - 1 - traversable_points_yx[:, 0],      # distance to bottom
+                traversable_points_yx[:, 1],              # distance to left
+                W - 1 - traversable_points_yx[:, 1]       # distance to right
+            ], axis=1),
+            axis=1
+        )
+
+        # 将距离转成“靠边权重”，距离越小，权重越大
+        epsilon = 1e-6  # 防止除零
+        weights = 1.0 / (distances_to_edge + epsilon)
+
+        # 平滑化或增强权重效果（可调参数）
+        weights = weights ** 2
+
+        # 归一化权重
+        weights = weights / np.sum(weights)
+
+        # 按权重采样一个索引
+        random_index = np.random.choice(len(traversable_points_yx), p=weights)
         random_grid_point_yx = traversable_points_yx[random_index]
         random_grid_point = (random_grid_point_yx[1], random_grid_point_yx[0])
 
         return self.grid_to_world(random_grid_point)
 
-    def plan_path(self, start_world, goal_world, clear_radius=10):
+    def plan_path(self, start_world, goal_world, clear_radius=3):
+        """
+        clear_radius * resolution (0.1 m) is the true clear radius in meters
+        """
         start_grid = self.world_to_grid(start_world)
         goal_grid = self.world_to_grid(goal_world)
+        if start_grid[0] < 0 or start_grid[0] >= self.grid.width or start_grid[1] < 0 or start_grid[1] >= self.grid.height:
+            logger.error(f"[PathPlanner] Start point {start_grid} is out of bounds.")
+            return []
+        if goal_grid[0] < 0 or goal_grid[0] >= self.grid.width or goal_grid[1] < 0 or goal_grid[1] >= self.grid.height:
+            logger.error(f"[PathPlanner] Goal point {goal_grid} is out of bounds.")
+            return []
 
         # 如果 start 不可行走，则临时清除周围障碍
         start_node = self.grid.node(start_grid[0], start_grid[1])

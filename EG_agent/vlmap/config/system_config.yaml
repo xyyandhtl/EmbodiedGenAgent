@@ -120,7 +120,7 @@ use_end_process: True
 use_parallel: True
 
 ### SHOW: Resolution of NavigationGraph in [GlobalManager, LocalManager, show_semantic_map]
-resolution: 0.03
+resolution: 0.05
 
 # ============================================================
 # SYSTEM MAPPING CONFIG
@@ -161,11 +161,8 @@ given_path_dir: ""
 # PATH PLANNING CONFIG
 # ============================================================
 # Path planning interval (seconds)
-path_planning_interval: 10.0
+path_planning_interval: 5.0
 
 # Editing wall if the wall generation result is not good
 edit_wall: False
 save_wall: False
-
-# Robot radius, for collision detection in path planning
-robot_radius: 0.18

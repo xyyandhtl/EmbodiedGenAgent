@@ -382,7 +382,7 @@ class Dualmap:
             if data_input.idx == self.last_layout_kf_idx:
                 continue
             self.last_layout_kf_idx = data_input.idx
-            
+
             self.detector.run_layout_thread()
             self.goal_event.wait(timeout=2)  # Wait for 2 seconds before next loop
             self.goal_event.clear()
@@ -543,6 +543,7 @@ class Dualmap:
                     self.global_map_manager._curr_pose, update_radius)
                 self.global_map_manager.set_layout_info(
                     layout_pcd_partial, update_radius=update_radius)
+            self.global_map_manager.process_binary_map()
 
             # 开始模式判断和路径规划
             if self.goal_pose:
@@ -841,10 +842,7 @@ class Dualmap:
             cur_path = self.action_path
         if not cur_path:
             logger.debug("[Core] No path available for next waypoint computation.")
-            return False, None
-        cur_path = remaining_path(cur_path, self.curr_pose)
-        if not cur_path:
-            logger.info("[Core] Already reached the last waypoint: goal reached.")
-            return True, None
-        return False, cur_path[min(1, len(cur_path)-1)]
+            return None
+        remain_path = remaining_path(cur_path, self.curr_pose)
+        return remain_path[min(2, len(remain_path)-1)]
 
