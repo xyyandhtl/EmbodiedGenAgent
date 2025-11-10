@@ -119,9 +119,6 @@ use_end_process: True
 # Use parallel processing (False = sequential)
 use_parallel: True
 
-### SHOW: Resolution of NavigationGraph in [GlobalManager, LocalManager, show_semantic_map]
-resolution: 0.05
-
 # ============================================================
 # SYSTEM MAPPING CONFIG
 # ============================================================
@@ -161,7 +158,7 @@ given_path_dir: ""
 # PATH PLANNING CONFIG
 # ============================================================
 # Path planning interval (seconds)
-path_planning_interval: 5.0
+path_planning_interval: 3.0
 
 # Editing wall if the wall generation result is not good
 edit_wall: False
