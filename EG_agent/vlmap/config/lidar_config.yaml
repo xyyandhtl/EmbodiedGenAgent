@@ -10,10 +10,16 @@ lidar_extrinsics:
   - [0, 0, 0, 1]
 
 # ============================================================
+# SemMap COnfig
+# ============================================================
+resolution: 0.1
+
+# ============================================================
 # PCD CONFIG
 # ============================================================
 layout_voxel_size: 0.1
-layout_update_radius: 8.0
+layout_update_radius: 20.0
+occ_update_radius: 8.0
 
 # small mask filtering threshold
 small_mask_th: 6

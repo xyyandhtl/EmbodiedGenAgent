@@ -24,7 +24,6 @@ class BaseAgentEnv:
         self._last_plan_time = time.time()
 
         self.tick_interval = 0.05
-        self.path_plan_interval = 5.0
         
         self.last_tick_output: str = ""
         self.tick_updated = False

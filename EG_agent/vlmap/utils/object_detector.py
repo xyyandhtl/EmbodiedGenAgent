@@ -303,9 +303,26 @@ class Detector:
             with self.layout_lock:
                 self.layout_pointcloud += current_pcd
                 before_downsample = len(self.layout_pointcloud.points)
-                self.layout_pointcloud = self.layout_pointcloud.voxel_down_sample(
-                    voxel_size=self.cfg.layout_voxel_size
-                )
+
+                radius = float(self.cfg.layout_update_radius) * 1.5
+                x, y = self.curr_data.pose[:2, 3]
+                region_bounds = [x - radius, x + radius, y - radius, y + radius]
+
+                points = np.asarray(self.layout_pointcloud.points)
+                x_filter = (points[:, 0] >= region_bounds[0]) & (points[:, 0] <= region_bounds[1])
+                y_filter = (points[:, 1] >= region_bounds[2]) & (points[:, 1] <= region_bounds[3])
+                region_mask = x_filter & y_filter
+                region_indices = np.where(region_mask)[0]
+                outside_indices = np.where(~region_mask)[0]
+
+                region_pcd = self.layout_pointcloud.select_by_index(region_indices)
+
+                downsampled_region_pcd = region_pcd.voxel_down_sample(voxel_size=self.cfg.layout_voxel_size)
+
+                outside_pcd = self.layout_pointcloud.select_by_index(outside_indices)
+                
+                self.layout_pointcloud = downsampled_region_pcd + outside_pcd
+
                 after_downsample = len(self.layout_pointcloud.points)
                 logger.debug(
                     f"[Detector][Layout] Points before/after downsample: "
@@ -882,7 +899,7 @@ class Detector:
         self.masked_points = refined_points_list
         self.masked_colors = refined_colors_list
 
-    def depth_to_point_cloud(self, sample_rate=1) -> o3d.geometry.PointCloud:
+    def depth_to_point_cloud(self, sample_rate=1, filter=True) -> o3d.geometry.PointCloud:
         """
         Convert depth image to a point cloud with RGB colors and transform it to world coordinates.
 
@@ -939,8 +956,15 @@ class Detector:
         # Discard the homogeneous coordinate (last column) to get the final 3D points in world coordinates
         points_world = points_world_homogeneous[:, :3]
 
+        # Filter points based on z value
+        if filter:
+            update_radius = float(self.cfg.layout_update_radius)
+            inside_index = points_world[:, 2] <= update_radius
+            points_world = points_world[inside_index]
+
         # Get the corresponding RGB colors for valid pixels
         colors = self.curr_data.color[v, u] / 255.0
+        colors = colors[inside_index]
 
         # Create a PointCloud object and set its points and colors
         point_cloud = o3d.geometry.PointCloud()
@@ -949,7 +973,7 @@ class Detector:
 
         return point_cloud
 
-    def lidar_to_point_cloud(self, sample_rate=1) -> o3d.geometry.PointCloud:
+    def lidar_to_point_cloud(self, sample_rate=1, filter=True) -> o3d.geometry.PointCloud:
         """
         Convert lidar points to a point cloud with RGB colors in world coordinates.
 
@@ -964,18 +988,13 @@ class Detector:
         points_world_homogeneous = (pose @ points_homogeneous.T).T
         points_world = points_world_homogeneous[:, :3]
 
-        # mask_indices, mask_colors = map_rgb_mask_to_lidar_points(
-        #     lidar_points,
-        #     self.curr_data.color,
-        #     self.curr_data.intrinsics,
-        #     np.ones((1, *self.curr_data.color.shape[:2]), dtype=bool),
-        # )
-
-        # colors = mask_colors[0] / 255.0 if mask_colors else np.zeros_like(points_world)
+        # Filter points based on z value
+        if filter:
+            update_radius = float(self.cfg.layout_update_radius)
+            points_world = points_world[points_world[:, 2] <= update_radius]
 
         point_cloud = o3d.geometry.PointCloud()
         point_cloud.points = o3d.utility.Vector3dVector(points_world)
-        # point_cloud.colors = o3d.utility.Vector3dVector(colors)
 
         return point_cloud
 

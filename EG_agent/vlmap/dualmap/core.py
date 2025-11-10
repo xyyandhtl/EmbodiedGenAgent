@@ -101,7 +101,6 @@ class Dualmap:
         self.inquiry_feat = None
         self.inquiry_found = set()
         self.found_obj_name: str = ""
-        self.goal_event = threading.Event()
 
         # Local planning flags & paths
         self.begin_local_planning = False
@@ -122,7 +121,12 @@ class Dualmap:
         self.detector_thread = None
         self.mapping_thread = None
         self.path_planning_thread = None
-        self.layout_thread = None  # New thread for layout processing
+        self.layout_thread = None
+        self.vis_map_thread = None
+
+        self.layout_event = threading.Event()
+        self.goal_event = threading.Event()
+        self.vis_map_event = threading.Event()
 
     # ===============================================
     # Basic Utilities
@@ -250,25 +254,6 @@ class Dualmap:
         else:
             # logger.info("Not a new keyframe, abandon")
             return False
-
-    def get_total_memory_by_keyword(self, keyword="applications"):
-        total_rss = 0
-        for proc in psutil.process_iter(["pid", "name", "cmdline", "memory_info"]):
-            try:
-                cmdline = proc.info.get("cmdline")
-                if isinstance(cmdline, list) and keyword in " ".join(cmdline):
-                    total_rss += proc.info["memory_info"].rss
-            except (psutil.NoSuchProcess, psutil.AccessDenied, TypeError):
-                continue
-        return total_rss / 1024 / 1024  # MB
-
-    def convert_inquiry_to_feat(self, inquiry_sentence: str):
-        text_query_tokenized = self.detector.clip_tokenizer(inquiry_sentence).to("cuda")
-        text_query_ft = self.detector.clip_model.encode_text(text_query_tokenized)
-        text_query_ft = text_query_ft / text_query_ft.norm(dim=-1, keepdim=True)
-        text_query_ft = text_query_ft.squeeze()
-
-        return text_query_ft
     
     # ===============================================
     # Threading Control
@@ -300,6 +285,12 @@ class Dualmap:
         self.layout_thread.start()
         logger.info("[Core] Layout thread started.")
 
+        self.vis_map_thread = threading.Thread(
+            target=self.run_vis_map_thread, daemon=True
+        )
+        self.vis_map_thread.start()
+        logger.info("[Core] Semantic map thread started.")
+
     def stop_threading(self):
         self.stop_thread = True
         self.goal_event.set()  # 唤醒线程以退出
@@ -312,6 +303,8 @@ class Dualmap:
             self.path_planning_thread.join()
         if self.layout_thread and self.layout_thread.is_alive():
             self.layout_thread.join()
+        if self.vis_map_thread and self.vis_map_thread.is_alive():
+            self.vis_map_thread.join()
         logger.info("[Core] Stopped detector, mapping and path planning thread.")
         logger.info("[Core] Stopped layout thread.")
 
@@ -319,7 +312,6 @@ class Dualmap:
         """
         The process of ending the sequnce.
         """
-        self.global_map_manager.shutdown_semantic()
         end_frame_id = self.curr_frame_id
         self.stop_threading()
 
@@ -378,14 +370,17 @@ class Dualmap:
         Independent thread for layout processing.
         """
         while not self.stop_thread:
+            self.layout_event.wait(timeout=2.0)
+            self.layout_event.clear()  # 重置为未触发状态
+            if self.stop_thread:
+                break
+
             data_input: DataInput = self.input_queue[-1]
             if data_input.idx == self.last_layout_kf_idx:
                 continue
             self.last_layout_kf_idx = data_input.idx
 
             self.detector.run_layout_thread()
-            self.goal_event.wait(timeout=2)  # Wait for 2 seconds before next loop
-            self.goal_event.clear()
 
         logger.info("[Core] Layout thread exiting.")
 
@@ -538,7 +533,7 @@ class Dualmap:
                 layout_pcd = self.detector.get_layout_pointcloud()
                 self.global_map_manager.set_layout_info(layout_pcd)
             else:
-                update_radius = self.cfg.layout_update_radius
+                update_radius = self.cfg.occ_update_radius
                 layout_pcd_partial = self.detector.get_partial_layout_pcd(
                     self.global_map_manager._curr_pose, update_radius)
                 self.global_map_manager.set_layout_info(
@@ -582,6 +577,20 @@ class Dualmap:
 
         logger.info("[Core] Path_planning thread exiting.")
 
+    def run_vis_map_thread(self):
+        """
+        Independent thread: semantic map with low-frequency execution and switching.
+        """
+        while not self.stop_thread:
+            self.vis_map_event.wait(timeout=3.0)
+            self.vis_map_event.clear()  # 重置为未触发状态
+            if self.stop_thread:
+                break
+
+            self.global_map_manager.background_map_update()
+
+        logger.info("[Core] Layout thread exiting.")
+
     # ===============================================
     # Query and Navigation API
     # ===============================================
@@ -607,6 +616,14 @@ class Dualmap:
         """检查当前是否存在有效的全局路径。"""
         return len(self.curr_global_path) > 0
 
+    def convert_inquiry_to_feat(self, inquiry_sentence: str):
+        text_query_tokenized = self.detector.clip_tokenizer(inquiry_sentence).to("cuda")
+        text_query_ft = self.detector.clip_model.encode_text(text_query_tokenized)
+        text_query_ft = text_query_ft / text_query_ft.norm(dim=-1, keepdim=True)
+        text_query_ft = text_query_ft.squeeze()
+
+        return text_query_ft
+    
     def query_object(self, query: str):
         """
         根据查询字符串在全局地图中寻找目标位置。

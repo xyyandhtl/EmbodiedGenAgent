@@ -55,7 +55,7 @@ class LayoutMap:
         """
         points = np.asarray(self.point_cloud.points)
         # 只保留 z 在 0.15 ~ 0.65 的点
-        # points = points[(points[:, 2] > current_z - 0.45) & (points[:, 2] < current_z + 0.05)]
+        points = points[(points[:, 2] > current_z - 0.45) & (points[:, 2] < current_z + 0.05)]
         xy_points = points[:, :2]
         x_min, y_min = np.min(xy_points, axis=0)
         x_max, y_max = np.max(xy_points, axis=0)
@@ -153,7 +153,7 @@ class LayoutMap:
         else:
             raise ValueError("Unsupported threshold calculation method.")
 
-    def process_binary_map(self):
+    def process_binary_map(self, remove_small_components=False):
         """
         Process binary map with connected component filtering and morphological operations.
         """
@@ -162,22 +162,25 @@ class LayoutMap:
             return None
         
         # Binarization
+        threshold = 0   # TODO: a hyperparameter
         # threshold = self.calculate_threshold()
         # print(f"[LayoutMap] Binarization threshold: {threshold}")
-        binary_map = (self.occ_map > 0).astype(np.uint8)
+        binary_map = (self.occ_map > threshold).astype(np.uint8)
 
         # Remove small connected components
-        cleaned_map = np.zeros_like(binary_map, dtype=np.uint8)
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary_map, connectivity=8)
+        if remove_small_components:
+            # cleaned_map = np.zeros_like(binary_map, dtype=np.uint8)
+            num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary_map, connectivity=8)
+            binary_map = np.zeros_like(binary_map, dtype=np.uint8)
 
-        for label in range(1, num_labels):
-            area = stats[label, cv2.CC_STAT_AREA]
-            if area >= self.min_area:
-                cleaned_map[labels == label] = 1
+            for label in range(1, num_labels):
+                area = stats[label, cv2.CC_STAT_AREA]
+                if area >= self.min_area:
+                    binary_map[labels == label] = 1
 
         # Morphological operation (closing)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (self.kernel_size, self.kernel_size))
-        processed_map = cv2.morphologyEx(cleaned_map, cv2.MORPH_CLOSE, kernel)
+        processed_map = cv2.morphologyEx(binary_map, cv2.MORPH_CLOSE, kernel)
 
         if self.cfg.edit_wall:
             processed_map = self.visualize_and_edit_map(processed_map)
