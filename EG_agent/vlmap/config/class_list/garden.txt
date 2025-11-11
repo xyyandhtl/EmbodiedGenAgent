@@ -17,4 +17,4 @@ Sidewalk
 Pool
 Jacuzzi
 Swing
-Person
+Human 

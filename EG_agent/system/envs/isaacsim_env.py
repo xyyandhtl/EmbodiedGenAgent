@@ -39,7 +39,6 @@ class IsaacsimEnv(BaseAgentEnv):
         # Real-time visibility state: {goal_name_lower: bool}
         self.goal_inview = {}
         self.near_dist = 3.0  # meters
-        self.internal_nav = True
 
         # Defer ROS init to configure_ros
         self.ros_node: Node | None = None
@@ -64,7 +63,7 @@ class IsaacsimEnv(BaseAgentEnv):
         # Config reference
         self._cfg = None  # Dynaconf instance
 
-        # --- 新增: VLMap 后端引用 + 发布器资源 ---
+        # --- VLMap 后端引用 + 发布器资源 ---
         self._vlmap_backend: VLMapNav = None
         self._ros_publisher: ROSPublisher = None
         self._ros_pub_executor: ThreadPoolExecutor = None
@@ -79,17 +78,9 @@ class IsaacsimEnv(BaseAgentEnv):
         self._action_dispatch = {
             "walk": self._handle_walk,
             "cmd_vel": self._handle_cmd_vel,
-            "cmdvel": self._handle_cmd_vel,
-            "cmd-vel": self._handle_cmd_vel,
-            "nav_pose": self._handle_nav_pose,
             "goal_pose": self._handle_nav_pose,
-            "pose": self._handle_nav_pose,
-            "enum": self._handle_enum,
             "enum_command": self._handle_enum,
-            "command_enum": self._handle_enum,
             "mark": self._handle_mark,
-            "mark_point": self._handle_mark,
-            "place_flag": self._handle_mark,
         }
     
     # ==========================================
@@ -307,7 +298,7 @@ class IsaacsimEnv(BaseAgentEnv):
         if verbose:
             print(f"[IsaacsimEnv] Published cmd_vel: vx={vx}, vy={vy}, wz={wz}")
 
-    def _handle_nav_pose(self, action, verbose: bool):        
+    def _handle_nav_pose(self, action, verbose: bool):
         if not isinstance(action, (list, tuple, _np.ndarray)) or len(action) != 7:
             raise ValueError("nav_pose action must be a list/tuple/ndarray of 7 elements: [x,y,z,qw,qx,qy,qz].")
         x, y, z = float(action[0]), float(action[1]), float(action[2])
@@ -328,16 +319,9 @@ class IsaacsimEnv(BaseAgentEnv):
 
     def _handle_walk(self, action, verbose: bool):
         # a wrapper for walk action
-        if self.internal_nav:
-            # if use vlmap internal nav system
-            cur_cmd_vel = self.get_cur_cmd_vel()
-            self.run_action("cmd_vel", cur_cmd_vel)
-        else:
-            # if use a external nav system
-            goal_pose = tuple(self.get_cur_target() + [1, 0, 0, 0])
-            if goal_pose != self.cur_goal_pose:
-                self.run_action("goal_pose", goal_pose)
-                self.cur_goal_pose = goal_pose
+        # if use vlmap internal nav system
+        cur_cmd_vel = self.get_cur_cmd_vel()
+        self._handle_cmd_vel(cur_cmd_vel, verbose)
 
     def _handle_enum(self, action, verbose: bool):
         to_publish = []

@@ -57,19 +57,8 @@ class BaseAgentEnv:
         return ""
 
     # =========================================================
-    # methods that low-level env should impl 
-    # =========================================================
-    def find_path(self, goal_pose):
-        # high-level env like VirtualHome has its wrapped function so it is not needed
-        raise NotImplementedError
-    
-    def grab_object(self, object_name: str):
-        # high-level env like VirtualHome has its wrapped function so it is not needed
-        raise NotImplementedError
-    
-    def get_target_pos(self, target_name: str):
-        raise NotImplementedError
-
+    # methods 
+    # =========================================================    
     def step(self) -> bool:
         now = time.time()
         elapsed = now - self._last_tick_time
@@ -120,6 +109,9 @@ class BaseAgentEnv:
     def create_behavior_lib(self):
         self.behavior_lib = ExecBehaviorLibrary(self.behavior_lib_path)
 
+    # =========================================================
+    # methods that low-level env should impl 
+    # =========================================================
     def reset(self):
         raise NotImplementedError
 
@@ -128,10 +120,6 @@ class BaseAgentEnv:
     
     def run_action(self, action_type: str, action: tuple | None = None, verbose=False):
         raise NotImplementedError
-    
-    def get_cur_cmd_vel(self) -> tuple:
-        raise NotImplementedError
-
 
 
 

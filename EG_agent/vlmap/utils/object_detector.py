@@ -1665,7 +1665,7 @@ class Filter:
         original_num = self.get_len()
         if self.confidence is None or original_num == 0:
             logger.debug("[Detector][Filter] No detections to filter.")
-            return
+            return None
 
         keep = self.filter_by_mask_size()
         self.set_detections(keep)

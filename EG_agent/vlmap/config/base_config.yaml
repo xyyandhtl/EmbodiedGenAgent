@@ -2,7 +2,7 @@
 # ROBOT CONFIG
 # ============================================================
 # Robot radius, for collision detection in path planning
-robot_radius: 0.5
+robot_radius: 0.35
 
 # ============================================================
 # CAMERA CONFIG
