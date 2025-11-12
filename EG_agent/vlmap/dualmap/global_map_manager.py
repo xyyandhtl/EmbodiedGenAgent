@@ -15,10 +15,10 @@ from PIL import Image, ImageDraw, ImageFont
 import torch
 import torch.nn.functional as F
 
-from EG_agent.vlmap.utils.object import GlobalObject
-from EG_agent.vlmap.utils.types import Observation, GoalMode, ObjectClasses
-from EG_agent.vlmap.utils.base_map_manager import BaseMapManager
-from EG_agent.vlmap.utils.navigation_helper import LayoutMap, PathPlanner
+from EG_agent.vlmap.dualmap.object import GlobalObject
+from EG_agent.vlmap.dualmap.types import Observation, GoalMode, ObjectClasses
+from EG_agent.vlmap.dualmap.base_map_manager import BaseMapManager
+from EG_agent.vlmap.dualmap.navigation_helper import LayoutMap, PathPlanner
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)

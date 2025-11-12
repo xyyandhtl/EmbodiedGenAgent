@@ -73,6 +73,7 @@ Future Work:
 - [x] The frontier self-exploration navigator for `Find` action when target not found
 - [x] Conitune dev and opt the vlmap backend, adding support for additional range sensors beyond the depth camera
 - [ ] Real world deployment with a legged robot
+- [ ] Maybe not traditional behavior tree as the action framework, replace the whole reasoning and planning with the rebuilt llm-based mcp tools framework
 
 
 ## Acknowledgments

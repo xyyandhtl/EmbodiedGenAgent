@@ -9,9 +9,6 @@ from EG_agent.planning.btpg.algos.base.btp_base import BTPlannerBase
 from collections import deque
 import random
 import numpy as np
-import asyncio
-from EG_agent.planning.btpg.algos.llm_client.llms.gpt3 import LLMGPT3
-from EG_agent.planning.btpg.algos.llm_client.tools import goal_transfer_str, act_str_process
 
 from EG_agent.planning.btpg.algos.base.tools  import calculate_priority_percentage
 from EG_agent.planning.btpg.algos.base.tools  import *

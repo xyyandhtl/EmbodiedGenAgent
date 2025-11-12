@@ -162,7 +162,7 @@ class LayoutMap:
             return None
         
         # Binarization
-        threshold = 0   # TODO: a hyperparameter
+        threshold = 1   # TODO: a hyperparameter
         # threshold = self.calculate_threshold()
         # print(f"[LayoutMap] Binarization threshold: {threshold}")
         binary_map = (self.occ_map > threshold).astype(np.uint8)

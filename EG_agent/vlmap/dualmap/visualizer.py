@@ -9,7 +9,7 @@ import supervision as sv
 from PIL import Image, ImageDraw, ImageFont
 from supervision.draw.color import Color, ColorPalette
 
-from EG_agent.vlmap.utils.types import ObjectClasses
+from EG_agent.vlmap.dualmap.types import ObjectClasses
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)

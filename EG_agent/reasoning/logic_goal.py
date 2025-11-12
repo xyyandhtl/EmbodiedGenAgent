@@ -5,6 +5,7 @@ from EG_agent.reasoning.llms.internvl3 import VLMInference
 from EG_agent.reasoning.tools.data_process_check import format_check, goal_transfer_ls_set
 from EG_agent.system.module_path import AGENT_PROMPT_PATH
 
+AllCondition = 'IsCaptured_<Object>, IsMarked_<Object>, IsReported_<Object>'
 
 class LogicGoalGenerator:
     def __init__(
@@ -28,8 +29,7 @@ class LogicGoalGenerator:
         self.llm = VLMInference()
 
     def prepare_prompt(self, object_set=()):
-        from EG_agent.prompts import default_objects
-        all_cond_str = default_objects.AllCondition
+        all_cond_str = AllCondition
         object_set = object_set or {"AnyObject"}
         # 动态传入 object sets 时用这个在外部调用
         objects_list = sorted(list(object_set))

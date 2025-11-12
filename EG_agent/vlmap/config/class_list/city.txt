@@ -1,4 +1,4 @@
-Person                    # 行人
+Human                     # 行人
 Car                       # 小汽车
 Truck                     # 卡车
 StreetLamp                # 路灯
