@@ -10,14 +10,38 @@
 #     --max_new_tokens 128 \
 #     --served_model_name InternVL3
 
+# CUDA_VISIBLE_DEVICES=0 \
+# swift deploy \
+#     --model OpenGVLab/InternVL3-2B-Instruct \
+#     --model_type internvl3 \
+#     --infer_backend vllm \
+#     --agent_template hermes \
+#     --temperature 0.5 \
+#     --gpu_memory_utilization 0.4 \
+#     --max_model_len 4096 \
+#     --max_new_tokens 128 \
+#     --served_model_name InternVL3
+
+# tool-call parser qwen3-coder:
+# ```json                                                                                                                              
+# {                                                                                                                                    
+#     "id": "chatcmpl-2de860d3571341efb8a192183b26db61",                                                                               
+#     "type": "function",                                                                                                              
+#     "function": {                                                                                                                    
+#         "name": "navigate_to_target",                                                                                                
+#         "arguments": {                                                                                                               
+#             "target": "kitchenTable"                                                                                                 
+#         }                                                                                                                            
+#     }                                                                                                                                
+# }     
+
 CUDA_VISIBLE_DEVICES=0 \
-swift deploy \
-    --model OpenGVLab/InternVL3-2B-Instruct \
-    --model_type internvl3 \
-    --infer_backend vllm \
-    --agent_template hermes \
-    --temperature 0.5 \
-    --gpu_memory_utilization 0.4 \
-    --max_model_len 4096 \
-    --max_new_tokens 128 \
-    --served_model_name InternVL3
+vllm serve \
+    ./RoboBrain/   \
+    --served-model-name RoboBrain   \
+    --tensor-parallel-size 1   \
+    --limit-mm-per-prompt '{"image": 16}' \
+    --max-model-len 8192 \
+    --enable-auto-tool-choice \
+    --tool-call-parser llama4_json \
+    --port 8000
