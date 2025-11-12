@@ -227,6 +227,7 @@ class LayoutMap:
         cv2.destroyAllWindows()
         return edited_map
 
+
 class PathPlanner:
     def __init__(self, binary_occ_map, map_origin, map_resolution, robot_radius, floor_height):
         """
@@ -248,9 +249,12 @@ class PathPlanner:
 
         # Create the pathfinding grid object
         self.pathfinding_matrix = np.where(self.inflated_map == 0, 1, 0)
-        self.grid = Grid(matrix=self.pathfinding_matrix.T.tolist())
+        self.free_nodes_yx = np.argwhere(self.pathfinding_matrix.T == 1)  # np.argwhere returns coordinates in (row, col) format, which is (y, x)
+        self.grid = Grid(matrix=self.pathfinding_matrix.T.tolist())  # 用于路径查找的 Grid：虽内部使用 (y,x) 格式的矩阵，但其公共接口（.node()等）都封装成接收 (x,y) 坐标
         # cv2.imwrite("inflated_map.png", self.inflated_map * 255)
         logger.info(f"[PathPlanner] Grid {self.grid}, map origin: {map_origin}, resolution: {map_resolution}")
+
+        self.finder = AStarFinder(diagonal_movement=True)  # 路径查找器
 
     def _inflate_obstacles(self, binary_occ, robot_radius, resolution):
         """
@@ -298,8 +302,7 @@ class PathPlanner:
         Samples a random traversable point from the grid with higher probability near edges,
         and returns its world coordinate.
         """
-        traversable_points_yx = np.argwhere(self.pathfinding_matrix.T == 1)
-        if traversable_points_yx.size == 0:
+        if self.free_nodes_yx.size == 0:
             logger.warning("[PathPlanner] No traversable points found to sample from.")
             return []
 
@@ -308,10 +311,10 @@ class PathPlanner:
         # 计算每个点距离边界的最小距离（越靠边，值越小）
         distances_to_edge = np.min(
             np.stack([
-                traversable_points_yx[:, 0],              # distance to top
-                H - 1 - traversable_points_yx[:, 0],      # distance to bottom
-                traversable_points_yx[:, 1],              # distance to left
-                W - 1 - traversable_points_yx[:, 1]       # distance to right
+                self.free_nodes_yx[:, 0],              # distance to top
+                H - 1 - self.free_nodes_yx[:, 0],      # distance to bottom
+                self.free_nodes_yx[:, 1],              # distance to left
+                W - 1 - self.free_nodes_yx[:, 1]       # distance to right
             ], axis=1),
             axis=1
         )
@@ -327,8 +330,8 @@ class PathPlanner:
         weights = weights / np.sum(weights)
 
         # 按权重采样一个索引
-        random_index = np.random.choice(len(traversable_points_yx), p=weights)
-        random_grid_point_yx = traversable_points_yx[random_index]
+        random_index = np.random.choice(len(self.free_nodes_yx), p=weights)
+        random_grid_point_yx = self.free_nodes_yx[random_index]
         random_grid_point = (random_grid_point_yx[1], random_grid_point_yx[0])
 
         return self.grid_to_world(random_grid_point)
@@ -360,21 +363,20 @@ class PathPlanner:
         goal_node = self.grid.node(goal_grid[0], goal_grid[1])
         if not goal_node.walkable:
             logger.warning(f"[PathPlanner] Original goal {goal_grid} is on an obstacle or out of bounds. Snapping to nearest walkable node.")
-            free_nodes_yx = np.argwhere(self.pathfinding_matrix.T == 1)
-            if free_nodes_yx.size == 0:
+            if self.free_nodes_yx.size == 0:
                 logger.error("[PathPlanner] No walkable nodes found on the entire map.")
                 return []
             goal_grid_yx = np.array([goal_grid[1], goal_grid[0]])
-            distances = np.linalg.norm(free_nodes_yx - goal_grid_yx, axis=1)
-            snapped_yx = free_nodes_yx[np.argmin(distances)]
+            distances = np.linalg.norm(self.free_nodes_yx - goal_grid_yx, axis=1)
+
+            snapped_yx = self.free_nodes_yx[np.argmin(distances)]
             goal_grid = (snapped_yx[1], snapped_yx[0])
             logger.info(f"[PathPlanner] Snapped goal to {goal_grid}.")
 
         # A* 寻路
         start_node = self.grid.node(start_grid[0], start_grid[1])
         end_node = self.grid.node(goal_grid[0], goal_grid[1])
-        finder = AStarFinder(diagonal_movement=True)
-        path_grid_coords, _ = finder.find_path(start_node, end_node, self.grid)
+        path_grid_coords, _ = self.finder.find_path(start_node, end_node, self.grid)
 
         # 简化并转换回世界坐标
         if path_grid_coords:
@@ -385,6 +387,7 @@ class PathPlanner:
         else:
             logger.warning("[PathPlanner] A* failed to find a path.")
             return []
+
 
 # functions used in core for path refine
 def remaining_path(path, current_pose):
