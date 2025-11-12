@@ -13,4 +13,4 @@
 
 
 ### architecture (continuing)
-![Architecture Diagram](assets/Egent.jpg)
+![Architecture Diagram](assets/Agent.jpg)
