@@ -1,7 +1,7 @@
 import time
 from typing import Union, List, Optional, Dict, Any
 
-from EG_agent.planning.btpg.algos.llm_client.tools import goal_transfer_str
+from EG_agent.planning.btpg.utils.tools import goal_transfer_str
 from EG_agent.planning.btpg.algos.bt_planning.bt_planner_interface import BTPlannerInterface
 from EG_agent.planning.btpg.behavior_tree.behavior_libs.ExecBehaviorLibrary import ExecBehaviorLibrary
 from EG_agent.planning.btpg import BehaviorTree

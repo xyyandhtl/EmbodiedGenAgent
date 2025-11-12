@@ -15,8 +15,8 @@ import open3d as o3d
 from dynaconf import Dynaconf
 
 # Local module imports
-from EG_agent.vlmap.utils.types import Observation
-from EG_agent.vlmap.utils.pcd_utils import init_pcd_denoise_dbscan
+from EG_agent.vlmap.dualmap.types import Observation
+from EG_agent.vlmap.dualmap.pcd_utils import init_pcd_denoise_dbscan
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)

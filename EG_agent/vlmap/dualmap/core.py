@@ -13,18 +13,18 @@ from collections import deque
 from scipy.spatial.transform import Rotation as R
 from dynaconf import Dynaconf, LazySettings
 
-from EG_agent.vlmap.utils.types import DataInput, GoalMode
-from EG_agent.vlmap.utils.object_detector import Detector
-from EG_agent.vlmap.utils.local_map_manager import LocalMapManager
-from EG_agent.vlmap.utils.global_map_manager import GlobalMapManager
-from EG_agent.vlmap.utils.visualizer import ReRunVisualizer
-from EG_agent.vlmap.utils.time_utils import (
+from EG_agent.vlmap.dualmap.types import DataInput, GoalMode
+from EG_agent.vlmap.dualmap.object_detector import Detector
+from EG_agent.vlmap.dualmap.local_map_manager import LocalMapManager
+from EG_agent.vlmap.dualmap.global_map_manager import GlobalMapManager
+from EG_agent.vlmap.dualmap.visualizer import ReRunVisualizer
+from EG_agent.vlmap.dualmap.time_utils import (
     timing_context,
     print_timing_results,
     save_timing_results,
     get_map_memory_usage,
 )
-from EG_agent.vlmap.utils.navigation_helper import (
+from EG_agent.vlmap.dualmap.navigation_helper import (
     remaining_path,
     remove_sharp_turns_3d,
 )
@@ -259,8 +259,6 @@ class Dualmap:
     # Threading Control
     # ===============================================
     def start_threading(self):
-        # Parallel for mapping thread
-        # if self.cfg.use_parallel:
         self.detector_thread = threading.Thread(
             target=self.run_detector_thread, daemon=True
         )
@@ -293,7 +291,9 @@ class Dualmap:
 
     def stop_threading(self):
         self.stop_thread = True
-        self.goal_event.set()  # 唤醒线程以退出
+        self.layout_event.set()
+        self.goal_event.set()
+        self.vis_map_event.set()
         # Join detector thread
         if self.detector_thread and self.detector_thread.is_alive():
             self.detector_thread.join()

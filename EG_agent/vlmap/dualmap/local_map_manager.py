@@ -9,10 +9,10 @@ import open3d as o3d
 import torch
 import torch.nn.functional as F
 
-from EG_agent.vlmap.utils.types import Observation, GlobalObservation, GoalMode
-from EG_agent.vlmap.utils.object import LocalObject, LocalObjStatus
-from EG_agent.vlmap.utils.base_map_manager import BaseMapManager
-from EG_agent.vlmap.utils.navigation_helper import PathPlanner
+from EG_agent.vlmap.dualmap.types import Observation, GlobalObservation, GoalMode
+from EG_agent.vlmap.dualmap.object import LocalObject, LocalObjStatus
+from EG_agent.vlmap.dualmap.base_map_manager import BaseMapManager
+from EG_agent.vlmap.dualmap.navigation_helper import PathPlanner
 
 # Set up the module-level logger
 logger = logging.getLogger(__name__)

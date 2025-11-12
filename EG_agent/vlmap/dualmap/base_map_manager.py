@@ -1,8 +1,8 @@
 from dynaconf import Dynaconf
 
-from EG_agent.vlmap.utils.tracker import Tracker
-from EG_agent.vlmap.utils.visualizer import ReRunVisualizer
-from EG_agent.vlmap.utils.types import Observation, GoalMode, ObjectClasses
+from EG_agent.vlmap.dualmap.tracker import Tracker
+from EG_agent.vlmap.dualmap.visualizer import ReRunVisualizer
+from EG_agent.vlmap.dualmap.types import Observation, GoalMode, ObjectClasses
 
 class BaseMapManager:
     def __init__(

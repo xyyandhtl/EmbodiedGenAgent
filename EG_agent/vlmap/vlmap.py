@@ -7,8 +7,8 @@ from scipy.spatial.transform import Rotation as R
 
 from EG_agent.system.module_path import AGENT_VLMAP_PATH
 from EG_agent.vlmap.dualmap.core import Dualmap
-from EG_agent.vlmap.utils.logging_helper import setup_logging
-from EG_agent.vlmap.utils.types import GoalMode, DataInput
+from EG_agent.vlmap.dualmap.logging_helper import setup_logging
+from EG_agent.vlmap.dualmap.types import GoalMode, DataInput
 
 class VLMapNav:
     """

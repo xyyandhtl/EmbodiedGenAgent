@@ -22,7 +22,7 @@ from scipy.spatial.transform import Rotation as _R
 
 from EG_agent.system.envs.base_env import BaseAgentEnv
 from EG_agent.system.module_path import AGENT_ENV_PATH
-from EG_agent.vlmap.utils.ros_publisher import ROSPublisher
+from EG_agent.vlmap.dualmap.ros_publisher import ROSPublisher
 
 import typing
 if typing.TYPE_CHECKING:
