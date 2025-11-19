@@ -15,7 +15,8 @@ FireHydrant               # 消防栓
 SignBoard                 # 标志牌
 Graffiti                  # 涂鸦
 Mailbox                   # 邮箱
-ShopCanopy                # 店铺遮篷
+Shop                      # 店铺遮篷
+Restaurant                # 餐馆
 ConstructionBarrier       # 施工围栏
 TrashBag                  # 垃圾袋
 Mailbox                   # 信箱

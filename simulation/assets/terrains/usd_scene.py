@@ -87,7 +87,7 @@ ASSET_DICT = {
         spawn=UsdFileCfg(
             visible=True,
             usd_path=f"{SIMULATION_DATA_DIR}/terrains/Road/scene.usdc",
-            scale=(0.05, 0.05, 0.05),
+            scale=(0.06, 0.06, 0.06),
             # usd_path=f"simulation/data/terrains/sketchfab/Barranco_Bar__PS1_EnvironmentOptimizedMobile.usdz",
             # usd_path=f"simulation/data/terrains/sketchfab/Popular_Streets_of_Lima__PS1_Environment.usdz",
             # usd_path=f"simulation/data/terrains/sketchfab/Full_Gameready_City_Buildings_retextured.usdz",
@@ -126,6 +126,7 @@ ASSET_DICT = {
         spawn=UsdFileCfg(
             visible=True,
             usd_path=f"{SIMULATION_DATA_DIR}/terrains/City/city.usdz",
+            scale=(0.8, 0.8, 0.8),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0)),
     ),

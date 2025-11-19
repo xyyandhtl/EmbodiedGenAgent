@@ -183,12 +183,109 @@ QStatusBar QLabel {
            <property name="placeholderText">
             <string>输入指令...</string>
            </property>
+           <property name="minimumHeight">
+            <number>40</number>
+           </property>
+           <property name="styleSheet">
+            <string>
+             QLineEdit {
+                 font: 14px "Microsoft YaHei";
+                 background: #1f242c;
+                 color: #e6e6e6;
+                 border: 1px solid #555;
+                 border-radius: 4px;
+                 padding: 4px 6px;
+                 selection-background-color: #3d7cff;
+                 selection-color: white;
+             }
+            </string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QPushButton" name="sendInstructionBtn">
            <property name="text">
             <string>发送</string>
+           </property>
+           <property name="minimumHeight">
+            <number>40</number>
+           </property>
+           <property name="styleSheet">
+            <string>
+             QPushButton {
+                 font: 14px "Microsoft YaHei";
+                 background: #3d7cff;
+                 color: white;
+                 border-radius: 6px;
+                 padding: 6px 12px;
+             }
+             QPushButton:hover { background: #5b93ff; }
+             QPushButton:pressed { background: #2d68dd; }
+             QPushButton:disabled {
+                 background: #3d7cff55;
+                 color: #dddddd88;
+             }
+            </string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="hboxInstructionDisplay">
+         <item>
+          <widget class="QLabel" name="instructionLabel">
+           <property name="text">
+            <string>当前指令</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignLeft</set>
+           </property>
+           <property name="styleSheet">
+            <string>
+             QLabel {
+                 font: bold 14px "Microsoft YaHei";
+                 color: #ffcc00;
+                 background-color: #2a2f38;
+                 border: 1px solid #4a4f57;
+                 border-radius: 6px;
+                 padding: 8px;
+             }
+            </string>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+             <horstretch>1</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="instructionValueLabel">
+           <property name="text">
+            <string>无</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignLeft</set>
+           </property>
+           <property name="styleSheet">
+            <string>
+             QLabel {
+                 font: bold 14px "Microsoft YaHei";
+                 color: #ffffff;
+                 background-color: #2a2f38;
+                 border: 1px solid #4a4f57;
+                 border-radius: 6px;
+                 padding: 8px;
+             }
+            </string>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+             <horstretch>3</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
            </property>
           </widget>
          </item>

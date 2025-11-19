@@ -50,6 +50,7 @@ class IsaacLabSensorHandler:
         # Internal storage for an atomic snapshot of a frame (protected by data_lock)
         self._rgb: torch.Tensor | None = None
         self._depth: torch.Tensor | None = None
+        self._lidar: torch.Tensor | None = None
         self._pose_camera: tuple[torch.Tensor, torch.Tensor] | None = None
         self._pose_lidar: tuple[torch.Tensor, torch.Tensor] | None = None
         self._pose_agent: tuple[torch.Tensor, torch.Tensor] | None = None

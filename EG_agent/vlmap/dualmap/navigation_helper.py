@@ -1,15 +1,8 @@
 import cv2
-import random
 import logging
-
 import numpy as np
 import open3d as o3d
-import networkx as nx
-import matplotlib.pyplot as plt
 
-from scipy.spatial import Voronoi, KDTree
-from scipy.ndimage import binary_erosion
-from dynaconf import Dynaconf
 from scipy.ndimage import binary_dilation
 from pathfinding.core.grid import Grid
 from pathfinding.finder.a_star import AStarFinder
@@ -54,8 +47,9 @@ class LayoutMap:
         Create Occupancy Map from point cloud data.
         """
         points = np.asarray(self.point_cloud.points)
-        # 只保留 z 在 0.15 ~ 0.65 的点
+        # 只保留 z 在 current_z - 0.45 ~ current_z + 0.05 的点
         points = points[(points[:, 2] > current_z - 0.45) & (points[:, 2] < current_z + 0.05)]
+        # points = points[points[:, 2] < current_z + 0.05]
         xy_points = points[:, :2]
         x_min, y_min = np.min(xy_points, axis=0)
         x_max, y_max = np.max(xy_points, axis=0)
@@ -127,6 +121,7 @@ class LayoutMap:
         points = np.asarray(partial_pcd.points)
         current_z = center_world[2]
         points = points[(points[:, 2] > current_z - 0.45) & (points[:, 2] < current_z + 0.05)]
+        # points = points[points[:, 2] < current_z + 0.05]
         if points.shape[0] > 0:
             xy_points = points[:, :2]
             new_occ, _, _ = np.histogram2d(
@@ -166,6 +161,8 @@ class LayoutMap:
         # threshold = self.calculate_threshold()
         # print(f"[LayoutMap] Binarization threshold: {threshold}")
         binary_map = (self.occ_map > threshold).astype(np.uint8)
+        # undiscovered area and occupied area
+        # binary_map = ((self.occ_map == 0) | (self.occ_map > threshold)).astype(np.uint8)
 
         # Remove small connected components
         if remove_small_components:

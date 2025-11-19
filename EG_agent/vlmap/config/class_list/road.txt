@@ -1,10 +1,5 @@
 Building
-Apartment
-Window
-Balcony
-Door
 Awning
-AirConditioner
 Signboard
 Billboard
 Shop
@@ -19,11 +14,10 @@ Streetlight
 ElectricPole
 FireHydrant
 TrafficLight
-TrafficSign
-BusStop
 TrafficCone
 TrafficBarrier
 ConstructionSign
+Flag
 Tree
 Bush
 Bench

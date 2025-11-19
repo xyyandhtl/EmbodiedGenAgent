@@ -331,16 +331,6 @@ class GlobalMapManager(BaseMapManager):
         if not self.update_path_planner():
             return []
 
-        # 2. Determine goal in world coordinates
-        # goal_world = None
-        # if goal_mode == GoalMode.POSE and goal_position is not None:
-        #     goal_world = goal_position
-        # elif goal_mode == GoalMode.RANDOM:
-        #     logger.info("[GlobalMapManager] Goal mode: RANDOM. Sampling a random goal.")
-        #     goal_world = self.path_planner.sample_random_world_goal()
-        # elif goal_mode == GoalMode.CLICK:
-        #     TODO
-
         # 3. Plan the path
         path = self.path_planner.plan_path(
             start_world=self._curr_pose[:3, 3],
