@@ -517,7 +517,6 @@ class Dualmap:
         Independent thread: path planning with low-frequency execution and switching.
         This thread covers the "find" and "walk" action.
         Currently, after goal_mode is set first time, path_plan is always running
-        TODO: check if goal_inview, reset_query_and_navigation()
         """
         loop_interval: float = self.cfg.path_planning_interval
 
@@ -582,7 +581,7 @@ class Dualmap:
         Independent thread: semantic map with low-frequency execution and switching.
         """
         while not self.stop_thread:
-            self.vis_map_event.wait(timeout=3.0)
+            self.vis_map_event.wait(timeout=2.0)
             self.vis_map_event.clear()  # 重置为未触发状态
             if self.stop_thread:
                 break

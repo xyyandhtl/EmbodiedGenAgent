@@ -204,7 +204,7 @@ class VLMapNav:
         kp_ang = 0.6
         kp_lin = 0.6
         min_lin_vel = 0.6
-        max_lin_vel = 2.5
+        max_lin_vel = 2.0
         max_ang_vel = 1.0
         yaw_error_threshold = 0.8
 

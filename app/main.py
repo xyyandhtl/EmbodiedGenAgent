@@ -165,6 +165,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if not text:
             return
         self.instructionEdit.clear()
+        if hasattr(self, "instructionValueLabel"):
+            self.instructionValueLabel.setText(text)  # Update the instructionValueLabel
         # 改为后台执行，避免 BT 生成/IO 阻塞 UI
         self._run_in_background("规划/执行指令", lambda: self.agent_system.feed_instruction(text))
 

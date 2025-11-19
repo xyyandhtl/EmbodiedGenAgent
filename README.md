@@ -73,7 +73,12 @@ Future Work:
 - [x] The frontier self-exploration navigator for `Find` action when target not found
 - [x] Conitune dev and opt the vlmap backend, adding support for additional range sensors beyond the depth camera
 - [ ] Real world deployment with a legged robot
-- [ ] Maybe not traditional behavior tree as the action framework, replace the whole reasoning and planning with the rebuilt llm-based mcp tools framework
+
+## Thinkings
+Consider 3 ways to achieve the open-ended instruction understanding and execution:
+- [x] Zero-shot method: The LLM parses the instruction once to produce goals, then a behavior tree drives the low-level controller to execute low-level actions.
+- [ ] Hierarchical coupling method: The LLM/VLM continuously interprets intent and spatial context, interacting via MCP to execute low-level execution.
+- [ ] End-to-end method: A VLA/VLN model directly maps visual–language input to actions, achieving unified perception, reasoning, and control.
 
 
 ## Acknowledgments
