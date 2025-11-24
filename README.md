@@ -38,6 +38,8 @@ And then in the GUI:
 >
 > **自主探索（可选）**: 点击`开始自主探索`按钮，智能体会引导机器人在环境中自主探索，探索过程中会持续更新地图。
 >
+> **保存地图（可选）**: 点击`保存地图`按钮，在运行过程中随时保存当前语义实体及抽象地图和点云地图。
+>
 > **载入地图（可选）**: 点击`载入地图`按钮，选择预建地图目录。
 >
 > **发送指令**: 在输入框中输入指令，点击`发送`按钮。任务目标会自动提取，请发送和场景有关的指令，若为场景无关指令，则可能会在对话窗口提示指令失败。解析和规划成功后，会在行为树窗口可视化执行行为树，机器人自动开始执行。
@@ -50,7 +52,7 @@ Some demo videos can be watched in [link](https://drive.google.com/drive/folders
 
 Some scene assets in the simulation: [link](https://drive.google.com/drive/folders/1SiGH3LGDxikIS0cmn6WFqujwO8liKcSE?usp=drive_link).
 
-Range sensor currently can be `lidar` or `depth`, settings are in [simulator_settings](simulation/settings.yaml) and [agent_settings](EG_agent/system/agent_system.yaml), and you can use rviz2 to visualize the map / nav status: ![rviz2](docs/assets/rviz.jpg)
+Range sensor currently can be `lidar` or `depth`, settings are in [simulator_settings](simulation/settings.yaml) and [agent_settings](EG_agent/system/agent_system.yaml), and also you can use rviz2 to visualize.
 
 
 ## Plans
@@ -89,3 +91,4 @@ Consider 3 ways to achieve the open-ended instruction understanding and executio
 - Go2W locomotion policy from: https://github.com/VisionTrekker/legged-loco
 - The mainly used scene assets from: https://sketchfab.com/
 - Livox lidar implementation in isaaclab from: https://github.com/aCodeDog/OmniPerception
+- Internal simple navigation planner from: https://github.com/brean/python-pathfinding

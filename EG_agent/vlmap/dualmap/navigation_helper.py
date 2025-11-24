@@ -385,30 +385,53 @@ class PathPlanner:
             logger.warning("[PathPlanner] A* failed to find a path.")
             return []
 
-
-# functions used in core for path refine
-def remaining_path(path, current_pose):
+def remaining_path(path, current_pose, passed_threshold=0.1):
     """
     Calculate the remaining path from the current pose along the global path.
 
     Parameters:
-    - global_path: List of 3D points [(x1, y1, z1), (x2, y2, z2), ...].
+    - path: List of 3D points [(x1, y1, z1), (x2, y2, z2), ...].
     - current_pose: 4x4 numpy array representing the current transformation matrix.
+    - passed_threshold: Distance threshold to consider a path point as "passed".
 
     Returns:
     - remaining_path: List of remaining 3D points [(x, y, z), ...].
     """
-    # Extract current position (translation part) from the transformation matrix
-    current_position = current_pose[:3, 3]
-    current_xy = current_position[:2]  # Ignore Z component
+    # 当前位姿的 XY 坐标
+    current_xy = current_pose[:2, 3]
 
     # Find the closest point in the global path to the current position (based on XY distance only)
     distances = [np.linalg.norm(np.array(point[:2]) - current_xy) for point in path]
     closest_idx = np.argmin(distances)
+    closest_dist = distances[closest_idx]
 
-    # Ensure we do not go backwards in the path
-    remaining_path = path[closest_idx:]
-    return remaining_path
+    # 处理路径开头
+    if closest_idx == 0:
+        if closest_dist < passed_threshold:
+            return path[1:]
+        else:
+            return path
+    # 处理路径末尾
+    if closest_idx == len(path) - 1:
+        return path[closest_idx:]
+
+    # 取最近点前后点用于判断是否已经经过
+    prev_point = np.array(path[closest_idx - 1][:2])
+    closest_point = np.array(path[closest_idx][:2])
+    # next_point = np.array(path[closest_idx + 1][:2])
+
+    vec_prev = closest_point - prev_point
+    vec_to_current = current_xy - prev_point
+    vec_prev_norm = np.linalg.norm(vec_prev)
+
+    proj_length = np.dot(vec_to_current, vec_prev) / vec_prev_norm
+    # 已经过最近点 或 距离很近
+    if proj_length > vec_prev_norm or closest_dist < passed_threshold:
+        remaining_idx = closest_idx + 1
+    else:
+        remaining_idx = closest_idx
+
+    return path[remaining_idx:]
 
 def angle_between_points_3d(p1, p2, p3):
     """

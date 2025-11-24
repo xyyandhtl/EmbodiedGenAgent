@@ -860,5 +860,7 @@ class Dualmap:
             logger.debug("[Core] No path available for next waypoint computation.")
             return None
         remain_path = remaining_path(cur_path, self.curr_pose)
-        return remain_path[min(2, len(remain_path)-1)]
-
+        if not remain_path:
+            logger.debug("[Core] No remaining path after current pose.")
+            return None
+        return remain_path[min(1, len(remain_path)-1)]

@@ -2,7 +2,7 @@
 # ROBOT CONFIG
 # ============================================================
 # Robot radius, for collision detection in path planning
-robot_radius: 0.35
+robot_radius: 0.5
 
 # ============================================================
 # CAMERA CONFIG
@@ -27,6 +27,7 @@ intrinsic:
 # dataset_name: 'garden'
 # dataset_name: 'factory'
 dataset_name: 'city'
+# dataset_name: 'supermarket'
 
 # ============================================================
 # OUTPUT CONFIG
