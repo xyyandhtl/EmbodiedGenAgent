@@ -157,12 +157,10 @@ class LayoutMap:
             return None
         
         # Binarization
-        threshold = 1   # TODO: a hyperparameter
+        threshold = self.cfg.occ_thr   # TODO: a hyperparameter
         # threshold = self.calculate_threshold()
         # print(f"[LayoutMap] Binarization threshold: {threshold}")
         binary_map = (self.occ_map > threshold).astype(np.uint8)
-        # undiscovered area and occupied area
-        # binary_map = ((self.occ_map == 0) | (self.occ_map > threshold)).astype(np.uint8)
 
         # Remove small connected components
         if remove_small_components:

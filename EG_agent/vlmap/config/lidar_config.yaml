@@ -1,7 +1,7 @@
 # ============================================================
 # RANGE SENSOR CONFIG
 # ============================================================
-range_sensor: "lidar"  
+range_sensor: "lidar"
 
 lidar_extrinsics:
   - [0, -1, 0, 0]
@@ -10,7 +10,7 @@ lidar_extrinsics:
   - [0, 0, 0, 1]
 
 # ============================================================
-# SemMap COnfig
+# SemMap Config
 # ============================================================
 resolution: 0.05
 boundary: True
@@ -23,6 +23,7 @@ sem_height: 30.0
 layout_voxel_size: 0.1
 layout_update_radius: 20.0
 occ_update_radius: 8.0
+occ_thr: 1
 
 # small mask filtering threshold
 small_mask_th: 6
