@@ -1,4 +1,4 @@
-range_sensor: "depth"
+range_sensor: "lidar"
 
 ros:
   use_compressed_topic: false
@@ -19,6 +19,10 @@ camera:
   fov_x_deg: 90.0
   aspect: 1.3333333333
   near_dist: 2.0
+
+lidar:
+  min_thr: 0.5
+  max_thr: 20.0
 
 use_rviz: true
 

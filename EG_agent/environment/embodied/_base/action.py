@@ -3,12 +3,13 @@ import time
 from EG_agent.planning.btpg.behavior_tree.base_nodes import Action
 from EG_agent.planning.btpg.behavior_tree import Status
 
-from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
+# from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
+from EG_agent.system.envs.real_env import RealEnv
 
 class EmbodiedAction(Action):
     can_be_expanded = True
     num_args = 1
-    agent_env: IsaacsimEnv = None  # type: ignore
+    agent_env: RealEnv = None  # type: ignore
 
     @property
     def action_class_name(self):

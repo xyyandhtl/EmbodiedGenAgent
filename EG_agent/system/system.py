@@ -12,7 +12,8 @@ from EG_agent.planning.bt_planner import BTGenerator
 from EG_agent.planning.btpg import BehaviorTree
 from EG_agent.vlmap.vlmap import VLMapNav
 from EG_agent.vlmap.dualmap.core import Dualmap
-from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
+# from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
+from EG_agent.system.envs.real_env import RealEnv
 from EG_agent.system.module_path import AGENT_SYSTEM_PATH
 
 
@@ -54,7 +55,7 @@ class EGAgentSystem:
         self.dm: Dualmap = None
 
         # Agent-Env 部署环境
-        self.agent_env = IsaacsimEnv()
+        self.agent_env = RealEnv()
         self.agent_env.set_vlmap_backend(self.vlmap_backend)
 
         # 运行控制
@@ -318,7 +319,7 @@ class EGAgentSystem:
             self._conv_warn("VLMap后台未创建，无法执行行为树，请先点击右侧“创建后台”。")
             return
 
-        # 3. 将 BT 与 IsaacsimEnv环境交互层 绑定
+        # 3. 将 BT 与 AgentEnv交互层 绑定
         # self.agent_env.reset()
         self.agent_env.bind_bt(self.bt)
         self._log_info("[system] [feed_instruction] Binding BT to agent_env.")
