@@ -33,7 +33,7 @@ min_points_threshold: 3
 
 # pcd params
 downsample_voxel_size: 0.05
-dbscan_remove_noise: False
-dbscan_eps: 0.1
-dbscan_min_points: 10
+dbscan_remove_noise: True
+dbscan_eps: 0.2
+dbscan_min_points: 3
 pcd_sample_ratio: 1.0

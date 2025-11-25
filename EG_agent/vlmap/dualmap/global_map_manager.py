@@ -74,7 +74,6 @@ class GlobalMapManager(BaseMapManager):
         self.traversable_map_metadata = {}
 
         # Object classes
-        # --- 加载指定的 要识别的 全部物体的 类别text ---
         classes_path = cfg.yolo.given_classes_path
         logger.info(f"[Detector][Init] Using given classes, path:{classes_path}")
 
@@ -88,7 +87,8 @@ class GlobalMapManager(BaseMapManager):
         self._curr_pose: np.ndarray = None  # Real-time pose
         self._nav_path: list = []
         self._traj_path = deque(maxlen=60)
-        self._traj_path_lock = threading.Lock()  # Add a lock for thread-safe access to _traj_path
+        self._traj_path_lock = threading.Lock()
+        self._traj_count = 0
         self.goal_grid: tuple | None = None
 
         self.layout_initialized = False
@@ -748,10 +748,12 @@ class GlobalMapManager(BaseMapManager):
         TODO: when to mark_traversable_map_dirty() and mark_semantic_map_dirty()
         """
         if curr_pose is not None:
+            self._traj_count += 1
             self._curr_pose = curr_pose
             self.mark_traversable_map_dirty()
-            with self._traj_path_lock:  # Use the lock to ensure thread-safe access
-                self._traj_path.append(curr_pose[:3, 3])
+            if self._traj_count % 5 == 0:
+                with self._traj_path_lock:
+                    self._traj_path.append(curr_pose[:3, 3])
             self.mark_semantic_map_dirty()
         if nav_path is not None:
             self._nav_path = nav_path

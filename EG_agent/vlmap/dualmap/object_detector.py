@@ -48,7 +48,6 @@ class Detector:
         """
 
         # Object classes
-        # --- 加载指定的 要识别的 全部物体的 类别text ---
         classes_path = cfg.yolo.given_classes_path
         logger.info(f"[Detector][Init] Using given classes, path:{classes_path}")
 
