@@ -173,10 +173,10 @@ class RealEnv(BaseAgentEnv):
         # Subs + sync
         if self.use_compressed_topic:
             self._rgb_sub = Subscriber(self.ros_node, CompressedImage, cfg.ros.topics.rgb)
-            self._depth_sub = Subscriber(self.ros_node, CompressedImage, cfg.ros.topics.depth)
+            # self._depth_sub = Subscriber(self.ros_node, CompressedImage, cfg.ros.topics.depth)
         else:
             self._rgb_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.rgb)
-            self._depth_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.depth)
+            
 
         self._odom_sub = Subscriber(self.ros_node, Odometry, cfg.ros.topics.odom)
 
@@ -187,7 +187,8 @@ class RealEnv(BaseAgentEnv):
                 queue_size=10,
                 slop=float(cfg.ros.sync_threshold)
             )
-        elif self.range_sensor == "depth":  
+        elif self.range_sensor == "depth":
+            self._depth_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.depth)
             self._sync = ApproximateTimeSynchronizer(
                 [self._rgb_sub, self._depth_sub, self._odom_sub],
                 queue_size=10,
@@ -232,6 +233,13 @@ class RealEnv(BaseAgentEnv):
                                       field_names=["x", "y", "z"], 
                                       skip_nans=True).tolist())
             lidar_points = lidar_points[_np.isfinite(lidar_points).all(1)]
+
+            min_thr = float(self._cfg.lidar.min_thr)
+            max_thr = float(self._cfg.lidar.max_thr)
+
+            x_mask = (_np.abs(lidar_points[:, 0]) >= min_thr) & (_np.abs(lidar_points[:, 0]) <= max_thr)
+            y_mask = (_np.abs(lidar_points[:, 1]) >= min_thr) & (_np.abs(lidar_points[:, 1]) <= max_thr)
+            lidar_points = lidar_points[x_mask & y_mask]
             # print("Lidar points shape:", lidar_points)
             depth_img = None
         elif self.range_sensor == "depth":
@@ -405,9 +413,10 @@ class RealEnv(BaseAgentEnv):
             # if use vlmap internal nav system
             cur_cmd_vel = self.get_cur_cmd_vel()
             self._handle_cmd_vel(cur_cmd_vel, verbose)
-        else:
+        elif self.get_cur_target():
             # if use a external nav system
             goal_pose = tuple(self.get_cur_target() + [1, 0, 0, 0])
+            print(f"[RealEnv] walk action: {goal_pose}")
             if self.use_action_client or goal_pose != self.cur_goal_pose:
                 self._handle_nav_pose(goal_pose, verbose)
                 self.cur_goal_pose = goal_pose

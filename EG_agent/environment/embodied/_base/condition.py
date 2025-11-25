@@ -1,12 +1,13 @@
 from EG_agent.planning.btpg.behavior_tree.base_nodes import Condition
 from EG_agent.planning.btpg.behavior_tree import Status
 
-from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
+# from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
+from EG_agent.system.envs.real_env import RealEnv
 
 class EmbodiedCondition(Condition):
     can_be_expanded = True
     num_args = 1
-    agent_env: IsaacsimEnv = None  # type: ignore
+    agent_env: RealEnv = None  # type: ignore
 
     def update(self) -> Status:
         if self.name in self.agent_env.condition_set:

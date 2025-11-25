@@ -9,8 +9,6 @@ import traceback
 # 正式运行
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from EG_agent.system.system import EGAgentSystem
-# 仅测试界面
-# from system_example import EGAgentSystem
 
 APP_ROOT = os.path.abspath(os.path.dirname(__file__))
 UI_PATH = os.path.join(APP_ROOT, "window.ui")
@@ -152,7 +150,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ----------------- UI Events -----------------
     def on_start(self):
-        self.agent_system.start()  # 启动 EGAgentSystem 的主线程 _run_loop
+        self.agent_system.start()
         self.update_statusbar()
 
     def on_stop(self):

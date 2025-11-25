@@ -1,4 +1,3 @@
-import time
 import os
 import logging
 import gzip
@@ -28,47 +27,7 @@ from EG_agent.vlmap.dualmap.pcd_utils import (
 from EG_agent.vlmap.dualmap.visualizer import ReRunVisualizer, visualize_result_rgb
 from EG_agent.vlmap.dualmap.time_utils import timing_context
 
-import pdb
-
-# Set up the module-level logger
 logger = logging.getLogger(__name__)
-
-
-class PoseLowPassFilter:
-    def __init__(self, alpha=0.95):
-        self.alpha = alpha
-        self.initialized = False
-        self.smoothed_translation = None
-        self.smoothed_rotation = None  # Rotation object (scipy)
-
-    def update(self, pose_mat: np.ndarray) -> np.ndarray:
-        """
-        input 4x4 pose matrix, output smoothed 4x4 pose matrix.
-        """
-        curr_translation = pose_mat[:3, 3]
-        curr_rotation = R.from_matrix(pose_mat[:3, :3])
-
-        if not self.initialized:
-            self.smoothed_translation = curr_translation
-            self.smoothed_rotation = curr_rotation
-            self.initialized = True
-        else:
-            # translation filtering（指数移动平均平滑）
-            self.smoothed_translation = (
-                self.alpha * self.smoothed_translation
-                + (1 - self.alpha) * curr_translation
-            )
-
-            # rotation using slerp（球面线性插值平滑）
-            slerp = Slerp(
-                [0, 1], R.concatenate([self.smoothed_rotation, curr_rotation])
-            )
-            self.smoothed_rotation = slerp(1 - self.alpha)
-
-        T_smooth = np.eye(4)
-        T_smooth[:3, :3] = self.smoothed_rotation.as_matrix()
-        T_smooth[:3, 3] = self.smoothed_translation
-        return T_smooth
 
 
 class Detector:
@@ -126,7 +85,7 @@ class Detector:
             self.visualizer = ReRunVisualizer()
              # for filtering the pose of follower camera for visualization
             # --- 创建 相机位姿 滤波器（平滑实时输入的位姿，避免 微小噪声 引起 可视化时的窗口抖动）
-            self.pose_filter_follower = PoseLowPassFilter(alpha=0.95)
+            # self.pose_filter_follower = PoseLowPassFilter(alpha=0.95)
 
         self.annotated_image = None
 
@@ -289,8 +248,6 @@ class Detector:
 
         # Check if layout_pointcloud needs to be updated
         if self.check_keyframe_for_layout_pcd():
-            start_time = time.time()
-
             # Generate current frame point cloud
             if self.cfg.range_sensor == "lidar":
                 current_pcd = self.lidar_to_point_cloud(sample_rate=2)
@@ -333,13 +290,8 @@ class Detector:
             self.prev_kf_data = self.curr_data.copy()
 
             # Update time and count
-            layout_time = time.time() - start_time
-            self.layout_time += layout_time
             self.layout_num += 1
-            logger.info(
-                f"[Detector][Layout] Layout update took {layout_time:.4f} seconds, "
-                f"total {self.layout_num} layouts with {after_downsample} points"
-            )
+            logger.info(f"total {self.layout_num} layouts with {after_downsample} points")
 
     def get_layout_pointcloud(self):
         """
@@ -744,6 +696,7 @@ class Detector:
                 target=self.process_masks, args=(filtered_detections.mask,)
             )
             cluster_thread.start()
+            # self.process_masks(filtered_detections.mask)
             # 2.2 主线程中：使用 CLIP 对每个实例分割物体提取 图像、文本特征
             with timing_context("CLIP", self):
                 # 裁剪后的 物体图像、对应图像特征、对应类别文本特征
@@ -758,7 +711,6 @@ class Detector:
                         self.obj_classes.get_classes_arr(),
                     )
                 )
-
             cluster_thread.join()
 
         results = {
@@ -791,25 +743,21 @@ class Detector:
             refined_points_list: A list of refined 3D points for each mask.
             refined_colors_list: A list of refined colors corresponding to the points for each mask.
         """
-
         with timing_context("Create Object Pointcloud", self):
             N, _, _ = masks.shape
 
             # Process based on range sensor type
             if self.cfg.range_sensor == "lidar":
                 lidar_points = self.curr_data.lidar
+                refined_points_list = []
+                refined_colors_list = []
+
                 mask_indices, mask_colors = map_rgb_mask_to_lidar_points(
                     lidar_points,
                     self.curr_data.color,
                     self.curr_data.intrinsics,
                     masks,
                 )
-                # print(f"masks: {masks.shape}/{masks}")
-                # print(f"lidar_points: {lidar_points.shape}")
-                # print(f"mask_indices: {len(mask_indices)}/{mask_indices}")
-                # print(f"mask_colors: {len(mask_colors)}/{mask_colors}")
-                refined_points_list = []
-                refined_colors_list = []
 
                 for indices, colors in zip(mask_indices, mask_colors):
                     if len(indices) < self.cfg.min_points_threshold:
@@ -818,6 +766,13 @@ class Detector:
                         continue
 
                     points = lidar_points[indices]
+                    sample_ratio = float(self.cfg.pcd_sample_ratio)        
+                    if sample_ratio < 1.0:
+                        num_points = points.shape[0]
+                        sample_count = int(num_points * sample_ratio)
+                        sample_indices = torch.randperm(num_points)[:sample_count]
+                        points = points[sample_indices]
+                        colors = colors[sample_indices]
 
                     if self.cfg.dbscan_remove_noise:
                         refined_points, refined_colors = refine_points_with_clustering(
@@ -890,8 +845,8 @@ class Detector:
                         refined_points_list.append(refined_points)
                         refined_colors_list.append(refined_colors)
                     else:
-                        refined_points_list.append(downsampled_points)
-                        refined_colors_list.append(downsampled_colors)
+                        refined_points_list.append(downsampled_points.cpu().numpy())
+                        refined_colors_list.append(downsampled_colors.cpu().numpy())
 
             else:
                 raise NotImplementedError(f"Unknown range sensor type: {self.cfg.range_sensor}")
@@ -1318,9 +1273,9 @@ class Detector:
         )
 
         # Using for visualization
-        pose_smooth = self.pose_filter_follower.update(pose_new_2)
-        translation = pose_smooth[:3, 3].tolist()
-        axis, angle = self.visualizer.rotation_matrix_to_axis_angle(pose_smooth[:3, :3])
+        # pose_smooth = self.pose_filter_follower.update(pose_new_2)
+        translation = pose_new_2[:3, 3].tolist()
+        axis, angle = self.visualizer.rotation_matrix_to_axis_angle(pose_new_2[:3, :3])
 
         self.visualizer.log(
             "world/follower_camera_2",
@@ -1609,6 +1564,9 @@ class Detector:
         return image_crops, image_feats, text_feats
 
 
+# ===============================================
+# Auxiliary class/functions
+# ===============================================
 class Filter:
     def __init__(
         self,

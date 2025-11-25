@@ -55,13 +55,13 @@ class VelocitySceneCfg(InteractiveSceneCfg):
         prim_path="/World/skyLight",
         spawn=sim_utils.DomeLightCfg(color=(0.2, 0.2, 0.3), intensity=10000.0),
     )
-    # cylinder_light1 = AssetBaseCfg(
-    #     prim_path="/World/cylinderLight1",
-    #     spawn=sim_utils.CylinderLightCfg(
-    #         length=100, radius=0.3, treat_as_line=False, intensity=10000.0
-    #     ),
-    # )
-    # cylinder_light1.init_state.pos = (0, 0, 2.0)
+    cylinder_light1 = AssetBaseCfg(
+        prim_path="/World/cylinderLight1",
+        spawn=sim_utils.CylinderLightCfg(
+            length=100, radius=0.3, treat_as_line=False, intensity=10000.0
+        ),
+    )
+    cylinder_light1.init_state.pos = (0, 0, 2.0)
     # cylinder_light2 = AssetBaseCfg(
     #     prim_path="/World/cylinderLight2",
     #     spawn=sim_utils.CylinderLightCfg(
@@ -278,7 +278,7 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
 
         # Viewer settings
-        self.viewer.eye = (0.0, -2.0, 5.0)
+        self.viewer.eye = (0.0, -2.0, 8.0)
         self.viewer.lookat = (0.0, 0.0, 0.0)
 
         # general settings

@@ -155,10 +155,9 @@ class IsaacsimEnv(BaseAgentEnv):
         # Subs + sync
         if self.use_compressed_topic:
             self._rgb_sub = Subscriber(self.ros_node, CompressedImage, cfg.ros.topics.rgb)
-            self._depth_sub = Subscriber(self.ros_node, CompressedImage, cfg.ros.topics.depth)
+            # self._depth_sub = Subscriber(self.ros_node, CompressedImage, cfg.ros.topics.depth)
         else:
             self._rgb_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.rgb)
-            self._depth_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.depth)
 
         self._odom_sub = Subscriber(self.ros_node, Odometry, cfg.ros.topics.odom)
 
@@ -169,7 +168,8 @@ class IsaacsimEnv(BaseAgentEnv):
                 queue_size=10,
                 slop=float(cfg.ros.sync_threshold)
             )
-        elif self.range_sensor == "depth":  
+        elif self.range_sensor == "depth":
+            self._depth_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.depth)
             self._sync = ApproximateTimeSynchronizer(
                 [self._rgb_sub, self._depth_sub, self._odom_sub],
                 queue_size=10,

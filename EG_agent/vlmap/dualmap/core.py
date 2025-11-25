@@ -127,6 +127,8 @@ class Dualmap:
         self.layout_event = threading.Event()
         self.goal_event = threading.Event()
         self.vis_map_event = threading.Event()
+        self.detector_event = threading.Event()
+        self.mapper_event = threading.Event()
 
     # ===============================================
     # Basic Utilities
@@ -371,7 +373,7 @@ class Dualmap:
         """
         while not self.stop_thread:
             self.layout_event.wait(timeout=2.0)
-            self.layout_event.clear()  # 重置为未触发状态
+            self.layout_event.clear()
             if self.stop_thread:
                 break
 
@@ -380,7 +382,8 @@ class Dualmap:
                 continue
             self.last_layout_kf_idx = data_input.idx
 
-            self.detector.run_layout_thread()
+            with timing_context("Update layout", self):
+                self.detector.run_layout_thread()
 
         logger.info("[Core] Layout thread exiting.")
 
@@ -395,6 +398,8 @@ class Dualmap:
         """
         # set_thread_priority()
         while not self.stop_thread:
+            self.detector_event.wait(timeout=0.1)
+            self.detector_event.clear()
             data_input: DataInput = self.input_queue[-1]
             if data_input.idx == self.last_detector_kf_idx:
                 continue
@@ -431,12 +436,15 @@ class Dualmap:
                 # Push to mapping queue
                 try:
                     self.detection_results_queue.put_nowait((curr_obs_list, self.curr_frame_id))
+                    # self.mapper_event.set()
                 except queue.Full:
                     logger.debug(
                         f"[Core] Mapping queue is full, skipping frame {self.curr_frame_id}."
                     )
 
             end_time = time.time()
+            logger.debug(f"[Core][DetectorThread] Processed frame {self.curr_frame_id} "
+                         f"in {end_time - start_time:.2f} seconds")
 
             # Set time sequence for visualizer
             if self.cfg.use_rerun:
@@ -445,25 +453,22 @@ class Dualmap:
                 self.visualizer.set_camera_info(data_input.intrinsics, data_input.pose)
                 self.visualizer.set_image(data_input.color)
 
-            logger.debug(f"[Core][DetectorThread] Processed frame {self.curr_frame_id} in {end_time - start_time:.2f} seconds")
-            if self.cfg.use_rerun:
                 elapsed_time = end_time - start_time
                 self.detector.visualize_time(elapsed_time)
 
                 # TODO: psutil seems not that correct
                 # mem_usage = self.get_total_memory_by_keyword()
-                # self.detector.visualize_memory(mem_usage)
+                # self.detector.visualize_memory(mem_usage) 
 
         logger.info("[Core] Detector thread exiting.")
 
     def run_mapping_thread(self):
         """
         Independent thread: Monitor detection results and process local mapping and global mapping.
-        建图线程（独立的后台线程）：
-            1. 不断地从 detection_results_queue 队列中取出观测结果
-            2. 将观测结果分别送入 LocalMapManager 和 GlobalMapManager，来更新局部和全局地图
         """
         while not self.stop_thread:
+            self.mapper_event.wait(timeout=0.3)
+            self.mapper_event.clear()
             try:
                 # Get detection results from queue
                 # logger.info(f"Queue length: {len(self.detection_results_queue)}")
@@ -479,10 +484,8 @@ class Dualmap:
             # Set time sequence for visualizer
             if self.cfg.use_rerun:
                 self.visualizer.set_time_sequence("frame", self.curr_frame_id)
-
-            # Detection Visualization
-            if self.cfg.use_rerun:
                 self.detector.visualize_detection()
+                
             self.detector.update_data()
 
             # Local Mapping
@@ -500,15 +503,6 @@ class Dualmap:
 
                 # if len(global_obs_list) > 0:
                 self.global_map_manager.mark_semantic_map_dirty()
-
-            # Get memory usage statistics of local and global maps
-            # mem_stats = get_map_memory_usage(self.local_map_manager.local_map,
-            #                                 self.global_map_manager.global_map)
-
-            # logger.info(
-            #     f"[Core][MappingThread] Memory Usage - Local Map: {mem_stats['local_map_mb']} MB, "
-            #     f"Global Map: {mem_stats['global_map_mb']} MB"
-            # )
 
         logger.info("[Core] Mapping thread exiting.")
 
@@ -528,16 +522,17 @@ class Dualmap:
                 break
             
             # 每次此低频loop先更新layout_map
-            if not self.global_map_manager.layout_initialized:
-                layout_pcd = self.detector.get_layout_pointcloud()
-                self.global_map_manager.set_layout_info(layout_pcd)
-            else:
-                update_radius = self.cfg.occ_update_radius
-                layout_pcd_partial = self.detector.get_partial_layout_pcd(
-                    self.global_map_manager._curr_pose, update_radius)
-                self.global_map_manager.set_layout_info(
-                    layout_pcd_partial, update_radius=update_radius)
-            self.global_map_manager.process_binary_map()
+            with timing_context("Occupancy Mapping", self):
+                if not self.global_map_manager.layout_initialized:
+                    layout_pcd = self.detector.get_layout_pointcloud()
+                    self.global_map_manager.set_layout_info(layout_pcd)
+                else:
+                    update_radius = self.cfg.occ_update_radius
+                    layout_pcd_partial = self.detector.get_partial_layout_pcd(
+                        self.global_map_manager._curr_pose, update_radius)
+                    self.global_map_manager.set_layout_info(
+                        layout_pcd_partial, update_radius=update_radius)
+                self.global_map_manager.process_binary_map()
 
             # 开始模式判断和路径规划
             if self.goal_pose:
@@ -860,5 +855,7 @@ class Dualmap:
             logger.debug("[Core] No path available for next waypoint computation.")
             return None
         remain_path = remaining_path(cur_path, self.curr_pose)
-        return remain_path[min(2, len(remain_path)-1)]
-
+        if not remain_path:
+            logger.debug("[Core] No remaining path after current pose.")
+            return None
+        return remain_path[min(1, len(remain_path)-1)]

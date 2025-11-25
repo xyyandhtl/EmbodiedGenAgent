@@ -15,7 +15,7 @@ policy_device: cuda:0
 # camera config
 publish_dt: 0.1
 enable_depth: True
-enable_lidar: False
+enable_lidar: True
 sensors:
   camera:
     width: 640

@@ -449,13 +449,26 @@ class GlobalMapManager(BaseMapManager):
         if self.semantic_map_dirty:
             self.semantic_map_dirty = False
 
-            if self.binary_occ is None:
+            if self.binary_occ is None or self._curr_pose is None:
                 self.cached_semantic_map = None
                 return
 
             x_edges, y_edges = self.layout_map.x_edges, self.layout_map.y_edges
-            min_coords = np.array([x_edges[0], y_edges[0]])
-            max_coords = np.array([x_edges[-1], y_edges[-1]])
+            if self.cfg.boundary:
+                # Calculate the update region based on _curr_pose and cfg.sem_width/sem_height
+                center = self._curr_pose[:3, 3][:2]  # Current position (x, y)
+                sem_width = float(self.cfg.sem_width)
+                sem_height = float(self.cfg.sem_height)
+                min_coords = np.array([center[0] - sem_width / 2, center[1] - sem_height / 2])
+                max_coords = np.array([center[0] + sem_width / 2, center[1] + sem_height / 2])
+
+                # Clip the update region to the layout map bounds
+                min_coords = np.maximum(min_coords, [x_edges[0], y_edges[0]])
+                max_coords = np.minimum(max_coords, [x_edges[-1], y_edges[-1]])
+            else:
+                min_coords = np.array([x_edges[0], y_edges[0]])
+                max_coords = np.array([x_edges[-1], y_edges[-1]])
+
             map_size = max_coords - min_coords
 
             width = int(map_size[0] / self.resolution * self.scale_factor) + self.padding
@@ -480,6 +493,14 @@ class GlobalMapManager(BaseMapManager):
                 y0 = y_edges[occ_indices[:, 1]]
                 x1 = x_edges[occ_indices[:, 0] + 1]
                 y1 = y_edges[occ_indices[:, 1] + 1]
+
+                if self.cfg.boundary:
+                    # Filter cells within the update region
+                    mask = (
+                        (x0 >= min_coords[0]) & (x1 <= max_coords[0]) &
+                        (y0 >= min_coords[1]) & (y1 <= max_coords[1])
+                    )
+                    x0, y0, x1, y1 = x0[mask], y0[mask], x1[mask], y1[mask]
 
                 # Vectorized conversion to image coordinates
                 p0s = np.stack([x0, y0, np.zeros_like(x0)], axis=-1)

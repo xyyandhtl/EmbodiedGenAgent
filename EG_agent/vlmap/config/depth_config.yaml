@@ -7,6 +7,9 @@ range_sensor: "depth"
 # SemMap COnfig
 # ============================================================
 resolution: 0.05
+boundary: True
+sem_width: 20.0
+sem_height: 20.0
 
 # ============================================================
 # PCD CONFIG
@@ -14,6 +17,7 @@ resolution: 0.05
 layout_voxel_size: 0.1
 layout_update_radius: 10.0
 occ_update_radius: 5.0
+occ_thr: 2
 
 # small mask filtering threshold
 small_mask_th: 50
