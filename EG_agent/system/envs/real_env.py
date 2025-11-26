@@ -42,7 +42,9 @@ class RealEnv(BaseAgentEnv):
         # Real-time visibility state: {goal_name_lower: bool}
         self.goal_inview = {}
         self.near_dist = 3.0  # meters
-        self.internal_nav = False
+
+        # Navigation settings
+        self.internal_nav = True
         self.use_action_client = False
 
         # Defer ROS init to configure_ros

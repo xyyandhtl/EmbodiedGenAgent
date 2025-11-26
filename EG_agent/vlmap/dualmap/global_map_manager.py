@@ -55,8 +55,6 @@ class GlobalMapManager(BaseMapManager):
         # pass to the local map manager for inquiry
         self.global_candidate_bbox = None
         self.global_candidate_score = 0.0
-        # for lost and found
-        # save the previous queried global obj uids
         self.ignore_global_obj_list = []
 
         self.best_candidate_name = None
@@ -74,7 +72,6 @@ class GlobalMapManager(BaseMapManager):
         self.traversable_map_metadata = {}
 
         # Object classes
-        # --- 加载指定的 要识别的 全部物体的 类别text ---
         classes_path = cfg.yolo.given_classes_path
         logger.info(f"[Detector][Init] Using given classes, path:{classes_path}")
 
@@ -88,8 +85,8 @@ class GlobalMapManager(BaseMapManager):
         self._curr_pose: np.ndarray = None  # Real-time pose
         self._nav_path: list = []
         self._traj_path = deque(maxlen=60)
-        self._traj_path_lock = threading.Lock()  # Add a lock for thread-safe access to _traj_path
-        self.goal_grid: tuple | None = None
+        self._traj_path_lock = threading.Lock()
+        self._traj_count = 0
 
         self.layout_initialized = False
 
@@ -109,6 +106,9 @@ class GlobalMapManager(BaseMapManager):
         except IOError:
             self.font = ImageFont.load_default()
 
+    # ===============================================
+    # Basic APIs
+    # ===============================================
     def has_global_map(self) -> bool:
         return len(self.global_map) > 0
 
@@ -280,67 +280,6 @@ class GlobalMapManager(BaseMapManager):
 
         logger.info(f"[GlobalMap] Successfully preloaded {len(self.global_map)} objects")
         self.is_initialized = True
-    
-    def read_json_files(self, directory):
-        data_records = {}
-
-        # Get all JSON files in directory
-        json_files = [f for f in os.listdir(directory) if f.endswith('.json')]
-
-        for json_file in json_files:
-            file_path = os.path.join(directory, json_file)
-            
-            # Read JSON file
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            # Store data
-            data_records[json_file] = data
-
-        return data_records
-    
-    def update_path_planner(self) -> bool:
-        if self.binary_occ is None or self.binary_occ.size == 0:
-            logger.warning("[GlobalMapManager][update_path_planner] Binary occ_map not available.")
-            return False
-
-        # logger.info(f"binary_occ_map shape: {self.binary_occ.shape}")
-        # logger.info(f"occ_map shape: {self.layout_map.occ_map.shape}")
-        self.path_planner = PathPlanner(
-            binary_occ_map=self.binary_occ,
-            map_origin=np.array([self.layout_map.x_edges[0], self.layout_map.y_edges[0]]),
-            map_resolution=self.layout_map.resolution,
-            robot_radius=self.cfg.robot_radius,
-            floor_height=self.cfg.floor_height
-        )
-        return True
-
-    def process_binary_map(self):
-        self.binary_occ = self.layout_map.process_binary_map()
-
-    def calculate_global_path(
-        self, goal_mode=GoalMode.POSE, goal_position=None
-    ) -> List:
-        """
-        Calculates the global path by creating and using a PathPlanner instance.
-        """
-        if goal_position is None:
-            logger.warning(f"[GlobalMapManager][calculate_global_path] No valid goal for {goal_mode}!")
-            return []
-        
-        if not self.update_path_planner():
-            return []
-
-        # 3. Plan the path
-        path = self.path_planner.plan_path(
-            start_world=self._curr_pose[:3, 3],
-            goal_world=goal_position
-        )
-
-        # 4. Update caches and return path
-        self.last_inflated_map = self.path_planner.inflated_map
-        self.mark_semantic_map_dirty()
-        return path
 
     def find_best_candidate_with_inquiry(self):
         """
@@ -413,20 +352,64 @@ class GlobalMapManager(BaseMapManager):
         # Output the best candidate and its similarity
         best_candidate_name = self.obj_classes.get_classes_arr()[best_candidate.class_id]
 
-        # logger.debug(f"[GlobalMap][Inquiry] We ignore {len(self.ignore_global_obj_list)} objects in this global query.")
-
         if self.best_candidate_name is None:
             self.best_candidate_name = best_candidate_name
 
         logger.debug(f"[GlobalMap][Inquiry] Memory Best Candidate '{self.best_candidate_name}'")
-
         # Set flag to the best candidate for visualization
         best_candidate.nav_goal = True
 
-        # input("Press any key to continue...")
-
         return best_candidate, best_similarity
+    
+    # ===============================================
+    # Path planner methods
+    # ===============================================
+    def update_path_planner(self) -> bool:
+        if self.binary_occ is None or self.binary_occ.size == 0:
+            logger.warning("[GlobalMapManager][update_path_planner] Binary occ_map not available.")
+            return False
 
+        # logger.info(f"binary_occ_map shape: {self.binary_occ.shape}")
+        # logger.info(f"occ_map shape: {self.layout_map.occ_map.shape}")
+        self.path_planner = PathPlanner(
+            binary_occ_map=self.binary_occ,
+            map_origin=np.array([self.layout_map.x_edges[0], self.layout_map.y_edges[0]]),
+            map_resolution=self.layout_map.resolution,
+            robot_radius=self.cfg.robot_radius,
+            floor_height=self.cfg.floor_height
+        )
+        return True
+
+    def process_binary_map(self):
+        self.binary_occ = self.layout_map.process_binary_map()
+
+    def calculate_global_path(
+        self, goal_mode=GoalMode.POSE, goal_position=None
+    ) -> List:
+        """
+        Calculates the global path by creating and using a PathPlanner instance.
+        """
+        if goal_position is None:
+            logger.warning(f"[GlobalMapManager][calculate_global_path] No valid goal for {goal_mode}!")
+            return []
+        
+        if not self.update_path_planner():
+            return []
+
+        # 3. Plan the path
+        path = self.path_planner.plan_path(
+            start_world=self._curr_pose[:3, 3],
+            goal_world=goal_position
+        )
+
+        # 4. Update caches and return path
+        self.last_inflated_map = self.path_planner.inflated_map
+        self.mark_semantic_map_dirty()
+        return path
+
+    # ===============================================
+    # Background Map Update Methods
+    # ===============================================
     def background_map_update(self):
         """Background thread worker that updates both semantic and traversable maps at low frequency."""
         if self.has_global_map():
@@ -637,6 +620,23 @@ class GlobalMapManager(BaseMapManager):
         points_img[:, 0] += padding // 2
         points_img[:, 1] = height - points_img[:, 1] - (padding // 2)
         return points_img
+    
+    def convert_pixel_to_world(self, pixel_x: int, pixel_y: int) -> list | None:
+        """将语义图的像素坐标转换为实际世界坐标"""
+        if self.cached_semantic_map is None:
+            return None
+        
+        metadata = self._cached_static_metadata
+        # 逆运算：像素坐标 -> 世界坐标
+        resolution = metadata["resolution"]
+        scale_factor = metadata["scale_factor"]
+        padding = metadata["padding"]
+        min_coords = metadata["min_coords"]
+        height = metadata["height"]
+
+        world_x = (pixel_x - padding // 2) * resolution / scale_factor + min_coords[0]
+        world_y = (height - pixel_y - padding // 2) * resolution / scale_factor + min_coords[1]
+        return [world_x, world_y, 0.0]  # 假设 Z 坐标为 0
 
     def _update_traversable_map_cache(self):
         """
@@ -748,10 +748,12 @@ class GlobalMapManager(BaseMapManager):
         TODO: when to mark_traversable_map_dirty() and mark_semantic_map_dirty()
         """
         if curr_pose is not None:
+            self._traj_count += 1
             self._curr_pose = curr_pose
             self.mark_traversable_map_dirty()
-            with self._traj_path_lock:  # Use the lock to ensure thread-safe access
-                self._traj_path.append(curr_pose[:3, 3])
+            if self._traj_count % 5 == 0:
+                with self._traj_path_lock:
+                    self._traj_path.append(curr_pose[:3, 3])
             self.mark_semantic_map_dirty()
         if nav_path is not None:
             self._nav_path = nav_path
@@ -760,6 +762,24 @@ class GlobalMapManager(BaseMapManager):
     # ===============================================
     # Rerun Visulization
     # ===============================================
+    def read_json_files(self, directory):
+        data_records = {}
+
+        # Get all JSON files in directory
+        json_files = [f for f in os.listdir(directory) if f.endswith('.json')]
+
+        for json_file in json_files:
+            file_path = os.path.join(directory, json_file)
+            
+            # Read JSON file
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Store data
+            data_records[json_file] = data
+
+        return data_records
+    
     def visualize_global_map(
         self
     ) -> None:

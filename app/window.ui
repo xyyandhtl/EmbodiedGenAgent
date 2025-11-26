@@ -617,7 +617,13 @@ QStatusBar QLabel {
           <property name="text"><string>停止当前任务</string></property>
          </widget>
         </item>
-
+        <item>
+         <widget class="QPushButton" name="navigateToTargetBtn">
+          <property name="text">
+           <string>导航至目标</string>
+          </property>
+         </widget>
+        </item>
         <item>
          <widget class="QPushButton" name="saveMapBtn">
           <property name="text"><string>保存地图</string></property>
