@@ -48,7 +48,7 @@ class LayoutMap:
         """
         points = np.asarray(self.point_cloud.points)
         # 只保留 z 在 current_z - 0.45 ~ current_z + 0.05 的点
-        points = points[(points[:, 2] > current_z - 0.45) & (points[:, 2] < current_z + 0.05)]
+        points = points[(points[:, 2] > current_z - 0.25) & (points[:, 2] < current_z + 0.25)]
         # points = points[points[:, 2] < current_z + 0.05]
         xy_points = points[:, :2]
         x_min, y_min = np.min(xy_points, axis=0)
@@ -120,7 +120,7 @@ class LayoutMap:
 
         points = np.asarray(partial_pcd.points)
         current_z = center_world[2]
-        points = points[(points[:, 2] > current_z - 0.45) & (points[:, 2] < current_z + 0.05)]
+        points = points[(points[:, 2] > current_z - 0.25) & (points[:, 2] < current_z + 0.25)]
         # points = points[points[:, 2] < current_z + 0.05]
         if points.shape[0] > 0:
             xy_points = points[:, :2]

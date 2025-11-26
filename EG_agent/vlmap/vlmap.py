@@ -54,11 +54,11 @@ class VLMapNav:
     # ===============================================
     def load_intrinsics(self, dataset_cfg):
         """Load camera intrinsics from config file."""
-        intrinsic_cfg = dataset_cfg.intrinsic
+        intrinsic_cfg = dataset_cfg.intrinsics
         fx, fy, cx, cy = intrinsic_cfg['fx'], intrinsic_cfg['fy'], intrinsic_cfg['cx'], intrinsic_cfg['cy']
         self.logger.info("[Main] Loaded intrinsics from config.")
         return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
-        
+
     def load_extrinsics(self, dataset_cfg, name='lidar_extrinsics'):
         """Load camera extrinsics from config file."""
         # extrinsic_cfg = dataset_cfg.get('extrinsics', None)

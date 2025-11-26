@@ -1,4 +1,4 @@
-range_sensor: "lidar"
+range_sensor: "depth"
 
 ros:
   use_compressed_topic: false
@@ -8,7 +8,8 @@ ros:
     rgb: /camera/rgb/image_raw
     depth: /camera/depth/image_raw
     lidar: /lidar/pointcloud
-    odom: /camera/pose
+    odom_camera: /camera/pose
+    odom_lidar: /lidar/pose
     camera_info: /camera_info
   pubs:
     cmd_vel: /cmd_vel

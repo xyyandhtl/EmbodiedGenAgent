@@ -152,8 +152,8 @@ class Dualmap:
             # ("Save Global Map?", self.cfg.save_global_map),
             # ("Use Preload Global Map?", self.cfg.preload_global_map),
             ("Use Rerun for Visualization?", self.cfg.use_rerun),
-            ("Camera Intrinsics", str(self.cfg.intrinsic)),
-            # ("Cmaera Extrinsics": str(self.cfg.extrinsics)},
+            ("Camera Intrinsics", str(self.cfg.intrinsics)),
+            ("Cmaera Extrinsics", str(self.cfg.extrinsics)),
             ("Range Sensor", str(self.cfg.range_sensor)),
         ]
 

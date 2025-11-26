@@ -178,11 +178,9 @@ class RealEnv(BaseAgentEnv):
             # self._depth_sub = Subscriber(self.ros_node, CompressedImage, cfg.ros.topics.depth)
         else:
             self._rgb_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.rgb)
-            
-
-        self._odom_sub = Subscriber(self.ros_node, Odometry, cfg.ros.topics.odom)
 
         if self.range_sensor == "lidar":
+            self._odom_sub = Subscriber(self.ros_node, Odometry, cfg.ros.topics.odom_lidar)
             self._lidar_sub = Subscriber(self.ros_node, PointCloud2, cfg.ros.topics.lidar)
             self._sync = ApproximateTimeSynchronizer(
                 [self._rgb_sub, self._lidar_sub, self._odom_sub],
@@ -190,6 +188,7 @@ class RealEnv(BaseAgentEnv):
                 slop=float(cfg.ros.sync_threshold)
             )
         elif self.range_sensor == "depth":
+            self._odom_sub = Subscriber(self.ros_node, Odometry, cfg.ros.topics.odom_camera)
             self._depth_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.depth)
             self._sync = ApproximateTimeSynchronizer(
                 [self._rgb_sub, self._depth_sub, self._odom_sub],
