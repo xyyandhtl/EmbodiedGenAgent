@@ -186,7 +186,7 @@ class EGAgentSystem:
         self.agent_env.bt = None  # Clear any existing BT
         self.agent_env.is_explore = False
         self.dm.reset_query_and_navigation()
-        self._conv_info("自主探索已停止。")
+        self._conv_info("当前任务已停止，规划和导航已重置。")
         self._log_info("Agent system stop exploration requested.")
         self._emit("explore", False)
 
@@ -236,6 +236,18 @@ class EGAgentSystem:
     def get_cur_target_pos(self) -> list:
         """返回当前所有目标的全局位置 {target_name: [x,y,z]}"""
         return self.agent_env.get_cur_target_pos()
+    
+    def set_pixel_goal(self, pixel_x: int, pixel_y: int):
+        """设置导航目标为语义图上的像素坐标"""
+        # 将像素坐标转换为实际坐标
+        goal_pose = self.dm.global_map_manager.convert_pixel_to_world(pixel_x, pixel_y)
+        if goal_pose:
+            self._log_info(f"目标实际坐标: {goal_pose}")
+            self.dm.goal_pose = goal_pose
+            self.dm.goal_event.set()
+            self._conv_info(f"目标已设置为指定地图坐标: {goal_pose}")
+        else:
+            self._log_warn("无法转换像素坐标到实际坐标，请重试。")
 
     def _run_loop_bt(self):
         """BT Main loop: step environment, propagate events, and check completion."""

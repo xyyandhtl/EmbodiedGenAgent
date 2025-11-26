@@ -115,17 +115,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # --- 将 semanticMapLabel ==> semanticMapWidget，以实现用鼠标左键拖拽和滚轮平移 ---
         self.semanticMapWidget = ZoomableImageWidget()
-        # Assuming the placeholder is in a layout within its parent
         if self.semanticMapLabel.parentWidget().layout() is not None:
             layout = self.semanticMapLabel.parentWidget().layout()
             index = layout.indexOf(self.semanticMapLabel)
             layout.removeWidget(self.semanticMapLabel)
             self.semanticMapLabel.deleteLater()
             layout.insertWidget(index, self.semanticMapWidget)
-            # Set size policies to match what the QLabel might have had
             self.semanticMapWidget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         else:
-            print("Warning: Could not find layout to replace semantic map placeholder.")
+            print("Warning: Could not find layout to replace semantic map placeholder.")  
+        self.navigateToTargetBtn.clicked.connect(self.on_navigate_to_target)
+        self.semanticMapWidget.set_navigation_callback(self.on_navigation_target_selected)
 
         # --- 将 behaviorTreeLabel ==> behaviorTreeWidget，同样支持拖拽/缩放 ---
         self.behaviorTreeWidget = ZoomableImageWidget()
@@ -143,7 +143,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _set_controls_enabled(self, enabled: bool):
         # 控制右侧按钮启用状态（含探索按钮）
-        for name in ("startBtn", "stopBtn", "startExploreBtn", "stopExploreBtn", "saveMapBtn", "loadMapBtn"):
+        for name in ("startBtn", "stopBtn", "startExploreBtn", "stopExploreBtn", 
+                     "saveMapBtn", "loadMapBtn", "navigateToTargetBtn"):
             w = getattr(self, name, None)
             if w is not None:
                 w.setEnabled(enabled)
@@ -192,6 +193,16 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_stop_explore(self):
         self.agent_system.stop_explore()
         self.update_statusbar()
+
+    def on_navigate_to_target(self):
+        """Activate navigation mode to select a target on the semantic map."""
+        self.semanticMapWidget.enable_navigation_mode(True)
+        self.statusbar.showMessage("点击语义地图以选择目标位置...", 5000)
+
+    def on_navigation_target_selected(self, pixel_x, pixel_y):
+        """Handle the navigation target selection."""
+        self.agent_system.set_pixel_goal(pixel_x, pixel_y)
+        self.statusbar.showMessage(f"目标位置已设置: ({pixel_x}, {pixel_y})", 5000)
 
     # ----------------- Periodic Updates -----------------
     def update_fast(self):
@@ -360,7 +371,7 @@ class MainWindow(QtWidgets.QMainWindow):
         f.setPointSize(12)
         f.setBold(True)
         p.setFont(f)
-        p.setPen(QtGui.QPen(QtCore.Qt.white))
+        p.setPen(QtGui.QPen(QtCore.Qt.white))  # Fixed: Use QtGui.QPen
         p.drawText(pm.rect(), QtCore.Qt.AlignCenter, text[:1])
         p.end()
         return pm

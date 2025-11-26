@@ -600,7 +600,6 @@ class Dualmap:
         """仅重置目标位置，保留查询内容不变。"""
         self.goal_mode = GoalMode.NONE
         self.goal_pose = []
-        self.global_map_manager.goal_grid = None
         
         self.action_path = []
         self.curr_global_path = []
