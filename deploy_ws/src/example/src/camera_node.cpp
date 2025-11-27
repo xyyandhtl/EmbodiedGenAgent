@@ -37,7 +37,7 @@ public:
             RCLCPP_INFO(this->get_logger(), "Publishing CompressedImage");
         } else {
             raw_pub_ = this->create_publisher<sensor_msgs::msg::Image>(
-                "/udp_cam/image", 10);
+                "/udp_cam/image", 15);
             RCLCPP_INFO(this->get_logger(), "Publishing raw Image");
         }
 
