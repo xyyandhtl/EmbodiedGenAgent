@@ -50,6 +50,8 @@ And then in the GUI:
 
 Some demo videos can be watched in [link](https://drive.google.com/drive/folders/1_V_zZ-w5djCpGRBKAjWJipEXnaxWuuTM?usp=drive_link).
 
+[▶ Demo in City Road](https://drive.google.com/file/d/1hmq6YUjSqRgAAOUpMMLpaQWld4H_Oel1/view?usp=drive_link)
+
 Some scene assets in the simulation: [link](https://drive.google.com/drive/folders/1SiGH3LGDxikIS0cmn6WFqujwO8liKcSE?usp=drive_link).
 
 Range sensor currently can be `lidar` or `depth`, settings are in [simulator_settings](simulation/settings.yaml) and [agent_settings](EG_agent/system/agent_system.yaml), and also you can use rviz2 to visualize.

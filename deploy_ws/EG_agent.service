@@ -1,0 +1,21 @@
+[Unit]
+Description=Go2W Basic Communication Topics Start
+After=network-online.target
+Wants=network-online.target
+
+# 可以等一些硬件（按需加入）
+# After=multi-user.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/unitree/ww/docker_ubuntu22
+ExecStart=/home/unitree/ww/docker_ubuntu22/deploy_ws/launch.sh
+Restart=on-failure
+RestartSec=5
+
+# 让 systemd 获取环境变量（可选）
+Environment="RCUTILS_COLORIZED_OUTPUT=1"
+
+[Install]
+WantedBy=multi-user.target

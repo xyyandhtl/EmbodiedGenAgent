@@ -29,15 +29,16 @@ public:
         }
 
         // 判断是否是压缩流（简单规则：包含 H264 就认为是压缩）
-        is_compressed_ = pipeline.find("H264") != std::string::npos;
+        // is_compressed_ = pipeline.find("H264") != std::string::npos;
+        is_compressed_ = false;
 
         if (is_compressed_) {
             compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>(
-                "/udp_cam/image/compressed", 10);
+                "/camera/image/compressed", 15);
             RCLCPP_INFO(this->get_logger(), "Publishing CompressedImage");
         } else {
             raw_pub_ = this->create_publisher<sensor_msgs::msg::Image>(
-                "/udp_cam/image", 15);
+                "/camera/image_raw", 15);
             RCLCPP_INFO(this->get_logger(), "Publishing raw Image");
         }
 
