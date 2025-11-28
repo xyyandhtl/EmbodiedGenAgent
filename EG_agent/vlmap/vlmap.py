@@ -37,6 +37,7 @@ class VLMapNav:
         # Let the received intrinsics topic decide
         # self.intrinsics = None
         self.intrinsics: np.ndarray = self.load_intrinsics(self.cfg)
+        self.dist = self.load_distortion(self.cfg)
         self.extrinsics = self.load_extrinsics(self.cfg, name='extrinsics')
         self.lidar_extrinsics = self.load_extrinsics(self.cfg, name='lidar_extrinsics')
 
@@ -58,6 +59,16 @@ class VLMapNav:
         fx, fy, cx, cy = intrinsic_cfg['fx'], intrinsic_cfg['fy'], intrinsic_cfg['cx'], intrinsic_cfg['cy']
         self.logger.info("[Main] Loaded intrinsics from config.")
         return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+
+    def load_distortion(self, dataset_cfg):
+        """Load camera distortion parameters from config file."""
+        intrinsic_cfg = dataset_cfg.intrinsics
+        dist = intrinsic_cfg.get('dist', None)  # Default to None if not specified
+        if dist is None:
+            self.logger.info("[Main] No distortion parameters found in config, using None")
+        else:
+            self.logger.info(f"[Main] Loaded distortion parameters from config: {dist}")
+        return dist
 
     def load_extrinsics(self, dataset_cfg, name='lidar_extrinsics'):
         """Load camera extrinsics from config file."""
@@ -126,6 +137,7 @@ class VLMapNav:
             lidar=lidar_points,
             color_name=str(timestamp),
             intrinsics=self.intrinsics,
+            dist=self.dist,
             pose=transformed_pose
         )
         self.realtime_pose = data_input.pose

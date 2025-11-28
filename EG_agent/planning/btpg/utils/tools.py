@@ -60,36 +60,6 @@ def collect_action_nodes(behavior_lib):
     return action_list
 
 
-
-# def refresh_VHT_samll_data():
-#     # 读入数据集合
-#     data_path = f"{ROOT_PATH}/../test/dataset/data0429.txt"
-#     data = read_dataset(data_path)
-#     data_num = len(data)
-#     print(f"导入 {data_num} 条数据")
-#     print(data[0])
-#
-#     # 数据集中涉及的所有物体集合
-#     objs=set()
-#     for d in data:
-#         objs |= set(d['Key_Object'])
-#
-#     categories = ['SURFACES', 'SITTABLE', 'CAN_OPEN', 'CONTAINERS', 'GRABBABLE', 'cleaning_tools', \
-#              'cutting_tools', 'HAS_SWITCH', 'HAS_PLUG', 'CUTABLE', 'EATABLE', 'WASHABLE', 'RECIPIENT', \
-#              'POURABLE', 'DRINKABLE']
-#     categories_objs_dic={}
-#     for ctg in categories:
-#         categories_objs_dic[ctg] = getattr(RHAction, ctg)
-#         categories_objs_dic[ctg] &= objs
-#
-#
-#     ctg_objs_path = f"{ROOT_PATH}/../test/EXP/ctg_objs.pickle"
-#     # 打开一个文件用于写入，注意'b'表示二进制模式
-#     with open(ctg_objs_path, 'wb') as file:
-#         # 使用pickle.dump()函数将数据写入文件
-#         pickle.dump(categories_objs_dic, file)
-
-
 def save_data_txt(output_path,data1):
     # Open the file for writing
     with open(output_path, "w", encoding="utf-8") as f:

@@ -5,7 +5,7 @@ from scipy.spatial import cKDTree
 
 from collections import Counter
 
-def map_rgb_mask_to_lidar_points(lidar_points, rgb_image, intrinsics, masks):
+def map_rgb_mask_to_lidar_points(lidar_points, rgb_image, intrinsics, masks, dist=None):
     """
     Map RGB masks to lidar points using nearest-neighbor ray mapping.
 
@@ -14,6 +14,7 @@ def map_rgb_mask_to_lidar_points(lidar_points, rgb_image, intrinsics, masks):
         rgb_image (np.ndarray): RGB image in shape (H, W, 3).
         intrinsics (np.ndarray): Camera intrinsics matrix (3x3).
         masks (np.ndarray): Binary masks in shape (M, H, W), where M is the number of masks.
+        dist (list): Distortion parameters [k1, k2, p1, p2, k3]. Default is None (no distortion).
 
     Returns:
         mask_indices (list): A list of arrays, where each array contains the indices of lidar points
@@ -31,7 +32,7 @@ def map_rgb_mask_to_lidar_points(lidar_points, rgb_image, intrinsics, masks):
     X = lidar_points[:, 0]
     Y = lidar_points[:, 1]
     Z = lidar_points[:, 2]
-    
+
     # 过滤掉Z<=0的点（在相机后方）
     valid_mask = Z > 0
     X = X[valid_mask]
@@ -39,9 +40,31 @@ def map_rgb_mask_to_lidar_points(lidar_points, rgb_image, intrinsics, masks):
     Z = Z[valid_mask]
     valid_indices = np.where(valid_mask)[0]
 
-    # 投影到像素坐标
-    u = (fx * X / Z + cx).astype(np.int32)
-    v = (fy * Y / Z + cy).astype(np.int32)
+    # 投影到像素坐标 (normalized coordinates)
+    x = X / Z
+    y = Y / Z
+
+    # Apply distortion if dist parameters are provided
+    if dist is not None:
+        k1, k2, p1, p2, k3 = dist
+        r2 = x * x + y * y
+        r4 = r2 * r2
+        r6 = r4 * r2
+
+        # Radial distortion
+        radial_distortion = 1 + k1 * r2 + k2 * r4 + k3 * r6
+
+        # Tangential distortion
+        x_distorted = x * radial_distortion + 2 * p1 * x * y + p2 * (r2 + 2 * x * x)
+        y_distorted = y * radial_distortion + p1 * (r2 + 2 * y * y) + 2 * p2 * x * y
+    else:
+        # No distortion
+        x_distorted = x
+        y_distorted = y
+
+    # Convert to pixel coordinates
+    u = (fx * x_distorted + cx).astype(np.int32)
+    v = (fy * y_distorted + cy).astype(np.int32)
 
     H, W, _ = rgb_image.shape
     # 过滤掉投影在图像外的点
@@ -59,7 +82,7 @@ def map_rgb_mask_to_lidar_points(lidar_points, rgb_image, intrinsics, masks):
         inside_mask = mask[v, u] > 0
         indices_in_mask = valid_indices[inside_mask]
         colors_in_mask = rgb_image[v[inside_mask], u[inside_mask], :]
-        
+
         mask_indices.append(indices_in_mask)
         mask_colors.append(colors_in_mask)
 

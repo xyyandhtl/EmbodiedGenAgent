@@ -20,6 +20,8 @@ class DataInput:
     color_name: str = ""
     # Intrinsic in 3*3
     intrinsics: np.ndarray = field(default_factory=lambda: np.eye(3))
+    # Distortion parameters [k1, k2, p1, p2, k3]
+    dist: list | None = field(default_factory=lambda: None)
     pose: np.ndarray = field(default_factory=lambda: np.eye(4))
     
     def clear(self) -> None:
@@ -29,6 +31,7 @@ class DataInput:
         self.depth = np.empty((0, 0), dtype=np.float32)
         self.color_name = ""
         self.intrinsics = np.eye(3)
+        self.dist = None
         self.pose = np.eye(4)
     
     def copy(self):

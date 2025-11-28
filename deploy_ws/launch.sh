@@ -24,4 +24,7 @@ source install/setup.bash
 # ros2 run unitree_ros2_example go2_vel_sport
 echo "🚀 启动 camera_node 节点..."
 ros2 run unitree_ros2_example camera_node
+# ros2 launch livox_camera_calib bag_to_pcd.launch.py
+# ros2 launch livox_camera_calib calib.launch.py
+
 
