@@ -756,6 +756,7 @@ class Detector:
                     self.curr_data.color,
                     self.curr_data.intrinsics,
                     masks,
+                    self.curr_data.dist,
                 )
 
                 for indices, colors in zip(mask_indices, mask_colors):

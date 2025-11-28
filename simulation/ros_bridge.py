@@ -11,7 +11,6 @@ from std_msgs.msg import Int32
 from cv_bridge import CvBridge
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import PointStamped
-import struct
 
 class ROSBridge(Node):
     """
@@ -58,6 +57,7 @@ class ROSBridge(Node):
         self.pose_pub = self.create_publisher(Odometry, "/camera/pose", 10)
         self.camera_info_pub = self.create_publisher(CameraInfo, "/camera_info", 10)
         self.lidar_pub = self.create_publisher(PointCloud2, "/lidar/pointcloud", 10)
+        self.lidar_pose_pub = self.create_publisher(Odometry, "/lidar/pose", 10)
 
         # --- Prepare CameraInfo message (sent every tick with fresh header) ---
         self.camera_info_msg = self._prepare_camera_info(camera_params)
@@ -101,7 +101,7 @@ class ROSBridge(Node):
     def publish_ros_data(self, sensor_data):
         ros_time = self.get_clock().now().to_msg()
 
-        # --- Pose and TF ---
+        # --- Camera Pose and TF ---
         pose_tuple = sensor_data.get("pose_camera")
         if pose_tuple is not None:
             pos_np, quat_wxyz_np = pose_tuple
@@ -179,11 +179,25 @@ class ROSBridge(Node):
             t.transform.rotation.w = float(quat_xyzw_np[3])
             self.tf_broadcaster.sendTransform(t)
 
-        # --- LiDAR PointCloud ---
+        # --- LiDAR Pose and TF ---
         pose_tuple = sensor_data.get("pose_lidar")
         if pose_tuple is not None:
             pos_np, quat_wxyz_np = pose_tuple
             quat_xyzw_np = np.roll(quat_wxyz_np, -1)
+
+            odom_msg = Odometry()
+            odom_msg.header.stamp = ros_time
+            odom_msg.header.frame_id = "map"
+            odom_msg.child_frame_id = "lidar_link"
+            odom_msg.pose.pose.position.x = float(pos_np[0])
+            odom_msg.pose.pose.position.y = float(pos_np[1])
+            odom_msg.pose.pose.position.z = float(pos_np[2])
+            odom_msg.pose.pose.orientation.x = float(quat_xyzw_np[0])
+            odom_msg.pose.pose.orientation.y = float(quat_xyzw_np[1])
+            odom_msg.pose.pose.orientation.z = float(quat_xyzw_np[2])
+            odom_msg.pose.pose.orientation.w = float(quat_xyzw_np[3])
+            self.lidar_pose_pub.publish(odom_msg)
+
             t = TransformStamped()
             t.header.stamp = ros_time
             t.header.frame_id = 'map'

@@ -38,7 +38,7 @@ Before running, configure the [system_config.yaml](config/system_config.yaml):
 ```yaml
 # Choose or create the appropriate class list depending on the scene:
 # These classes would be used for yolov8l-world open-vocabulary zero-shot detection
-given_classes_path: ./config/class_list/gpt_outdoor_general.txt
+given_classes_path: ./class_list/gpt_outdoor_general.txt
 ```
 
 and [base_config.yaml](config/base_config.yaml)

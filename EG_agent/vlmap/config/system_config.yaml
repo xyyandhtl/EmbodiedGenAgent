@@ -19,7 +19,7 @@ yolo:
   use_given_classes: True
 
   ## The given classes lists
-  given_classes_path: ./config/class_list
+  given_classes_path: ./class_list
 
   # Pre-set for stable filter, do not delete this
   num_classes: 0

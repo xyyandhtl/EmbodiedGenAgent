@@ -10,9 +10,13 @@ dataset/
 captured/
 reports/
 usd/
+build/
+install/
+log/
+logs/
 
 # specific paths
-EG_agent/vlmap/config/class_list/*.json
+EG_agent/vlmap/class_list/*.json
 EG_agent/vlmap/model/*
 simulation/data/terrains/*
 
