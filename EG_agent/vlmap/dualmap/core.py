@@ -375,8 +375,10 @@ class Dualmap:
             self.layout_event.wait(timeout=2.0)
             self.layout_event.clear()
             if self.stop_thread:
-                break
-
+                break           
+            if len(self.input_queue) == 0:
+                continue
+            
             data_input: DataInput = self.input_queue[-1]
             if data_input.idx == self.last_layout_kf_idx:
                 continue
@@ -400,6 +402,9 @@ class Dualmap:
         while not self.stop_thread:
             self.detector_event.wait(timeout=0.1)
             self.detector_event.clear()
+            if len(self.input_queue) == 0:
+                continue
+
             data_input: DataInput = self.input_queue[-1]
             if data_input.idx == self.last_detector_kf_idx:
                 continue

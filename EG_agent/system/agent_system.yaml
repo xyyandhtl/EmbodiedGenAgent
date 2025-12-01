@@ -6,16 +6,16 @@ ros:
   sync_threshold: 0.1
   topics:
     # ----- deployment topics -----
-    # rgb: /camera/image_raw
-    # lidar: /livox/lidar
-    # odom_lidar: /Odometry
+    rgb: /camera/image_raw
+    lidar: /livox/lidar
+    odom_lidar: /Odometry
     # ----- simulation topics -----
-    rgb: /camera/rgb/image_raw
-    lidar: /lidar/pointcloud
-    odom_lidar: /lidar/pose
+    # rgb: /camera/rgb/image_raw
+    # lidar: /lidar/pointcloud
+    # odom_lidar: /lidar/pose
     odom_camera: /camera/pose
     depth: /camera/depth/image_raw
-    camera_info: /camera_info
+    # camera_info: /camera_info
   pubs:
     cmd_vel: /cmd_vel
     nav_pose: /nav_pose
