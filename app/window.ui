@@ -584,8 +584,13 @@ QStatusBar QLabel {
        <property name="title"><string>后台</string></property>
        <layout class="QVBoxLayout" name="vboxBackend">
         <item>
-         <widget class="QPushButton" name="createBackendBtn">
-          <property name="text"><string>创建后台</string></property>
+         <widget class="QPushButton" name="createSimBackendBtn">
+          <property name="text"><string>创建Sim后台</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="createRealBackendBtn">
+          <property name="text"><string>创建Real后台</string></property>
          </widget>
         </item>
        </layout>

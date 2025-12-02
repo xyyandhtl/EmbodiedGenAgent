@@ -44,9 +44,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.agent_system = EGAgentSystem()
 
-        # 绑定“创建后台”按钮
-        if hasattr(self, "createBackendBtn"):
-            self.createBackendBtn.clicked.connect(self.on_create_backend)
+        # 绑定"创建Sim后台"和"创建Real后台"按钮
+        if hasattr(self, "createSimBackendBtn"):
+            self.createSimBackendBtn.clicked.connect(lambda: self.on_create_backend(backend_type="sim"))
+        if hasattr(self, "createRealBackendBtn"):
+            self.createRealBackendBtn.clicked.connect(lambda: self.on_create_backend(backend_type="real"))
 
         # 连接信号到槽 (主线程更新 UI)
         self.logSignal.connect(self._on_log_update)
@@ -137,9 +139,9 @@ class MainWindow(QtWidgets.QMainWindow):
             bt_layout.insertWidget(bt_index, self.behaviorTreeWidget)
             self.behaviorTreeWidget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
-    def on_create_backend(self):
+    def on_create_backend(self, backend_type="sim"):
         # 改为后台执行，避免阻塞 UI
-        self._run_in_background("创建后台", self.agent_system.create_backend)
+        self._run_in_background("创建Sim后台", lambda: self.agent_system.create_backend(backend_type))
 
     def _set_controls_enabled(self, enabled: bool):
         # 控制右侧按钮启用状态（含探索按钮）

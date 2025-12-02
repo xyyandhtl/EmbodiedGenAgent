@@ -1,11 +1,10 @@
-range_sensor: "lidar_real"
+range_sensor: "lidar"
 
 ros:
   use_compressed_topic: true
   ros_rate: 10
   sync_threshold: 0.08
   topics:
-    # ----- deployment topics -----
     rgb: /camera/rgb/image_raw
     lidar: /livox/lidar
     odom_lidar: /Odometry

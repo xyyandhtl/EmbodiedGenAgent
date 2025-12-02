@@ -1,11 +1,10 @@
-range_sensor: "lidar"
+range_sensor: "depth" # depth, lidar
 
 ros:
   use_compressed_topic: false
   ros_rate: 10
   sync_threshold: 0.08
   topics:
-    # ----- simulation topics -----
     rgb: /camera/rgb/image_raw
     lidar: /lidar/pointcloud
     odom_lidar: /lidar/pose
