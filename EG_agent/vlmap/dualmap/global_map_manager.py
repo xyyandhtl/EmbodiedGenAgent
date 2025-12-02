@@ -147,15 +147,15 @@ class GlobalMapManager(BaseMapManager):
             return
 
         # The test part, no matching just adding
-        if self.cfg.no_update:
-            logger.debug("[GlobalMap] No update mode, simply adding")
-            for obs in curr_observations:
-                self.global_map.append(GlobalObject(obs))
+        # if self.cfg.no_update:
+        #     logger.debug("[GlobalMap] No update mode, simply adding")
+        #     for obs in curr_observations:
+        #         self.global_map.append(GlobalObject(obs))
 
-            if self.cfg.use_rerun:
-                self.visualize_global_map()
+        #     if self.cfg.use_rerun:
+        #         self.visualize_global_map()
             
-            return
+        #     return
 
         # if not the first, then do the global matching
         logger.debug("[GlobalMap] Matching")
@@ -212,8 +212,6 @@ class GlobalMapManager(BaseMapManager):
                 matched_obj = self.global_map[matched_obj_idx]
                 matched_obj.add_observation(obs)
                 matched_obj.update_info()
-
-        pass
 
     def save_map(
         self
@@ -786,37 +784,6 @@ class GlobalMapManager(BaseMapManager):
         new_logged_entities = set()
 
         path_radii = self.cfg.path_radii
-
-        if self.preload_path_ok is False and self.cfg.use_given_path:
-            json_data = self.read_json_files(self.cfg.given_path_dir)
-            # traverse all the json data
-            for key, value in json_data.items():
-                idx = key.split('.')[0]
-                path_points = np.array(value)
-
-                path_color = self.cfg.global_path_color
-
-                # if idx == '3':
-                #     path_color = (169, 220, 169)
-                #     path_radii = 0.02
-
-                # if idx == '5':
-                #     path_color = self.cfg.action_path_color
-
-                preload_path_entity = f"world/preload_path/{idx}"
-
-                # Log the navigation path as a line strip (connecting consecutive points)
-                self.visualizer.log(
-                    preload_path_entity,
-                    self.visualizer.LineStrips3D(
-                        [path_points.tolist()],  # Convert the list of points to the required format
-                        colors=[path_color],  # Green color for the path
-                        radii=[path_radii]
-                    )
-                )
-                # new_logged_entities.add(global_path_entity)
-            
-            self.preload_path_ok = True
 
         for global_obj in self.global_map:
             base_entity_path = "global/objects"

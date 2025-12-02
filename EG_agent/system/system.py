@@ -30,7 +30,7 @@ class EGAgentSystem:
 
     def __init__(self):
         # 加载配置
-        cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
+        cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system_sim.yaml"
         self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
 
         # QT 监听器与缓存
@@ -60,7 +60,6 @@ class EGAgentSystem:
 
         # 运行控制
         self._running = False
-        self._is_finished = False
         self._thread_bt: threading.Thread | None = None
         self._stop_event = threading.Event()
 
@@ -70,11 +69,6 @@ class EGAgentSystem:
     @property
     def backend_ready(self) -> bool:
         return self.dm is not None
-    
-    @property
-    def finished(self) -> bool:
-        """Whether the agent loop has finished."""
-        return self._is_finished
 
     @property
     def status(self) -> bool:
@@ -137,7 +131,6 @@ class EGAgentSystem:
         self._log_info("Agent system started.")
         self._stop_event.clear()
         self._running = True
-        self._is_finished = False
         if self.backend_ready:
             self.dm.start_threading()
             self._conv_debug(f"检测和建图线程已启动。")
@@ -160,7 +153,6 @@ class EGAgentSystem:
                 self._log_warn("Agent loop did not stop cleanly.")
         if self.backend_ready:
             self.dm.end_process()
-        self._is_finished = True
         self._running = False
         self._log_info("Agent loop stopped.")
         self._emit("status", self.status)

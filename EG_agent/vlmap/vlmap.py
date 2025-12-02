@@ -16,16 +16,9 @@ class VLMapNav:
     EGAgentSystem feeds observations; this class maintains Dualmap and exposes navigation APIs.
     """
     def __init__(self, range_sensor: str = "depth"):
-        cfg_files = [f"{AGENT_VLMAP_PATH}/config/base_config.yaml",
-                     f"{AGENT_VLMAP_PATH}/config/system_config.yaml",
-                     f"{AGENT_VLMAP_PATH}/config/mobility_config.yaml",
-                     f"{AGENT_VLMAP_PATH}/config/rerun_config.yaml"]
-        if range_sensor == "lidar":
-            cfg_files.append(f"{AGENT_VLMAP_PATH}/config/lidar_config.yaml")
-        elif range_sensor == "depth":
-            cfg_files.append(f"{AGENT_VLMAP_PATH}/config/depth_config.yaml")
-        else:
-            raise ValueError(f"range_sensor must be 'lidar' or 'depth', but got {range_sensor}")
+        cfg_files = [f"{AGENT_VLMAP_PATH}/config/dualmap.yaml",
+                     f"{AGENT_VLMAP_PATH}/config/rerun_config.yaml",
+                     f"{AGENT_VLMAP_PATH}/config/{range_sensor}_config.yaml"]
         self.cfg = Dynaconf(settings_files=cfg_files, lowercase_read=True, merge_enabled=False)
         self.cfg.output_path = f'{AGENT_VLMAP_PATH}/{self.cfg.output_path}'
         self.cfg.logging_config = f'{AGENT_VLMAP_PATH}/{self.cfg.logging_config}'

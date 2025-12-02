@@ -27,7 +27,11 @@ ros2 run unitree_ros2_example camera_vel_node \
     --ros-args \
     -p enable_speed_control:=true \
     -p camera_image_raw_topic:=/camera/rgb/image_raw \
-    -p cmd_vel_topic:=/cmd_vel
+    -p cmd_vel_topic:=/cmd_vel \
+    -p max_linear_x:=1.0 \
+    -p max_angular_z:=0.5 \
+    -p enable_resize:=false \
+    -p publish_compressed:=true
 
 # 标定节点
 # echo "🚀 启动 bag_to_pcd 节点..."

@@ -1,0 +1,31 @@
+range_sensor: "lidar"
+
+ros:
+  use_compressed_topic: false
+  ros_rate: 10
+  sync_threshold: 0.08
+  topics:
+    # ----- simulation topics -----
+    rgb: /camera/rgb/image_raw
+    lidar: /lidar/pointcloud
+    odom_lidar: /lidar/pose
+    odom_camera: /camera/pose
+    depth: /camera/depth/image_raw
+    # camera_info: /camera_info
+  pubs:
+    cmd_vel: /cmd_vel
+    nav_pose: /nav_pose
+    enum_cmd: /enum_cmd
+
+camera:
+  fov_x_deg: 90.0
+  aspect: 1.3333333333
+  near_dist: 2.0
+
+lidar:
+  min_thr: 0.4
+  max_thr: 20.0
+
+use_rviz: true
+
+caring_mode: false

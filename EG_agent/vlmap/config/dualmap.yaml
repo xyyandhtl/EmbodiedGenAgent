@@ -1,21 +1,35 @@
-defaults:
-  - base_config
-  - rerun_config@_here_
-  - _self_
+# ============================================================
+# ROBOT CONFIGURATION
+# ============================================================
+# Robot radius, for collision detection in path planning
+robot_radius: 0.4
 
 # ============================================================
-# MODEL CONFIG
+# PRELOADING CONFIGURATION
+# ============================================================
+preload_path: "map" # 拼接后的完整路径是 "./output/${dataset_name}/map"
+
+# ============================================================
+# OUTPUT CONFIGURATION
+# ============================================================
+output_path: ../../outputs
+
+# ============================================================
+# LOGGING CONFIGURATION
+# ============================================================
+logging_config: ./config/logging_config.yaml
+
+# ============================================================
+# MODEL CONFIGURATION
 # ============================================================
 yolo:
-  _target_: _self_
   model_path: model/yolov8l-worldv2.pt
 
   # List of background classes
   bg_classes: ["wall", "floor", "ceiling"]
   skip_bg: False
 
-  # Whether to use a predefined class list (True = use given list, False = use ground truth classes)
-  # Default is True
+  # Whether to use a predefined class list
   use_given_classes: True
 
   ## The given classes lists
@@ -25,16 +39,13 @@ yolo:
   num_classes: 0
 
 sam:
-  _target_: _self_
   # model_path: model/sam_l.pt
   model_path: model/mobile_sam.pt
 
 fastsam:
-  _target_: _self_
   model_path: model/FastSAM-s.pt
 
 clip:
-  _target_: _self_
   model_path: model
   # model_name: ViT-H-14
   # pretrained: laion2b_s32b_b79k
@@ -50,13 +61,14 @@ clip:
 device: cuda
 
 # ============================================================
-# DUALMAP CONFIG
+# DUALMAP VISUALIZATION CONFIGURATION
 # ============================================================
 ### VISUALIZATION CONFIG
 use_rerun: False
 
-### OBSERVATION GENERATION CONFIG
-## General Detection Settings
+# ============================================================
+# DUALMAP DETECTER CONFIGURATION
+# ============================================================
 # Enable object detection during mapping
 run_detection: True
 # Save detection results to disk
@@ -88,15 +100,24 @@ image_weight: 0.7
 # Use average feat for unknown classes detected by FastSAM
 use_avg_feat_for_unknown: True
 
+# ============================================================
+# DUALMAP MATCHING CONFIGURATION
+# ============================================================
 ### MATCHING CONFIG
 # similarity threshold for matching
 sim_threshold: 1.0
 
+# ============================================================
+# DUALMAP KEYFRAME CONFIGURATION
+# ============================================================
 ### KEYFRAME CONFIG
-time_threshold: 1.5 # set 1.5 because the view average detections are ~10, local mapping time would be ~1.0s per frame
+time_threshold: 1.5
 pose_threshold: 0.5
 rotation_threshold: 5
 
+# ============================================================
+# DUALMAP LOCAL OBJECTS CONFIGURATION (CONCRETE OBJECTS)
+# ============================================================
 ### LOCAL OBJECTS CONFIG --> CONCRETE OBJECTS
 active_window_size: 10
 downsample_interval: 1
@@ -106,21 +127,8 @@ max_pending_count: 5
 # Param for Stability Check
 stable_num: 3
 
-### GLOBAL OBJECTS CONFIG --> ANCHOR OBJECTS
-# if True, the global(abstract) map will no update
-no_update: False
-
-### END PROCESS CONFIG
-# if True, the system save the map objects, calculate the time cost, and end the process safely
-# In ROS mode, this will trigger the end of the system if no new data input for a while
-use_end_process: True
-
-### PARALLELIZATION
-# Use parallel processing (False = sequential)
-use_parallel: True
-
 # ============================================================
-# SYSTEM MAPPING CONFIG
+# SYSTEM MAPPING CONFIGURATION
 # ============================================================
 ### GENERAL MAP CONFIG
 # If True, run local mapping only and get local map
@@ -145,21 +153,28 @@ save_cropped: False
 save_layout: True
 
 # ============================================================
-# PRELOADING CONFIG
-# ============================================================
-# Path to preload map data.
-preload_path: "map" # 拼接后的完整路径是 "./output/${dataset_name}/map"
-
-# Preload action paths for visualization
-use_given_path: False
-given_path_dir: ""
-
-# ============================================================
-# PATH PLANNING CONFIG
+# PATH PLANNING CONFIGURATION
 # ============================================================
 # Path planning interval (seconds)
 path_planning_interval: 3.0
 
 # Editing wall if the wall generation result is not good
 edit_wall: False
-save_wall: False
+
+# ============================================================
+# MOBILITY CONFIGURATION
+# ============================================================
+check_mobility: false
+
+# low mobility examples
+lm_examples: []
+
+# high mobility examples
+hm_examples: []
+
+# Extra descriptions for low mobility examples
+lm_descriptions:
+  - "urban structures, infrastructures, and objects fixed to the ground"
+  - "architectural and environmental components that rarely move"
+  - "elements forming the static and stable part of the city scene"
+  - "man-made or natural objects that remain stationary for long periods"

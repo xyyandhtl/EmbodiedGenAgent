@@ -96,7 +96,7 @@ class BaseObject:
         cls._cfg = config
 
         classes_path = config.yolo.given_classes_path
-        logger.info(f"[BaseObject] Using given classes, path:{classes_path}")
+        # logger.info(f"[BaseObject] Using given classes, path:{classes_path}")
         
         with open(classes_path, 'r') as file:
             lines = file.readlines()

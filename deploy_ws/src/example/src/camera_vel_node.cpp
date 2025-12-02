@@ -38,6 +38,9 @@ public:
         declare_parameter("max_linear_x", 1.0);
         declare_parameter("max_linear_y", 1.0);
         declare_parameter("max_angular_z", 0.5);
+        declare_parameter("enable_resize", false);
+        declare_parameter("resize_width", 640);
+        declare_parameter("resize_height", 360);
 
         // Get parameter values
         enable_speed_control_ = get_parameter("enable_speed_control").as_bool();
@@ -55,6 +58,9 @@ public:
         max_linear_x_ = get_parameter("max_linear_x").as_double();
         max_linear_y_ = get_parameter("max_linear_y").as_double();
         max_angular_z_ = get_parameter("max_angular_z").as_double();
+        enable_resize_ = get_parameter("enable_resize").as_bool();
+        resize_width_ = get_parameter("resize_width").as_int();
+        resize_height_ = get_parameter("resize_height").as_int();
 
         // Initialize velocity values
         vel_[0] = vel_[1] = vel_[2] = 0.0;
@@ -144,12 +150,20 @@ private:
             return;
         }
 
+        // Resize image if enabled
+        cv::Mat processed_frame = frame;
+        if (enable_resize_) {
+            cv::resize(frame, processed_frame, 
+                       cv::Size(resize_width_, resize_height_), 
+                       0, 0, cv::INTER_NEAREST);
+        }
+
         rclcpp::Time timestamp = this->get_clock()->now();
 
         if (publish_compressed_) {
-            publish_compressed(frame, timestamp);
+            publish_compressed(processed_frame, timestamp);
         } else {
-            publish_raw(frame, timestamp);
+            publish_raw(processed_frame, timestamp);
         }
     }
 
@@ -234,6 +248,9 @@ private:
     bool publish_compressed_;
     std::string camera_image_raw_topic_;
     std::string camera_image_compressed_topic_;
+    bool enable_resize_;
+    int resize_width_;
+    int resize_height_;
 
     rclcpp::TimerBase::SharedPtr timer_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr raw_pub_;

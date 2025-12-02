@@ -1,20 +1,16 @@
-range_sensor: "lidar"
+range_sensor: "lidar_real"
 
 ros:
-  use_compressed_topic: false
+  use_compressed_topic: true
   ros_rate: 10
-  sync_threshold: 0.1
+  sync_threshold: 0.08
   topics:
     # ----- deployment topics -----
-    rgb: /camera/image_raw
+    rgb: /camera/rgb/image_raw
     lidar: /livox/lidar
     odom_lidar: /Odometry
-    # ----- simulation topics -----
-    # rgb: /camera/rgb/image_raw
-    # lidar: /lidar/pointcloud
-    # odom_lidar: /lidar/pose
-    odom_camera: /camera/pose
-    depth: /camera/depth/image_raw
+    # odom_camera: /camera/pose
+    # depth: /camera/depth/image_raw
     # camera_info: /camera_info
   pubs:
     cmd_vel: /cmd_vel
@@ -27,7 +23,7 @@ camera:
   near_dist: 2.0
 
 lidar:
-  min_thr: 0.5
+  min_thr: 0.4
   max_thr: 20.0
 
 use_rviz: true
