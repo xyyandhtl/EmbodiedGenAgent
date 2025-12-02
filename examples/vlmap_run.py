@@ -23,7 +23,7 @@ class VLMapRosRunner(Node):
         self.logger.warning("[VLMapRosRunner] start")
 
         # Config and backend
-        cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
+        cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system_sim.yaml"
         self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
         self.backend = VLMapNav()  # VLMap backend (non-ROS)
 

@@ -182,7 +182,6 @@ class Dualmap:
         self.detector.save_layout()
         layout_pcd = self.detector.get_layout_pointcloud()
         self.global_map_manager.set_layout_info(layout_pcd, force_full_update=True)
-        # self.global_map_manager.save_wall_pcd()
 
     def load_map(self, map_path=None):
         """
@@ -374,9 +373,9 @@ class Dualmap:
         while not self.stop_thread:
             self.layout_event.wait(timeout=2.0)
             self.layout_event.clear()
-            if self.stop_thread:
-                break
-
+            if len(self.input_queue) == 0:
+                continue
+            
             data_input: DataInput = self.input_queue[-1]
             if data_input.idx == self.last_layout_kf_idx:
                 continue
@@ -400,6 +399,9 @@ class Dualmap:
         while not self.stop_thread:
             self.detector_event.wait(timeout=0.1)
             self.detector_event.clear()
+            if len(self.input_queue) == 0:
+                continue
+
             data_input: DataInput = self.input_queue[-1]
             if data_input.idx == self.last_detector_kf_idx:
                 continue
@@ -517,9 +519,9 @@ class Dualmap:
         while not self.stop_thread:
             logger.debug(f"[PathPlanningThread] Loop begins.")
             self.goal_event.wait(timeout=loop_interval)
-            self.goal_event.clear()  # 重置为未触发状态
-            if self.stop_thread:
-                break
+            self.goal_event.clear()
+            if len(self.input_queue) == 0:
+                continue
             
             # 每次此低频loop先更新layout_map
             with timing_context("Occupancy Mapping", self):
@@ -578,8 +580,6 @@ class Dualmap:
         while not self.stop_thread:
             self.vis_map_event.wait(timeout=2.0)
             self.vis_map_event.clear()  # 重置为未触发状态
-            if self.stop_thread:
-                break
 
             self.global_map_manager.background_map_update()
 

@@ -1,0 +1,61 @@
+# ============================================================
+# SCENARIO CONFIGURATION
+# ============================================================
+dataset_name: 'field'
+
+# ============================================================
+# RANGE SENSOR CONFIG
+# ============================================================
+range_sensor: "lidar"
+
+lidar_extrinsics:
+  - [0, -1, 0, 0.0]
+  - [0, 0, -1, -0.0]
+  - [1, 0, 0, -0.2]
+  - [0, 0, 0, 1]
+
+# ============================================================
+# CAMERA CONFIG
+# ============================================================
+intrinsics:
+  fx: 864.0
+  fy: 864.0
+  cx: 639.2
+  cy: 373.3
+  dist: [-0.354630, 0.102054, -0.001614, -0.001249, 0.000000]
+
+# odom frame -> camera frame, here use /odom_lidar (lidar_extrinsics.inv)
+extrinsics:
+  - [ 0,  0,  1,  0.2 ]
+  - [-1,  0,  0,  0.0 ]
+  - [ 0, -1,  0,  0.0 ]
+  - [ 0,  0,  0,  1.0 ]
+
+# ============================================================
+# SemMap Config
+# ============================================================
+resolution: 0.05
+boundary: True
+sem_width: 30.0
+sem_height: 30.0
+
+# ============================================================
+# PCD CONFIG
+# ============================================================
+layout_voxel_size: 0.1
+layout_update_radius: 20.0
+occ_update_radius: 8.0
+occ_thr: 1
+
+# small mask filtering threshold
+small_mask_th: 6
+
+# minimum points threshold for object's PCD
+min_points_threshold: 3
+
+# pcd params
+downsample_voxel_size: 0.05
+dbscan_remove_noise: True
+dbscan_eps: 0.2
+dbscan_min_points: 3
+pcd_sample_ratio: 1.0

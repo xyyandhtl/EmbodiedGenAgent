@@ -1,4 +1,15 @@
 # ============================================================
+# SCENARIO CONFIGURATION
+# ============================================================
+# dataset_name: 'road'
+dataset_name: 'warehouse'
+# dataset_name: 'house'
+# dataset_name: 'garden'
+# dataset_name: 'factory'
+# dataset_name: 'city'
+# dataset_name: 'supermarket'
+
+# ============================================================
 # RANGE SENSOR CONFIG
 # ============================================================
 range_sensor: "depth"

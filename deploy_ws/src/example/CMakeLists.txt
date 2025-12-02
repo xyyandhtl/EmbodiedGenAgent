@@ -54,9 +54,9 @@ target_compile_features(go2_robot_state_client PRIVATE cxx_std_20)
 add_executable(go2_vel_sport src/go2/go2_vel_sport.cpp src/common/ros2_sport_client.cpp)
 target_compile_features(go2_vel_sport PRIVATE cxx_std_20)
 
-add_executable(camera_node src/camera_node.cpp)
-target_compile_features(camera_node PRIVATE cxx_std_20)
-target_link_libraries(camera_node ${OpenCV_LIBS})
+add_executable(camera_vel_node src/camera_vel_node.cpp src/common/ros2_sport_client.cpp)
+target_compile_features(camera_vel_node PRIVATE cxx_std_20)
+target_link_libraries(camera_vel_node ${OpenCV_LIBS})
 
 # Non-ROS
 add_executable(camera_test src/camera.cpp)
@@ -68,14 +68,14 @@ ament_target_dependencies(go2_sport_client ${DEPENDENCY_LIST})
 ament_target_dependencies(go2_stand_example ${DEPENDENCY_LIST})
 ament_target_dependencies(go2_robot_state_client ${DEPENDENCY_LIST})
 ament_target_dependencies(go2_vel_sport ${DEPENDENCY_LIST})
-ament_target_dependencies(camera_node ${DEPENDENCY_LIST} sensor_msgs)
+ament_target_dependencies(camera_vel_node ${DEPENDENCY_LIST} sensor_msgs)
 
 install(TARGETS 
   go2_vel_sport
   go2_sport_client
   go2_stand_example
   go2_robot_state_client
-  camera_node
+  camera_vel_node
   DESTINATION lib/${PROJECT_NAME})
 
 

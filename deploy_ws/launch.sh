@@ -22,9 +22,18 @@ source install/setup.bash
 # 启动节点
 # echo "🚀 启动 go2_vel_sport 节点..."
 # ros2 run unitree_ros2_example go2_vel_sport
-echo "🚀 启动 camera_node 节点..."
-ros2 run unitree_ros2_example camera_node
+echo "🚀 启动 camera_vel_node 节点..."
+ros2 run unitree_ros2_example camera_vel_node \
+    --ros-args \
+    -p enable_speed_control:=true \
+    -p camera_image_raw_topic:=/camera/rgb/image_raw \
+    -p cmd_vel_topic:=/cmd_vel \
+    -p max_linear_x:=1.0 \
+    -p max_angular_z:=0.5 \
+    -p enable_resize:=false \
+    -p publish_compressed:=true
+
+# 标定节点
+# echo "🚀 启动 bag_to_pcd 节点..."
 # ros2 launch livox_camera_calib bag_to_pcd.launch.py
 # ros2 launch livox_camera_calib calib.launch.py
-
-

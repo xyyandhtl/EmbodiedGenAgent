@@ -85,7 +85,7 @@ class VelocitySceneCfg(InteractiveSceneCfg):
         # spawn=sim_utils.PinholeCameraCfg(
         #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=54.0, clipping_range=(0.1, 1.0e5)
         # ),
-        offset=CameraCfg.OffsetCfg(pos=(0.4, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0), convention="world"),
+        offset=CameraCfg.OffsetCfg(pos=(0.3, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0), convention="world"),
         colorize_semantic_segmentation=False,
         colorize_instance_id_segmentation=False,
         colorize_instance_segmentation=False,
@@ -114,7 +114,7 @@ class VelocitySceneCfg(InteractiveSceneCfg):
     # Livox lidar
     lidar_sensor = LidarSensorCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
-        offset=LidarSensorCfg.OffsetCfg(pos=(0.0, 0.0, 0.2), rot=(1, 0, 0., 0.)),
+        offset=LidarSensorCfg.OffsetCfg(pos=(0.0, 0.0, 0.1), rot=(1, 0, 0., 0.)),
         # attach_yaw_only=False,
         ray_alignment = "base",
         pattern_cfg=LivoxPatternCfg(

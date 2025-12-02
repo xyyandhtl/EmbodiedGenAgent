@@ -12,7 +12,7 @@ from EG_agent.planning.bt_planner import BTGenerator
 from EG_agent.planning.btpg import BehaviorTree
 from EG_agent.vlmap.vlmap import VLMapNav
 from EG_agent.vlmap.dualmap.core import Dualmap
-# from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
+from EG_agent.system.envs.isaacsim_env import IsaacsimEnv
 from EG_agent.system.envs.real_env import RealEnv
 from EG_agent.system.module_path import AGENT_SYSTEM_PATH
 
@@ -29,11 +29,7 @@ class EGAgentSystem:
     bt_name: str = "behavior_tree"
 
     def __init__(self):
-        # 加载配置
-        cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system.yaml"
-        self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
-
-        # QT 监听器与缓存
+        # 初始化基础组件（不加载配置或创建环境）
         self._listeners: Dict[str, List[Callable[[Any], None]]] = {}
         self._conversation: List[str] = ["智能体: 请先创建后台"]
         self._logs: List[str] = []
@@ -43,24 +39,23 @@ class EGAgentSystem:
         # Logic-Goal 生成器
         self.goal_generator = LogicGoalGenerator()
         self.goal_generator.prepare_prompt(object_set=None)
-        self._log_info(f"goal_generator prompt: \n{self.goal_generator.prompt_scene}")
 
         # Behavior-Tree 生成器
         self.bt_generator = BTGenerator(env_name="embodied",
                                         cur_cond_set=set(),
                                         key_objects=[])
 
-        # VLM-Backend 后台
-        self.vlmap_backend = VLMapNav(range_sensor=str(self.cfg.range_sensor))
+        # VLM-Backend 后台 (延迟初始化)
+        self.vlmap_backend: VLMapNav = None
         self.dm: Dualmap = None
 
-        # Agent-Env 部署环境
-        self.agent_env = RealEnv()
-        self.agent_env.set_vlmap_backend(self.vlmap_backend)
+        # Agent-Env 部署环境 (延迟初始化)
+        self.backend_type: str = ""
+        self.agent_env: IsaacsimEnv | RealEnv = None
+        self.cfg = None
 
         # 运行控制
         self._running = False
-        self._is_finished = False
         self._thread_bt: threading.Thread | None = None
         self._stop_event = threading.Event()
 
@@ -70,11 +65,6 @@ class EGAgentSystem:
     @property
     def backend_ready(self) -> bool:
         return self.dm is not None
-    
-    @property
-    def finished(self) -> bool:
-        """Whether the agent loop has finished."""
-        return self._is_finished
 
     @property
     def status(self) -> bool:
@@ -107,26 +97,50 @@ class EGAgentSystem:
                 pass
 
     # ---------------------- 控制接口 ----------------------
-    def create_backend(self) -> bool:
+    def create_backend(self, backend_type="sim") -> bool:
         """Create the VLMapNav backend and configure ROS subscriptions."""
-        if self.dm is not None:
-            self._log_warn("Backend already created.")
+        if self.dm is not None and self.backend_type == backend_type:
+            self._log_warn(f"{backend_type} Backend already created.")
             return True
-        self._conv_info("正在创建后台，请稍候...")
-        self._log_info("Creating backend...")
+
+        self.backend_type = backend_type
+        # 根据backend_type加载配置和环境
+        if backend_type == "sim":
+            cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system_sim.yaml"
+            env_class = IsaacsimEnv
+            self._conv_info("正在创建Sim后台，请稍候...")
+            self._log_info("Creating Sim backend...")
+        elif backend_type == "real":
+            cfg_path = f"{AGENT_SYSTEM_PATH}/agent_system_real.yaml"
+            env_class = RealEnv
+            self._conv_info("正在创建Real后台，请稍候...")
+            self._log_info("Creating Real backend...")
+        else:
+            self._log_error(f"Unknown backend type: {backend_type}")
+            return False
+
+        # 加载配置
+        self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
+
+        # 初始化VLM-Backend 后台
+        self.vlmap_backend = VLMapNav(range_sensor=f"{self.cfg.range_sensor}_{backend_type}")
+
+        # 初始化 Agent-Env 部署环境
+        self.agent_env = env_class()
+        self.agent_env.set_vlmap_backend(self.vlmap_backend)
 
         # 创建建图后台
         self.vlmap_backend.create_backend()
         self.dm = self.vlmap_backend.dualmap
         self._log_info("Configuring ROS...")
         self.agent_env.configure_ros(self.cfg)
-        self._conv_info("后台创建成功，ROS2通信已配置，请启动智能体。")
-        # For test goal_inview
-        # self.agent_env.set_object_places({"flag1": [5, 0, 0]})
-        # self.agent_env.set_object_places({"flag2": [0, 5, 0]})
-        # self.agent_env.run_action("mark", (5, 0, 0))
-        # self.agent_env.run_action("mark", (0, 5, 0))
-        self._log_info("Backend created successfully.")
+
+        if backend_type == "sim":
+            self._conv_info("Sim后台创建成功，ROS2通信已配置，请启动智能体。")
+            self._log_info("Sim backend created successfully.")
+        else:
+            self._conv_info("Real后台创建成功，ROS2通信已配置，请启动智能体。")
+            self._log_info("Real backend created successfully.")
         return True
     
     def start(self):
@@ -137,7 +151,6 @@ class EGAgentSystem:
         self._log_info("Agent system started.")
         self._stop_event.clear()
         self._running = True
-        self._is_finished = False
         if self.backend_ready:
             self.dm.start_threading()
             self._conv_debug(f"检测和建图线程已启动。")
@@ -160,7 +173,6 @@ class EGAgentSystem:
                 self._log_warn("Agent loop did not stop cleanly.")
         if self.backend_ready:
             self.dm.end_process()
-        self._is_finished = True
         self._running = False
         self._log_info("Agent loop stopped.")
         self._emit("status", self.status)
@@ -232,13 +244,19 @@ class EGAgentSystem:
         self._conv_info("地图加载完成。")
 
     def get_last_tick_output(self) -> str:
+        if self.agent_env is None:
+            return "No environment"
         return self.agent_env.last_tick_output
 
     def get_goal_inview(self) -> dict:
+        if self.agent_env is None:
+            return {}
         return self.agent_env.goal_inview
 
     def get_cur_cmd_vel(self) -> tuple:
         """返回当前计算的速度命令 (vx, vy, wz)"""
+        if self.agent_env is None:
+            return (0, 0, 0)
         return self.agent_env.cur_cmd_vel
 
     def get_agent_pose(self) -> tuple:
@@ -247,6 +265,8 @@ class EGAgentSystem:
 
     def get_cur_target_pos(self) -> list:
         """返回当前所有目标的全局位置 {target_name: [x,y,z]}"""
+        if self.agent_env is None:
+            return []
         return self.agent_env.get_cur_target_pos()
 
     def _run_loop_bt(self):
