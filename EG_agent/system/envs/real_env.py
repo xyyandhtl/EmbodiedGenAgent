@@ -17,7 +17,7 @@ from sensor_msgs.msg import Image, CompressedImage, CameraInfo, PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
 from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge
-from message_filters import Subscriber, ApproximateTimeSynchronizer
+# from message_filters import Subscriber, ApproximateTimeSynchronizer
 from scipy.spatial.transform import Rotation as _R
 
 from EG_agent.system.envs.base_env import BaseAgentEnv
@@ -172,32 +172,60 @@ class RealEnv(BaseAgentEnv):
         # 合并：统一使用 /mark_point (PointStamped)
         self.mark_pub = self.ros_node.create_publisher(PointStamped, "/mark_point", 10)
 
-        # Subs + sync
+        # Independent subscribers (no synchronization)
         if self.use_compressed_topic:
-            self._rgb_sub = Subscriber(self.ros_node, CompressedImage, cfg.ros.topics.rgb)
-            # self._depth_sub = Subscriber(self.ros_node, CompressedImage, cfg.ros.topics.depth)
+            self._rgb_sub = self.ros_node.create_subscription(
+                CompressedImage,
+                cfg.ros.topics.rgb,
+                self._rgb_callback,
+                10
+            )
         else:
-            self._rgb_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.rgb)
+            self._rgb_sub = self.ros_node.create_subscription(
+                Image,
+                cfg.ros.topics.rgb,
+                self._rgb_callback,
+                10
+            )
 
         if self.range_sensor == "lidar":
-            self._odom_sub = Subscriber(self.ros_node, Odometry, cfg.ros.topics.odom_lidar)
-            self._lidar_sub = Subscriber(self.ros_node, PointCloud2, cfg.ros.topics.lidar)
-            self._sync = ApproximateTimeSynchronizer(
-                [self._rgb_sub, self._lidar_sub, self._odom_sub],
-                queue_size=10,
-                slop=float(cfg.ros.sync_threshold)
+            self._odom_sub = self.ros_node.create_subscription(
+                Odometry,
+                cfg.ros.topics.odom_lidar,
+                self._odom_callback,
+                10
+            )
+            self._lidar_sub = self.ros_node.create_subscription(
+                PointCloud2,
+                cfg.ros.topics.lidar,
+                self._lidar_callback,
+                10
             )
         elif self.range_sensor == "depth":
-            self._odom_sub = Subscriber(self.ros_node, Odometry, cfg.ros.topics.odom_camera)
-            self._depth_sub = Subscriber(self.ros_node, Image, cfg.ros.topics.depth)
-            self._sync = ApproximateTimeSynchronizer(
-                [self._rgb_sub, self._depth_sub, self._odom_sub],
-                queue_size=10,
-                slop=float(cfg.ros.sync_threshold)
+            self._odom_sub = self.ros_node.create_subscription(
+                Odometry,
+                cfg.ros.topics.odom_camera,
+                self._odom_callback,
+                10
+            )
+            self._depth_sub = self.ros_node.create_subscription(
+                Image,
+                cfg.ros.topics.depth,
+                self._depth_callback,
+                10
             )
         else:
             raise NotImplementedError(f"Unsupported range_sensor type: {self.range_sensor}")
-        self._sync.registerCallback(self._synced_callback)
+
+        # Initialize message buffers for time-based matching
+        self._rgb_buffer = {}
+        self._lidar_buffer = {}
+        self._depth_buffer = {}
+        self._odom_buffer = {}
+        self._latest_rgb = None
+        self._latest_lidar = None
+        self._latest_depth = None
+        self._latest_odom = None
 
         # Start spinning
         self._ros_executor = MultiThreadedExecutor()
@@ -216,22 +244,106 @@ class RealEnv(BaseAgentEnv):
         period = 1.0 / float(cfg.ros.ros_rate)
         self._ros_pub_timer = self.ros_node.create_timer(period, self._ros_pub_tick)
 
-    def _synced_callback(self, rgb_msg, range_msg, odom_msg):
-        """RGB/Depth/Odom 同步回调：解码 -> 位姿矩阵 -> 推送到 VLMap 后端 -> 更新可视状态"""
+    def _match_and_process_data(self):
+        """Match messages by timestamp and process synchronized data"""
+        if self._latest_rgb is None or self._latest_odom is None:
+            return  # Need at least RGB and odom to proceed
+
+        # Select the appropriate range data based on sensor type
+        if self.range_sensor == "lidar":
+            range_msg = self._find_closest_message(self._latest_rgb, self._lidar_buffer)
+        elif self.range_sensor == "depth":
+            range_msg = self._find_closest_message(self._latest_rgb, self._depth_buffer)
+        else:
+            raise NotImplementedError(f"Unsupported range_sensor type: {self.range_sensor}")
+
+        if range_msg is None:
+            return  # Wait for matching range data
+
+        # Process with all three data types
+        self._process_matched_messages(self._latest_rgb, range_msg, self._latest_odom)
+
+    def _find_closest_message(self, base_msg, buffer_dict):
+        """Find the message in buffer that is closest in time to the base message"""
+        if not buffer_dict:
+            return None
+
+        base_time = base_msg.header.stamp.sec + base_msg.header.stamp.nanosec * 1e-9
+        closest_msg = None
+        min_diff = float('inf')
+
+        # Look for messages within the sync threshold
+        for msg_time, msg in buffer_dict.items():
+            time_diff = abs(msg_time - base_time)
+            if time_diff < float(self._cfg.ros.sync_threshold) and time_diff < min_diff:
+                min_diff = time_diff
+                closest_msg = msg
+
+        return closest_msg
+
+    def _rgb_callback(self, msg):
+        """Handle RGB image messages independently"""
+        timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        self._rgb_buffer[timestamp] = msg
+        self._latest_rgb = msg
+
+        # Clean up old messages from buffer
+        self._clean_old_messages(self._rgb_buffer, timestamp)
+
+        # Try to match and process data
+        self._match_and_process_data()
+
+    def _lidar_callback(self, msg):
+        """Handle LiDAR messages independently"""
+        timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        self._lidar_buffer[timestamp] = msg
+        self._latest_lidar = msg
+
+        # Clean up old messages from buffer
+        self._clean_old_messages(self._lidar_buffer, timestamp)
+
+        # Try to match and process data
+        self._match_and_process_data()
+
+    def _depth_callback(self, msg):
+        """Handle depth image messages independently"""
+        timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        self._depth_buffer[timestamp] = msg
+        self._latest_depth = msg
+
+        # Clean up old messages from buffer
+        self._clean_old_messages(self._depth_buffer, timestamp)
+
+        # Try to match and process data
+        self._match_and_process_data()
+
+    def _odom_callback(self, msg):
+        """Handle odometry messages independently"""
+        timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        self._odom_buffer[timestamp] = msg
+        self._latest_odom = msg
+
+        # Clean up old messages from buffer
+        self._clean_old_messages(self._odom_buffer, timestamp)
+
+        # Try to match and process data
+        self._match_and_process_data()
+
+    def _process_matched_messages(self, rgb_msg, range_msg, odom_msg):
+        """Process matched RGB, range, and odometry messages"""
         # Timestamp
         timestamp = rgb_msg.header.stamp.sec + rgb_msg.header.stamp.nanosec * 1e-9
-        # print(f"Received synced data at time {timestamp}")
 
-        # RGB/Depth or Lidar conversion
+        # RGB conversion
         if self.use_compressed_topic:
-            # Minimal compressed support via CvBridge; if not supported fallback to no-op
             rgb_img = self._bridge.compressed_imgmsg_to_cv2(rgb_msg, desired_encoding='rgb8')
         else:
             rgb_img = self._bridge.imgmsg_to_cv2(rgb_msg, desired_encoding='rgb8')
 
+        # Range data processing
         if self.range_sensor == "lidar":
-            lidar_points = _np.vstack(pc2.read_points(range_msg, 
-                                      field_names=["x", "y", "z"], 
+            lidar_points = _np.vstack(pc2.read_points(range_msg,
+                                      field_names=["x", "y", "z"],
                                       skip_nans=True).tolist())
             lidar_points = lidar_points[_np.isfinite(lidar_points).all(1)]
 
@@ -241,7 +353,6 @@ class RealEnv(BaseAgentEnv):
             x_mask = (_np.abs(lidar_points[:, 0]) >= min_thr) & (_np.abs(lidar_points[:, 0]) <= max_thr)
             y_mask = (_np.abs(lidar_points[:, 1]) >= min_thr) & (_np.abs(lidar_points[:, 1]) <= max_thr)
             lidar_points = lidar_points[x_mask & y_mask]
-            # print("Lidar points shape:", lidar_points)
             depth_img = None
         elif self.range_sensor == "depth":
             lidar_points = None
@@ -271,6 +382,15 @@ class RealEnv(BaseAgentEnv):
 
         # Recompute real-time FOV visibility check using cam_pose_w
         self._update_goal_inview()
+
+    def _clean_old_messages(self, buffer_dict, current_timestamp):
+        """Remove old messages from the buffer to prevent infinite growth"""
+        sync_threshold = float(self._cfg.ros.sync_threshold)
+        # Keep only messages within a reasonable time window (3x threshold)
+        threshold_time = current_timestamp - 3 * sync_threshold
+        old_keys = [key for key in buffer_dict.keys() if key < threshold_time]
+        for key in old_keys:
+            del buffer_dict[key]
 
     def _cmd_vel_callback(self, msg: Twist):
         v = msg.linear
@@ -326,6 +446,16 @@ class RealEnv(BaseAgentEnv):
         if self._ros_pub_executor is not None:
             self._ros_pub_executor.shutdown(wait=False)
             self._ros_pub_executor = None
+
+        # Clear message buffers to free memory
+        self._rgb_buffer.clear()
+        self._lidar_buffer.clear()
+        self._depth_buffer.clear()
+        self._odom_buffer.clear()
+        self._latest_rgb = None
+        self._latest_lidar = None
+        self._latest_depth = None
+        self._latest_odom = None
 
     # ==========================================
     # Action Implementation
