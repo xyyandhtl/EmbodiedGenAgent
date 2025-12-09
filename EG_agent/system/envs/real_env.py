@@ -245,23 +245,28 @@ class RealEnv(BaseAgentEnv):
         self._ros_pub_timer = self.ros_node.create_timer(period, self._ros_pub_tick)
 
     def _match_and_process_data(self):
-        """Match messages by timestamp and process synchronized data"""
-        if self._latest_rgb is None or self._latest_odom is None:
-            return  # Need at least RGB and odom to proceed
+        """Match messages by timestamp: find odom, then range_sensor with identical timestamp (using extremely small threshold), then closest cam topic"""
+        if self._latest_odom is None:
+            return  # Need odom to proceed
 
-        # Select the appropriate range data based on sensor type
+        # Find range sensor data that has nearly identical timestamp to odom (using extremely small threshold)
         if self.range_sensor == "lidar":
-            range_msg = self._find_closest_message(self._latest_rgb, self._lidar_buffer)
+            range_msg = self._find_identical_timestamp_message(self._latest_odom, self._lidar_buffer)
         elif self.range_sensor == "depth":
-            range_msg = self._find_closest_message(self._latest_rgb, self._depth_buffer)
+            range_msg = self._find_identical_timestamp_message(self._latest_odom, self._depth_buffer)
         else:
             raise NotImplementedError(f"Unsupported range_sensor type: {self.range_sensor}")
 
         if range_msg is None:
-            return  # Wait for matching range data
+            return  # Wait for range data with nearly identical timestamp to odom
+
+        # Find the camera message that is closest in time to the synchronized odom/range
+        cam_msg = self._find_closest_message(self._latest_odom, self._rgb_buffer)
+        if cam_msg is None:
+            return  # Wait for camera data
 
         # Process with all three data types
-        self._process_matched_messages(self._latest_rgb, range_msg, self._latest_odom)
+        self._process_matched_messages(cam_msg, range_msg, self._latest_odom)
 
     def _find_closest_message(self, base_msg, buffer_dict):
         """Find the message in buffer that is closest in time to the base message"""
@@ -280,6 +285,22 @@ class RealEnv(BaseAgentEnv):
                 closest_msg = msg
 
         return closest_msg
+
+    def _find_identical_timestamp_message(self, base_msg, buffer_dict):
+        """Find the message in buffer that has an identical timestamp (using extremely small threshold)"""
+        if not buffer_dict:
+            return None
+
+        base_time = base_msg.header.stamp.sec + base_msg.header.stamp.nanosec * 1e-9
+
+        # Look for messages with nearly identical timestamps (using extremely small threshold)
+        for msg_time, msg in buffer_dict.items():
+            time_diff = abs(msg_time - base_time)
+            # Use a very small threshold to ensure "identical" timestamps (0.1ms)
+            if time_diff < 0.0001:  # 0.1ms threshold for "identical" timestamps
+                return msg
+
+        return None
 
     def _rgb_callback(self, msg):
         """Handle RGB image messages independently"""
@@ -353,6 +374,7 @@ class RealEnv(BaseAgentEnv):
             x_mask = (_np.abs(lidar_points[:, 0]) >= min_thr) & (_np.abs(lidar_points[:, 0]) <= max_thr)
             y_mask = (_np.abs(lidar_points[:, 1]) >= min_thr) & (_np.abs(lidar_points[:, 1]) <= max_thr)
             lidar_points = lidar_points[x_mask & y_mask]
+            # print(f"lidar_points {len(lidar_points)}")
             depth_img = None
         elif self.range_sensor == "depth":
             lidar_points = None

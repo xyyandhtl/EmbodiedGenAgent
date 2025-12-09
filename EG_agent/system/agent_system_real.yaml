@@ -7,7 +7,8 @@ ros:
   topics:
     rgb: /camera/image/compressed
     lidar: /livox/lidar
-    odom_lidar: /Odometry
+    # odom_lidar: /Odometry
+    odom_lidar: /lio/odometry
     # odom_camera: /camera/pose
     # depth: /camera/depth/image_raw
     # camera_info: /camera_info
@@ -26,5 +27,3 @@ lidar:
   max_thr: 20.0
 
 use_rviz: true
-
-caring_mode: false
