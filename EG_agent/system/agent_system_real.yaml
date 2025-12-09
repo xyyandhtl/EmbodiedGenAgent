@@ -23,7 +23,7 @@ camera:
   near_dist: 2.0
 
 lidar:
-  min_thr: 0.4
+  min_thr: 0.3
   max_thr: 20.0
 
 use_rviz: true

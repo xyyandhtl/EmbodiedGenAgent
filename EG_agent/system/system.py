@@ -122,11 +122,14 @@ class EGAgentSystem:
 
         # 加载配置
         self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
-        self._log_info(f"加载配置: {json.dumps(self.cfg.as_dict(), indent=2)}")
+        self._log_info(f"系统配置: {json.dumps(self.cfg.as_dict(), indent=4)}")
 
         # 初始化VLM-Backend 后台
         self.vlmap_backend = VLMapNav(range_sensor=f"{self.cfg.range_sensor}_{backend_type}")
         # self._log_info(f"Dualmap配置: {json.dumps(self.vlmap_backend.cfg.as_dict(), indent=2)}")
+        self._log_info(f"内参配置: {json.dumps(self.vlmap_backend.cfg.intrinsics.to_dict(), indent=4)}")
+        self._log_info(f"外参配置: {self.vlmap_backend.cfg.extrinsics.to_list()}")
+        self._log_info(f"速度控制器配置: {json.dumps(self.vlmap_backend.cfg.controller.to_dict(), indent=4)}")
 
         # 初始化 Agent-Env 部署环境
         self.agent_env = env_class()
