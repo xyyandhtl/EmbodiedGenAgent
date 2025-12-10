@@ -3,6 +3,7 @@ range_sensor: "lidar"
 ros:
   use_compressed_topic: true
   ros_rate: 10
+  range_sensor_frequency: 5
   sync_threshold: 0.1
   topics:
     rgb: /camera/image/compressed

@@ -195,11 +195,19 @@ class RealEnv(BaseAgentEnv):
                 self._odom_callback,
                 10
             )
+            # Subscribe to lidar with a callback that stores latest message
+            # Use BEST_EFFORT QoS to match the publisher's configuration
+            lidar_qos_profile = rclpy.qos.QoSProfile(
+                depth=10,
+                reliability=rclpy.qos.ReliabilityPolicy.BEST_EFFORT,
+                durability=rclpy.qos.DurabilityPolicy.VOLATILE,
+                history=rclpy.qos.HistoryPolicy.KEEP_LAST
+            )
             self._lidar_sub = self.ros_node.create_subscription(
                 PointCloud2,
                 cfg.ros.topics.lidar,
-                self._lidar_callback,
-                10
+                self._store_latest_lidar,
+                lidar_qos_profile
             )
         elif self.range_sensor == "depth":
             self._odom_sub = self.ros_node.create_subscription(
@@ -208,14 +216,21 @@ class RealEnv(BaseAgentEnv):
                 self._odom_callback,
                 10
             )
+            # Subscribe to depth with a callback that stores latest message
             self._depth_sub = self.ros_node.create_subscription(
                 Image,
                 cfg.ros.topics.depth,
-                self._depth_callback,
+                self._store_latest_depth,
                 10
             )
         else:
             raise NotImplementedError(f"Unsupported range_sensor type: {self.range_sensor}")
+
+        # Create timer for range sensor processing at specified frequency
+        self.range_sensor_frequency = float(cfg.ros.range_sensor_frequency)
+        range_sensor_period = 1.0 / self.range_sensor_frequency
+        self._range_sensor_timer = self.ros_node.create_timer(
+            range_sensor_period, self._process_range_sensor_at_frequency)
 
         # Initialize message buffers for time-based matching
         self._rgb_buffer = {}
@@ -226,6 +241,10 @@ class RealEnv(BaseAgentEnv):
         self._latest_lidar = None
         self._latest_depth = None
         self._latest_odom = None
+
+        # Timer for range sensor subscription at specific frequency
+        self._range_sensor_timer = None
+        self._latest_range_msg = None
 
         # Start spinning
         self._ros_executor = MultiThreadedExecutor()
@@ -302,6 +321,34 @@ class RealEnv(BaseAgentEnv):
 
         return None
 
+    def _store_latest_lidar(self, msg):
+        """Store the latest lidar message without processing immediately"""
+        self._latest_range_msg = msg
+
+    def _store_latest_depth(self, msg):
+        """Store the latest depth message without processing immediately"""
+        self._latest_range_msg = msg
+
+    def _process_range_sensor_at_frequency(self):
+        """Process range sensor data at the specified frequency"""
+        if self._latest_range_msg is not None:
+            # Update the appropriate buffer based on range sensor type
+            timestamp = self._latest_range_msg.header.stamp.sec + self._latest_range_msg.header.stamp.nanosec * 1e-9
+
+            if self.range_sensor == "lidar":
+                self._lidar_buffer[timestamp] = self._latest_range_msg
+                self._latest_lidar = self._latest_range_msg
+                # Clean up old messages from buffer
+                self._clean_old_messages(self._lidar_buffer, timestamp)
+            elif self.range_sensor == "depth":
+                self._depth_buffer[timestamp] = self._latest_range_msg
+                self._latest_depth = self._latest_range_msg
+                # Clean up old messages from buffer
+                self._clean_old_messages(self._depth_buffer, timestamp)
+
+            # Try to match and process data
+            self._match_and_process_data()
+
     def _rgb_callback(self, msg):
         """Handle RGB image messages independently"""
         timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
@@ -310,30 +357,6 @@ class RealEnv(BaseAgentEnv):
 
         # Clean up old messages from buffer
         self._clean_old_messages(self._rgb_buffer, timestamp)
-
-        # Try to match and process data
-        self._match_and_process_data()
-
-    def _lidar_callback(self, msg):
-        """Handle LiDAR messages independently"""
-        timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-        self._lidar_buffer[timestamp] = msg
-        self._latest_lidar = msg
-
-        # Clean up old messages from buffer
-        self._clean_old_messages(self._lidar_buffer, timestamp)
-
-        # Try to match and process data
-        self._match_and_process_data()
-
-    def _depth_callback(self, msg):
-        """Handle depth image messages independently"""
-        timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-        self._depth_buffer[timestamp] = msg
-        self._latest_depth = msg
-
-        # Clean up old messages from buffer
-        self._clean_old_messages(self._depth_buffer, timestamp)
 
         # Try to match and process data
         self._match_and_process_data()
@@ -478,6 +501,12 @@ class RealEnv(BaseAgentEnv):
         self._latest_lidar = None
         self._latest_depth = None
         self._latest_odom = None
+        self._latest_range_msg = None
+
+        # Cancel the range sensor timer
+        if self._range_sensor_timer is not None:
+            self._range_sensor_timer.cancel()
+            self._range_sensor_timer = None
 
     # ==========================================
     # Action Implementation
