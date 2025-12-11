@@ -111,7 +111,7 @@ public:
             });
 
         // Create publishers
-        odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>("/lio/odometry", 10);
+        odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>("/Odometry", 10);
         pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/lio/pose", 100);  // 100Hz for IMU rate
         current_scan_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/lio/current_scan", 10);
         raw_scan_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/lio/raw_scan", 10);

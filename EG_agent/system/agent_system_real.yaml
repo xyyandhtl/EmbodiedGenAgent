@@ -9,7 +9,7 @@ ros:
     rgb: /camera/image/compressed
     lidar: /livox/lidar
     # odom_lidar: /Odometry
-    odom_lidar: /lio/odometry
+    odom_lidar: /Odometry
     # odom_camera: /camera/pose
     # depth: /camera/depth/image_raw
     # camera_info: /camera_info
