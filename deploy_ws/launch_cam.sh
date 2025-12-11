@@ -15,11 +15,6 @@ echo "🔧 正在加载 ROS 2 环境..."
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
-# 标定节点
-# echo "🚀 启动 bag_to_pcd 节点..."
-# ros2 launch livox_camera_calib bag_to_pcd.launch.py
-# ros2 launch livox_camera_calib calib.launch.py
-
 # 启动节点
 # echo "🚀 启动 go2_vel_sport 节点..."
 # ros2 run unitree_ros2_example go2_vel_sport
@@ -34,4 +29,9 @@ ros2 run unitree_ros2_example camera_vel_node \
     -p max_angular_z:=0.5 \
     -p enable_resize:=false \
     -p publish_compressed:=true
+
+# 标定节点
+# echo "🚀 启动 bag_to_pcd 节点..."
+# ros2 launch livox_camera_calib bag_to_pcd.launch.py
+# ros2 launch livox_camera_calib calib.launch.py
 

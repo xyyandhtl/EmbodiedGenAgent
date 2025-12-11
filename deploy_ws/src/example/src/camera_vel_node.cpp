@@ -68,15 +68,6 @@ public:
         vel_[0] = vel_[1] = vel_[2] = 0.0;
         last_cmd_time_ = this->now();
 
-        // // Subscribe to the sport mode state topic if speed control is enabled
-        // if (enable_speed_control_) {
-        //     suber_ = this->create_subscription<unitree_go::msg::SportModeState>(
-        //         TOPIC_HIGHSTATE, 1,
-        //         [this](const unitree_go::msg::SportModeState::SharedPtr data) {
-        //             HighStateHandler(data);
-        //         });
-        // }
-
         // Setup camera if enabled
         setup_camera(interface_name, address, port, width, height);
 
@@ -242,7 +233,7 @@ private:
     void publish_compressed(const cv::Mat &frame, const rclcpp::Time &ts)
     {
         if (compressed_pub_ == nullptr) return;
-
+        
         sensor_msgs::msg::CompressedImage msg;
         msg.header.stamp = ts;
         msg.header.frame_id = "camera_link";
@@ -254,15 +245,6 @@ private:
         msg.data = buffer;
         compressed_pub_->publish(msg);
     }
-
-    // void HighStateHandler(const unitree_go::msg::SportModeState::SharedPtr msg) {
-    //     state_ = *msg;
-    //     RCLCPP_INFO(this->get_logger(), "Position: %f, %f, %f", state_.position[0],
-    //                 state_.position[1], state_.position[2]);
-    //     RCLCPP_INFO(this->get_logger(), "IMU rpy: %f, %f, %f",
-    //                 state_.imu_state.rpy[0], state_.imu_state.rpy[1],
-    //                 state_.imu_state.rpy[2]);
-    // }
 
 private:
     // Camera related variables
@@ -284,8 +266,6 @@ private:
     SportClient sport_client_;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr vel_sub_;
     unitree_api::msg::Request req_;
-    // rclcpp::Subscription<unitree_go::msg::SportModeState>::SharedPtr suber_;
-    // unitree_go::msg::SportModeState state_;
     double vel_[3];
     std::mutex vel_mutex_;
     std::thread control_thread_;
