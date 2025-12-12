@@ -26,5 +26,3 @@ lidar:
   max_thr: 20.0
 
 use_rviz: true
-
-caring_mode: false

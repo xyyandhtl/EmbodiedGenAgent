@@ -3,10 +3,12 @@ range_sensor: "lidar"
 ros:
   use_compressed_topic: true
   ros_rate: 10
-  sync_threshold: 0.08
+  range_sensor_frequency: 5
+  sync_threshold: 0.1
   topics:
-    rgb: /camera/rgb/image_raw
+    rgb: /camera/image/compressed
     lidar: /livox/lidar
+    # odom_lidar: /Odometry
     odom_lidar: /Odometry
     # odom_camera: /camera/pose
     # depth: /camera/depth/image_raw
@@ -22,9 +24,7 @@ camera:
   near_dist: 2.0
 
 lidar:
-  min_thr: 0.4
+  min_thr: 0.3
   max_thr: 20.0
 
 use_rviz: true
-
-caring_mode: false

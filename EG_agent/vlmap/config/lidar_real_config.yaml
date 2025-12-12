@@ -10,26 +10,44 @@ range_sensor: "lidar"
 
 lidar_extrinsics:
   - [0, -1, 0, 0.0]
-  - [0, 0, -1, -0.0]
-  - [1, 0, 0, -0.2]
+  - [0, 0, -1, -0.05]
+  - [1, 0, 0, -0.32]
   - [0, 0, 0, 1]
 
 # ============================================================
 # CAMERA CONFIG
 # ============================================================
+# Go2W front camera
 intrinsics:
   fx: 864.0
   fy: 864.0
   cx: 639.2
   cy: 373.3
   dist: [-0.354630, 0.102054, -0.001614, -0.001249, 0.000000]
+# intrinsics: # After resize
+  # fx: 432.0
+  # fy: 432.0
+  # cx: 319.6
+  # cy: 186.6
+  # dist: [-0.354630, 0.102054, -0.001614, -0.001249, 0.000000]
 
 # odom frame -> camera frame, here use /odom_lidar (lidar_extrinsics.inv)
 extrinsics:
-  - [ 0,  0,  1,  0.2 ]
+  - [ 0,  0,  1,  0.32 ]
   - [-1,  0,  0,  0.0 ]
-  - [ 0, -1,  0,  0.0 ]
+  - [ 0, -1,  0,  -0.05 ]
   - [ 0,  0,  0,  1.0 ]
+
+# ============================================================
+# Controller Config
+# ============================================================
+controller:
+  kp_ang: 0.6
+  kp_lin: 0.6
+  min_lin_vel: 0.2
+  max_lin_vel: 0.8
+  max_ang_vel: 0.6
+  yaw_error_threshold: 0.8
 
 # ============================================================
 # SemMap Config
@@ -45,7 +63,7 @@ sem_height: 30.0
 layout_voxel_size: 0.1
 layout_update_radius: 20.0
 occ_update_radius: 8.0
-occ_thr: 1
+occ_thr: 2
 
 # small mask filtering threshold
 small_mask_th: 6

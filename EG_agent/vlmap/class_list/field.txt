@@ -1,4 +1,4 @@
-Person                   # 人员
+FireHydrant              # 消防栓
 Vehicle                  # 车辆(Cart)
 CubeBox                  # 立方体盒
 PalmTree                 # 棕榈树

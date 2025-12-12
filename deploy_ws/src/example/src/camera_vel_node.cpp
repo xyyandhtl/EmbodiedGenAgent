@@ -15,6 +15,8 @@
 #include <thread>
 #include <algorithm>
 
+#define TOPIC_HIGHSTATE "lf/sportmodestate"
+
 using namespace std::chrono_literals;
 
 class Go2CameraVelNode : public rclcpp::Node
@@ -120,8 +122,10 @@ private:
                         camera_image_raw_topic_.c_str());
         }
 
+        double camera_fps = 15.0;
+        int frame_interval_ms = static_cast<int>(1000.0 / camera_fps);
         timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(10),
+            std::chrono::milliseconds(frame_interval_ms),
             std::bind(&Go2CameraVelNode::timer_callback, this));
     }
 

@@ -38,6 +38,8 @@ class VLMapNav:
         self.last_message_time = None
         self.realtime_pose: np.ndarray = np.eye(4)
 
+        self.controller_cfg = self.cfg.controller
+
         self.dualmap: Dualmap = None
 
     def create_backend(self):
@@ -206,12 +208,12 @@ class VLMapNav:
             return (0.0, 0.0, 0.0)
 
         # Controller parameters
-        kp_ang = 0.6
-        kp_lin = 0.6
-        min_lin_vel = 0.6
-        max_lin_vel = 2.0
-        max_ang_vel = 1.0
-        yaw_error_threshold = 0.8
+        kp_ang = self.controller_cfg.kp_ang
+        kp_lin = self.controller_cfg.kp_lin
+        min_lin_vel = self.controller_cfg.min_lin_vel
+        max_lin_vel = self.controller_cfg.max_lin_vel
+        max_ang_vel = self.controller_cfg.max_ang_vel
+        yaw_error_threshold = self.controller_cfg.yaw_error_threshold
 
         # === 2. 世界 -> base_link 坐标变换 ===
         delta_body = cam_rot.T @ delta_world

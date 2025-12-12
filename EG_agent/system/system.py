@@ -1,6 +1,7 @@
 import numpy as np
 import threading
 import time
+import json
 from typing import Callable, Dict, List, Any, Iterable
 from pathlib import Path
 from PIL import Image
@@ -121,9 +122,14 @@ class EGAgentSystem:
 
         # 加载配置
         self.cfg = Dynaconf(settings_files=[cfg_path], lowercase_read=True, merge_enabled=False)
+        self._log_info(f"系统配置: {json.dumps(self.cfg.as_dict(), indent=4)}")
 
         # 初始化VLM-Backend 后台
         self.vlmap_backend = VLMapNav(range_sensor=f"{self.cfg.range_sensor}_{backend_type}")
+        # self._log_info(f"Dualmap配置: {json.dumps(self.vlmap_backend.cfg.as_dict(), indent=2)}")
+        self._log_info(f"内参配置: {json.dumps(self.vlmap_backend.cfg.intrinsics.to_dict(), indent=4)}")
+        self._log_info(f"外参配置: {self.vlmap_backend.cfg.extrinsics.to_list()}")
+        self._log_info(f"速度控制器配置: {json.dumps(self.vlmap_backend.cfg.controller.to_dict(), indent=4)}")
 
         # 初始化 Agent-Env 部署环境
         self.agent_env = env_class()
@@ -415,10 +421,6 @@ class EGAgentSystem:
             # self._log_info(f"Updated goal_generator with bt_objects: {self.bt_objects}")
             # self.bt_generator.set_key_objects(list(self.bt_objects))
             # self._log_info(f"已设置原子动作: \n{[action.name for action in self.bt_generator.planner.actions]}")
-            if self.cfg['caring_mode']:
-                chinese_objs = self.goal_generator.ask_question(
-                    f"请用中文列出以下英文目标集合：{self.bt_objects}", use_system_prompt=False)
-                self._conv_debug(f"可以参考的任务对象有 {chinese_objs}")
 
     def get_semantic_map_image(self) -> np.ndarray:
         """Semantic/path map from dualmap; fallback to detector annotated image."""

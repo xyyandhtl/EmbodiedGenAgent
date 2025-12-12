@@ -248,7 +248,7 @@ class Dualmap:
 
         if is_keyframe:
             self.keyframe_counter += 1
-            logger.debug(
+            logger.info(
                 f"[Core][CheckKeyframe] Current frame is keyframe: {self.keyframe_counter}"
             )
             return True
