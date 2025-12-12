@@ -18,3 +18,4 @@ source install/setup.bash
 # LIO节点
 # echo "🚀 启动 LIO 节点..."
 ros2 launch lio_ros_wrapper lio_mid360.launch.py
+# ros2 launch fast_lio mapping.launch.py
